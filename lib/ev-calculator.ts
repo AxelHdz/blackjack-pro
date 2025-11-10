@@ -79,13 +79,25 @@ function calculateEVs(playerHand: Card[], dealerUpCard: Card): ActionEVs {
   // Double EV (if allowed)
   if (isFirstTwoCards) {
     if (playerValue === 11) {
-      ev.double = dealerValue <= 10 ? 0.25 : 0.1 // Great doubling opportunity
+      ev.double = dealerValue === 11 ? 0.2 : 0.25 // 11 doubles against every upcard
     } else if (playerValue === 10) {
       ev.double = dealerValue <= 9 ? 0.2 : 0.05
     } else if (playerValue === 9) {
       ev.double = dealerValue >= 3 && dealerValue <= 6 ? 0.15 : -0.05
-    } else if (isSoft && playerValue >= 13 && playerValue <= 18) {
-      ev.double = dealerValue >= 3 && dealerValue <= 6 ? 0.1 : -0.1
+    } else if (isSoft) {
+      if (playerValue === 19 && dealerValue === 6) {
+        ev.double = 0.12
+      } else if (playerValue === 18 && dealerValue >= 2 && dealerValue <= 6) {
+        ev.double = 0.1
+      } else if (playerValue === 17 && dealerValue >= 3 && dealerValue <= 6) {
+        ev.double = 0.08
+      } else if ((playerValue === 16 || playerValue === 15) && dealerValue >= 4 && dealerValue <= 6) {
+        ev.double = 0.06
+      } else if ((playerValue === 14 || playerValue === 13) && (dealerValue === 5 || dealerValue === 6)) {
+        ev.double = 0.05
+      } else {
+        ev.double = -0.12
+      }
     } else {
       ev.double = -0.15
     }

@@ -37,12 +37,27 @@ export function getOptimalMove(playerHand: Card[], dealerUpCard: Card): GameActi
 
 export function getTipMessage(playerHand: Card[], dealerUpCard: Card): string {
   const rule = getStrategyRule(playerHand, dealerUpCard)
-  return rule.tip
+  return adjustMessageForDoubleAvailability(rule.tip, rule, playerHand.length === 2)
 }
 
 export function getFeedbackMessage(playerHand: Card[], dealerUpCard: Card): string {
   const rule = getStrategyRule(playerHand, dealerUpCard)
-  return rule.feedback
+  return adjustMessageForDoubleAvailability(rule.feedback, rule, playerHand.length === 2)
+}
+
+function adjustMessageForDoubleAvailability(message: string, rule: StrategyRule, canDouble: boolean): string {
+  if (rule.action === "double" && !canDouble && rule.fallback) {
+    const fallbackAction = rule.fallback
+    const fallbackDirective =
+      fallbackAction === "stand"
+        ? "stand instead."
+        : fallbackAction === "hit"
+          ? "hit instead."
+          : `${fallbackAction} instead.`
+    return `${message} Doubling isn't available after drawing cards, so ${fallbackDirective}`
+  }
+
+  return message
 }
 
 function getStrategyRule(playerHand: Card[], dealerUpCard: Card): StrategyRule {
@@ -67,7 +82,6 @@ function getStrategyRule(playerHand: Card[], dealerUpCard: Card): StrategyRule {
 
 function getPairRule(card: Card, dealerCard: string, dealerValue: number): StrategyRule {
   const cardValue = getCardValue(card)
-  const pair = `${card.rank},${card.rank}`
 
   // A,A
   if (cardValue === 11) {
@@ -235,115 +249,128 @@ function getPairRule(card: Card, dealerCard: string, dealerValue: number): Strat
 }
 
 function getSoftHandRule(
-  playerHand: Card[],
+  _playerHand: Card[],
   playerValue: number,
-  dealerCard: string,
+  _dealerCard: string,
   dealerValue: number,
-  canDouble: boolean,
+  _canDouble: boolean,
 ): StrategyRule {
-  // A,9 (Soft 20) or A,8 (Soft 19)
-  if (playerValue === 20 || playerValue === 19) {
+  // Soft 20
+  if (playerValue === 20) {
     return {
       action: "stand",
       fallback: null,
-      tip: "A,8/A,9: stand—these are premium totals.",
-      feedback: "Hitting soft 19/20 reduces a strong made hand to a worse one too often.",
+      tip: "Soft 20 (A,9) always stands—it's already a premium total.",
+      feedback: "Soft 20 beats most dealer outcomes; hitting only downgrades a made hand.",
     }
   }
 
-  // A,7 (Soft 18)
-  if (playerValue === 18) {
-    if (dealerValue >= 3 && dealerValue <= 6) {
+  // Soft 19
+  if (playerValue === 19) {
+    if (dealerValue === 6) {
       return {
         action: "double",
         fallback: "stand",
-        tip: "A,7 vs 3–6: double—capitalize on favorable spots.",
-        feedback: "Soft 18 is good, but doubling vs 3–6 wins more money than standing.",
+        tip: "A,8 vs 6: double to press your huge edge.",
+        feedback: "Dealer 6 is the weakest upcard; doubling soft 19 wins more than settling for a stand.",
       }
     }
-    if (dealerValue === 2 || dealerValue === 7 || dealerValue === 8) {
-      return {
-        action: "stand",
-        fallback: null,
-        tip: "A,7 vs 2,7,8: stand—your 18 is already strong.",
-        feedback: "Hitting risks weakening a made hand; standing keeps your edge.",
-      }
-    }
-    // Hit vs 9, 10, A
     return {
-      action: "hit",
+      action: "stand",
       fallback: null,
-      tip: "A,7 vs 9–A: improve—18 often loses to strong dealer cards.",
-      feedback: "Against 9–A, 18 isn't enough; hitting finds 19–21 or a competitive hard total.",
+      tip: "Soft 19 stands against every other upcard.",
+      feedback: "You're already ahead of the dealer most of the time—drawing risks ruining that edge.",
     }
   }
 
-  // A,6 (Soft 17)
+  // Soft 18
+  if (playerValue === 18) {
+    if (dealerValue >= 2 && dealerValue <= 6) {
+      return {
+        action: "double",
+        fallback: "stand",
+        tip: "A,7 vs 2–6: double when the dealer is weak.",
+        feedback: "Soft 18 converts to 19–21 often, so doubling vs 2–6 scoops extra EV.",
+      }
+    }
+    if (dealerValue === 7 || dealerValue === 8) {
+      return {
+        action: "stand",
+        fallback: null,
+        tip: "A,7 vs 7 or 8: stand—18 keeps pace with the dealer here.",
+        feedback: "Against 7/8 you're roughly even; standing avoids giving the dealer extra outs.",
+      }
+    }
+    return {
+      action: "hit",
+      fallback: null,
+      tip: "A,7 vs 9–A: take a card—18 trails strong upcards.",
+      feedback: "Those upcards make 19+ often; hitting finds competitive totals more reliably.",
+    }
+  }
+
+  // Soft 17
   if (playerValue === 17) {
     if (dealerValue >= 3 && dealerValue <= 6) {
       return {
         action: "double",
         fallback: "hit",
-        tip: "A,6 vs 3–6: double—many ways to end at 18–21.",
-        feedback: "Dealer weakness plus strong improvement chances make doubling optimal.",
+        tip: "A,6 vs 3–6: double to attack vulnerable dealers.",
+        feedback: "Soft 17 has many live outs and doubling vs 3–6 compounds that edge.",
       }
     }
     return {
       action: "hit",
       fallback: null,
-      tip: "A,6 vs 2 or 7–A: take a card.",
-      feedback: "Standing leaves too many losses; hitting soft 17 is better unless doubling vs 3–6.",
+      tip: "A,6 vs 2 or 7–A: hit—standing leaves you behind.",
+      feedback: "Without the double opportunity, the hand is too weak; keep drawing.",
     }
   }
 
-  // A,5 (Soft 16) or A,4 (Soft 15)
+  // Soft 16 and Soft 15
   if (playerValue === 16 || playerValue === 15) {
     if (dealerValue >= 4 && dealerValue <= 6) {
+      const descriptor = playerValue === 16 ? "A,5" : "A,4"
       return {
         action: "double",
         fallback: "hit",
-        tip:
-          playerValue === 15 && dealerValue === 5
-            ? "Soft 15 (A,4) vs 5: double—many ways to improve to 18-21."
-            : "A,4/A,5 vs 4–6: double—excellent upgrade spots.",
-        feedback:
-          playerValue === 15 && dealerValue === 5
-            ? "Soft 15 (A,4) vs 5 should double to maximize value. If doubling isn't allowed, hit."
-            : "Soft 15/16 gains the most by pressing when the dealer is weak.",
+        tip: `${descriptor} vs 4–6: double to escape the weak total.`,
+        feedback: "Dealer 4–6 busts often and these hands pick up strong totals after one card.",
       }
     }
     return {
       action: "hit",
       fallback: null,
-      tip: "A,4/A,5 vs stronger upcards: just hit.",
-      feedback: "Doubling with soft 15/16 against strength lowers EV; hitting is safer and better.",
+      tip: "A,4/A,5 vs tougher cards: hit first.",
+      feedback: "Doubling against stronger upcards overcommits a fragile total; hitting is safer.",
     }
   }
 
-  // A,3 (Soft 14) or A,2 (Soft 13)
+  // Soft 14 and Soft 13
   if (playerValue === 14 || playerValue === 13) {
     if (dealerValue === 5 || dealerValue === 6) {
+      const descriptor = playerValue === 14 ? "A,3" : "A,2"
       return {
         action: "double",
         fallback: "hit",
-        tip: "A,2/A,3 vs 5–6: double—great chance to land 18–21.",
-        feedback: "Dealer is weak; doubling soft 13/14 vs 5–6 outperforms a simple hit.",
+        tip: `${descriptor} vs 5–6: double—dealer is on the ropes.`,
+        feedback: "These are the only upcards where pressing soft 13/14 pays off; double if you can.",
       }
     }
     return {
       action: "hit",
       fallback: null,
-      tip: "A,2/A,3 vs other upcards: improve first.",
-      feedback: "Doubling here overextends a marginal hand; a hit keeps your options open.",
+      tip: "A,2/A,3 vs other upcards: improve with a hit.",
+      feedback: "Outside of dealer 5–6 the advantage disappears, so just draw.",
     }
   }
 
-  // Fallback for other soft totals
+  // Fallback for any other soft total
   return {
     action: "hit",
     fallback: null,
     tip: "Hit to improve your soft total.",
-    feedback: "Soft hands can't bust, so improve your total.",
+    feedback: "Soft hands can't bust on one card, so keep building a winning total.",
   }
 }
 
@@ -409,23 +436,12 @@ function getHardHandRule(
     }
   }
 
-  // 11 vs 2-10: Double
-  if (playerValue === 11 && dealerValue >= 2 && dealerValue <= 10) {
+  if (playerValue === 11) {
     return {
       action: "double",
       fallback: "hit",
-      tip: "11 vs 2–10: best double in blackjack—any 10 makes 21.",
-      feedback: "You're a clear favorite with 11 vs 2–10; doubling exploits the advantage.",
-    }
-  }
-
-  // 11 vs A: Hit
-  if (playerValue === 11) {
-    return {
-      action: "hit",
-      fallback: null,
-      tip: "11 vs Ace (S17): hit—doubling is weaker when the dealer has ace.",
-      feedback: "Against an Ace in S17 games, doubling 11 loses value; hitting performs better on average.",
+      tip: "Hard 11 doubles vs every upcard—any ten gives you 21.",
+      feedback: "Even against an Ace, doubling hard 11 earns more than a simple hit over the long run.",
     }
   }
 

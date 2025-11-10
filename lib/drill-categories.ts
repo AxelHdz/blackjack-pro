@@ -21,15 +21,12 @@ export function categorizeHand(playerHand: Card[], dealerUpcard: Card): DrillCat
   }
 
   // Soft hands
-  if (isSoft && playerValue <= 19) {
+  if (isSoft && playerValue <= 20) {
     if (playerValue === 18) {
-      // A,7 exceptions
-      if ([9, 10, 11].includes(dealerValue) || [3, 4, 5, 6].includes(dealerValue)) {
+      if ((dealerValue >= 2 && dealerValue <= 6) || dealerValue >= 9) {
         return "soft18_exceptions"
       }
-    }
-    // Soft doubles A,2-A,7
-    if (playerValue >= 13 && playerValue <= 18 && dealerValue >= 3 && dealerValue <= 6) {
+    } else if (shouldSoftDouble(playerValue, dealerValue)) {
       return "soft_double_core"
     }
   }
@@ -68,7 +65,7 @@ export function getCategoryTip(category: DrillCategory, playerHand: Card[], deal
     case "soft_double_core":
       return `Double soft ${playerValue} vs ${dealerRank}—many live outs plus dealer bust odds.`
     case "soft18_exceptions":
-      if ([9, 10, 11].includes(dealerValue)) {
+      if (dealerValue >= 9) {
         return `A,7 hits vs ${dealerRank}—18 trails strong dealer upcards.`
       }
       return `A,7 doubles vs ${dealerRank}—good spot for aggressive play.`
@@ -93,10 +90,10 @@ export function getCategoryWhy(category: DrillCategory, playerHand: Card[], deal
     case "soft_double_core":
       return "You have many live outs plus dealer bust odds; one-card double has positive EV."
     case "soft18_exceptions":
-      if ([9, 10, 11].includes(dealerValue)) {
+      if (dealerValue >= 9) {
         return "Against strong upcards, 18 is often trailing; hitting recovers EV that standing leaves."
       }
-      return "Doubling against mid-range dealer cards captures the edge with your flexible hand."
+      return "Doubling against weak dealer cards captures the edge with your flexible hand."
     case "pair_splits_core":
       return "Optimal pair strategy balances splitting for better hands vs standing/doubling with good totals."
     case "double_9_10_11":
@@ -104,4 +101,24 @@ export function getCategoryWhy(category: DrillCategory, playerHand: Card[], deal
     default:
       return "Basic strategy maximizes long-term expected value across all decisions."
   }
+}
+
+function shouldSoftDouble(playerValue: number, dealerValue: number): boolean {
+  if (playerValue === 19) {
+    return dealerValue === 6
+  }
+
+  if (playerValue === 17) {
+    return dealerValue >= 3 && dealerValue <= 6
+  }
+
+  if (playerValue === 16 || playerValue === 15) {
+    return dealerValue >= 4 && dealerValue <= 6
+  }
+
+  if (playerValue === 14 || playerValue === 13) {
+    return dealerValue === 5 || dealerValue === 6
+  }
+
+  return false
 }

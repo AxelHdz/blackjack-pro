@@ -1,6 +1,11 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
+function isValidUUID(uuid: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  return uuidRegex.test(uuid)
+}
+
 export async function GET() {
   const supabase = await createClient()
 
@@ -43,20 +48,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { friendUserId } = body
 
-    if (!friendUserId || friendUserId === user.id) {
-      return NextResponse.json({ error: "Invalid friend user ID" }, { status: 400 })
+    if (!friendUserId || !isValidUUID(friendUserId)) {
+      return NextResponse.json({ error: "Invalid user ID format" }, { status: 400 })
     }
 
-    // Check if friend user exists
-    const { data: friendData, error: friendError } = await supabase
-      .from("game_stats")
-      .select("user_id")
-      .eq("user_id", friendUserId)
-      .single()
-
-    if (friendError || !friendData) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    if (friendUserId === user.id) {
+      return NextResponse.json({ error: "Cannot add yourself as a friend" }, { status: 400 })
     }
+
+    // The friend request will be created regardless, and the recipient can accept/reject when they log in
 
     // Check if already friends
     const { data: existingFriend } = await supabase
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       .select("id")
       .eq("user_id", user.id)
       .eq("friend_user_id", friendUserId)
-      .single()
+      .maybeSingle()
 
     if (existingFriend) {
       return NextResponse.json({ error: "Already friends" }, { status: 409 })
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
       .select("id, status")
       .eq("from_user_id", user.id)
       .eq("to_user_id", friendUserId)
-      .single()
+      .maybeSingle()
 
     if (existingRequest) {
       if (existingRequest.status === "pending") {
@@ -84,13 +84,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create friend request
+    // Create friend request - allow it even if user doesn't exist yet
     const { error: insertError } = await supabase
       .from("friend_requests")
       .insert({ from_user_id: user.id, to_user_id: friendUserId, status: "pending" })
 
     if (insertError) {
       console.error("[v0] Friend request error:", insertError)
+      if (insertError.code === "23503") {
+        return NextResponse.json({ error: "User not found" }, { status: 404 })
+      }
       return NextResponse.json({ error: "Failed to send friend request" }, { status: 500 })
     }
 

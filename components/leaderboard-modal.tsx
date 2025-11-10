@@ -48,6 +48,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
   const [copiedUserId, setCopiedUserId] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
@@ -70,6 +71,22 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       localStorage.setItem("leaderboard_metric", metric)
     }
   }, [metric, scope])
+
+  useEffect(() => {
+    const handleFocus = () => {
+      if (inputRef.current && window.innerWidth < 768) {
+        setTimeout(() => {
+          inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+        }, 300)
+      }
+    }
+
+    const input = inputRef.current
+    if (input) {
+      input.addEventListener("focus", handleFocus)
+      return () => input.removeEventListener("focus", handleFocus)
+    }
+  }, [showAddFriend])
 
   const loadLeaderboard = async (reset = false) => {
     try {
@@ -119,9 +136,27 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   }
 
   const handleAddFriend = async () => {
-    if (!friendInput.trim()) return
+    if (!friendInput.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a User ID",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (friendInput.trim() === userId) {
+      toast({
+        title: "Error",
+        description: "You cannot add yourself as a friend",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
+      console.log("[v0] Sending friend request to:", friendInput.trim())
+
       const response = await fetch("/api/me/friends", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,6 +166,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       const data = await response.json()
 
       if (!response.ok) {
+        console.error("[v0] Friend request failed:", data.error)
         toast({
           title: "Error",
           description: data.error || "Failed to send friend request",
@@ -147,6 +183,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       console.log("[v0] friend_request_sent", { friendUserId: friendInput.trim() })
 
       setFriendInput("")
+      loadFriendRequests()
     } catch (error) {
       console.error("[v0] Failed to add friend:", error)
       toast({
@@ -196,7 +233,21 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   const handleCopyUserId = async () => {
     try {
-      await navigator.clipboard.writeText(userId)
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(userId)
+      } else {
+        const textArea = document.createElement("textarea")
+        textArea.value = userId
+        textArea.style.position = "fixed"
+        textArea.style.left = "-999999px"
+        textArea.style.top = "-999999px"
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textArea)
+      }
+
       setCopiedUserId(true)
       toast({
         title: "Copied!",
@@ -237,8 +288,8 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[72vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border sticky top-0 bg-background z-10">
+      <DialogContent className="max-w-md max-h-[90dvh] md:max-h-[72vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border sticky top-0 bg-background z-10 flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {friendRequests.length > 0 ? (
@@ -313,7 +364,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
           </div>
         </DialogHeader>
 
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {showRequests && friendRequests.length > 0 ? (
             <div className="px-6 py-4">
               <div className="flex items-center justify-between mb-3">
@@ -374,7 +425,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
               </div>
             </div>
           ) : (
-            <ScrollArea ref={scrollRef} onScrollCapture={handleScroll} className="h-[360px] px-6">
+            <ScrollArea ref={scrollRef} onScrollCapture={handleScroll} className="flex-1 px-6">
               {loading && entries.length === 0 ? (
                 <div className="space-y-2">
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -433,7 +484,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
         </div>
 
         {showAddFriend && !showRequests && (
-          <div className="px-6 pb-4 pt-3 border-t border-border bg-background">
+          <div className="px-6 pb-4 md:pb-4 pt-3 border-t border-border bg-background flex-shrink-0 sticky bottom-0">
             <div className="space-y-2">
               <div className="text-xs font-semibold text-muted-foreground">Add Friends</div>
               <div className="flex gap-2">
@@ -452,6 +503,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
               </div>
               <div className="flex gap-2">
                 <Input
+                  ref={inputRef}
                   placeholder="Friend's User ID"
                   value={friendInput}
                   onChange={(e) => setFriendInput(e.target.value)}

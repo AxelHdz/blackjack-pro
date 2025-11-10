@@ -25,20 +25,23 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  // IMPORTANT: getUser() must be called to refresh session
+  // This prevents infinite redirects and allows public pages like login/signup
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Redirect to login if not authenticated and trying to access protected route
-  if (!user && request.nextUrl.pathname !== "/auth/login" && request.nextUrl.pathname !== "/auth/callback") {
+  const publicRoutes = ["/auth/login", "/auth/sign-up", "/auth/callback"]
+  const isPublicRoute = publicRoutes.some((route) => request.nextUrl.pathname.startsWith(route))
+
+  // Redirect to login if not authenticated and trying to access protected route (root path)
+  if (!user && request.nextUrl.pathname === "/" && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
     return NextResponse.redirect(url)
   }
 
-  // Redirect to home if authenticated and trying to access login
-  if (user && request.nextUrl.pathname === "/auth/login") {
+  // Redirect to home if authenticated and trying to access auth pages
+  if (user && (request.nextUrl.pathname === "/auth/login" || request.nextUrl.pathname === "/auth/sign-up")) {
     const url = request.nextUrl.clone()
     url.pathname = "/"
     return NextResponse.redirect(url)

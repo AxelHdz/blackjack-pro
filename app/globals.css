@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+
 :root {
   /* Apple dark mode color scheme with subtle accents */
   --background: oklch(0.12 0.006 264);
@@ -137,6 +139,7 @@
   }
   body {
     /* Apple-style subtle gradient background */
+    @apply bg-background text-foreground;
     background: linear-gradient(to bottom, oklch(0.13 0.006 264), oklch(0.1 0.006 264));
     color: oklch(0.95 0.005 264);
   }
@@ -202,4 +205,59 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+/* Added animate-in utility for slide and fade animations */
+@keyframes slideInFromBottom {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInFromTop {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: fadeIn;
+}
+
+.slide-in-from-bottom-4 {
+  animation-name: slideInFromBottom;
+}
+
+.slide-in-from-top-2 {
+  animation-name: slideInFromTop;
+}
+
+.duration-200 {
+  animation-duration: 200ms;
+}
+
+.duration-400 {
+  animation-duration: 400ms;
+}
+
+.duration-500 {
+  animation-duration: 500ms;
+}
+
+.ease-out {
+  animation-timing-function: ease-out;
 }

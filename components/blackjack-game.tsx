@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
@@ -39,7 +39,7 @@ interface BlackjackGameProps {
 
 export function BlackjackGame({ userId }: BlackjackGameProps) {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [statsLoaded, setStatsLoaded] = useState(false)
 

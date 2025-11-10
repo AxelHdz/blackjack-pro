@@ -287,16 +287,16 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
   const optimalMove = getOptimalMove(playerHand, dealerHand[0])
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-2 overflow-hidden">
-      <div className="bg-card border border-border rounded-2xl p-3 sm:p-4 max-w-lg w-full shadow-2xl">
+    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden">
+      <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 md:p-6 max-w-lg w-full shadow-2xl max-h-[95vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Badge variant="default" className="text-sm px-3 py-1 bg-primary">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="default" className="text-sm sm:text-base px-3 py-1 bg-primary">
               {streakCount}/{streakRequired}
             </Badge>
-            <Badge variant="secondary" className="text-sm px-3 py-1 flex items-center gap-1">
-              <Clock className="h-3 w-3" />
+            <Badge variant="secondary" className="text-sm sm:text-base px-3 py-1 flex items-center gap-1">
+              <Clock className="h-3 w-3 sm:h-4 sm:w-4" />
               {timeRemaining}s
             </Badge>
             <div className="flex gap-1">
@@ -308,39 +308,39 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
               ))}
             </div>
           </div>
-          <Button onClick={onClose} variant="ghost" size="sm" className="h-7 w-7 p-0">
+          <Button onClick={onClose} variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0">
             <X className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Title */}
-        <div className="text-center mb-3">
-          <h2 className="text-lg font-bold mb-1">Buyback Drill: Tier {currentTier + 1}</h2>
-          <p className="text-xs text-muted-foreground">
+        <div className="text-center mb-4">
+          <h2 className="text-xl sm:text-2xl font-bold mb-1">Buyback Drill: Tier {currentTier + 1}</h2>
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Get {streakRequired} correct in a row to earn ${rewardAmount}
           </p>
         </div>
 
         {/* Game State */}
-        <div className="space-y-3 mb-3">
+        <div className="space-y-4 mb-4">
           {/* Dealer Hand */}
           <div className="text-center">
-            <div className="text-xs text-muted-foreground mb-1">Dealer Shows</div>
-            <Badge variant="secondary" className="mb-2 text-base font-bold px-3 py-1">
+            <div className="text-xs sm:text-sm text-muted-foreground mb-2">Dealer Shows</div>
+            <Badge variant="secondary" className="mb-3 text-lg sm:text-xl font-bold px-4 py-1.5">
               {calculateHandValue([dealerHand[0]])}
             </Badge>
-            <div className="flex justify-center scale-75">
+            <div className="flex justify-center scale-[0.7] sm:scale-75 md:scale-90">
               <PlayingCard card={dealerHand[0]} delay={0} owner="dealer" />
             </div>
           </div>
 
           {/* Player Hand */}
           <div className="text-center">
-            <div className="text-xs text-muted-foreground mb-1">Your Hand</div>
-            <Badge variant="default" className="mb-2 text-base font-bold px-3 py-1 bg-primary">
+            <div className="text-xs sm:text-sm text-muted-foreground mb-2">Your Hand</div>
+            <Badge variant="default" className="mb-3 text-lg sm:text-xl font-bold px-4 py-1.5 bg-primary">
               {calculateHandValue(playerHand)}
             </Badge>
-            <div className="flex justify-center gap-1 scale-75">
+            <div className="flex justify-center gap-1 sm:gap-2 scale-[0.7] sm:scale-75 md:scale-90">
               {playerHand.map((card, index) => (
                 <PlayingCard key={index} card={card} delay={0} owner="player" />
               ))}
@@ -351,7 +351,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
         {/* Feedback */}
         {showFeedback && (
           <div
-            className={`mb-3 p-2 rounded-lg border text-xs ${
+            className={`mb-4 p-3 rounded-lg border text-xs sm:text-sm ${
               isCorrect
                 ? isCounted
                   ? "bg-success/10 border-success"
@@ -363,18 +363,18 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
               {isCorrect ? (
                 isCounted ? (
                   <>
-                    <Check className="inline h-3 w-3 mr-1" />
+                    <Check className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     Optimal: {optimalMove?.toUpperCase()}. You chose {selectedAction?.toUpperCase()}. +1 streak!
                   </>
                 ) : (
                   <>
-                    <AlertCircle className="inline h-3 w-3 mr-1" />
+                    <AlertCircle className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                     Correct, but didn't count—{notCountedReason}
                   </>
                 )
               ) : (
                 <>
-                  <X className="inline h-3 w-3 mr-1" />
+                  <X className="inline h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                   Optimal: {optimalMove?.toUpperCase()}. Streak reset.
                 </>
               )}
@@ -383,13 +383,13 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
         )}
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           <Button
             onClick={() => handleActionSelect("hit")}
             disabled={showFeedback}
             variant="outline"
             size="lg"
-            className="h-12 text-sm"
+            className="h-12 sm:h-14 text-sm sm:text-base font-semibold"
           >
             Hit
           </Button>
@@ -398,7 +398,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
             disabled={showFeedback}
             variant="outline"
             size="lg"
-            className="h-12 text-sm"
+            className="h-12 sm:h-14 text-sm sm:text-base font-semibold"
           >
             Stand
           </Button>
@@ -407,7 +407,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
             disabled={showFeedback}
             variant="outline"
             size="lg"
-            className="h-12 text-sm"
+            className="h-12 sm:h-14 text-sm sm:text-base font-semibold"
           >
             Double
           </Button>
@@ -416,7 +416,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
             disabled={showFeedback}
             variant="outline"
             size="lg"
-            className="h-12 text-sm"
+            className="h-12 sm:h-14 text-sm sm:text-base font-semibold"
           >
             Split
           </Button>

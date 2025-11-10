@@ -95,29 +95,29 @@ Blackjack Pro is an educational web application designed to teach optimal blackj
 
 ### 1. Clone the Repository
 
-```bash
+\`\`\`bash
 git clone <repository-url>
 cd blackjack-pro
-```
+\`\`\`
 
 ### 2. Install Dependencies
 
-```bash
+\`\`\`bash
 pnpm install
-```
+\`\`\`
 
 ### 3. Environment Variables
 
 Create a `.env.local` file in the root directory:
 
-```env
+\`\`\`env
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # Optional: For OAuth redirects
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000/auth/callback
-```
+\`\`\`
 
 ### 4. Database Setup
 
@@ -135,15 +135,15 @@ These scripts will:
 
 ### 5. Run Development Server
 
-```bash
+\`\`\`bash
 pnpm dev
-```
+\`\`\`
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 📁 Project Structure
 
-```
+\`\`\`
 blackjack-pro/
 ├── app/                      # Next.js App Router pages
 │   ├── auth/                 # Authentication pages
@@ -185,7 +185,7 @@ blackjack-pro/
 ├── next.config.mjs        # Next.js configuration
 ├── package.json           # Dependencies and scripts
 └── tsconfig.json          # TypeScript configuration
-```
+\`\`\`
 
 ## 🎮 Key Features Explained
 
@@ -240,7 +240,7 @@ All stats persist to Supabase and sync across sessions.
 
 ### Available Scripts
 
-```bash
+\`\`\`bash
 # Development server
 pnpm dev
 
@@ -252,7 +252,7 @@ pnpm start
 
 # Lint code
 pnpm lint
-```
+\`\`\`
 
 ### Code Style
 
@@ -362,4 +362,3 @@ For issues, questions, or contributions, please open an issue on the repository.
 ---
 
 **Built with ❤️ for learning optimal blackjack strategy**
-

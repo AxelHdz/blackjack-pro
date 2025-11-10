@@ -1,0 +1,84 @@
+import { createClient } from "@/lib/supabase/server"
+import { type NextRequest, NextResponse } from "next/server"
+
+export async function GET(request: NextRequest) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const searchParams = request.nextUrl.searchParams
+  const scope = searchParams.get("scope") || "global"
+  const metric = searchParams.get("metric") || "balance"
+  const cursor = searchParams.get("cursor")
+  const limit = 50
+
+  try {
+    let query = supabase.from("game_stats").select(`
+        user_id,
+        total_money,
+        level,
+        user_profiles!inner(display_name, avatar_url)
+      `)
+
+    // Apply scope filter
+    if (scope === "friends") {
+      const { data: friendsData } = await supabase.from("friends").select("friend_user_id").eq("user_id", user.id)
+
+      const friendIds = friendsData?.map((f) => f.friend_user_id) || []
+      // Include user's own ID to see themselves in friends view
+      friendIds.push(user.id)
+
+      if (friendIds.length === 0) {
+        return NextResponse.json({ entries: [], nextCursor: null })
+      }
+
+      query = query.in("user_id", friendIds)
+    }
+
+    // Apply sorting
+    if (metric === "balance") {
+      query = query.order("total_money", { ascending: false }).order("level", { ascending: false })
+    } else {
+      query = query.order("level", { ascending: false }).order("total_money", { ascending: false })
+    }
+
+    // Apply pagination
+    if (cursor) {
+      const cursorValue = Number.parseInt(cursor)
+      query = query.range(cursorValue, cursorValue + limit - 1)
+    } else {
+      query = query.range(0, limit - 1)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error("[v0] Leaderboard query error:", error)
+      return NextResponse.json({ error: "Failed to fetch leaderboard" }, { status: 500 })
+    }
+
+    // Transform data to include rank
+    const entries =
+      data?.map((entry: any, index) => ({
+        userId: entry.user_id,
+        name: entry.user_profiles?.display_name || `User ${entry.user_id.slice(-4)}`,
+        avatarUrl: entry.user_profiles?.avatar_url,
+        currentBalance: entry.total_money,
+        level: entry.level,
+        rank: (cursor ? Number.parseInt(cursor) : 0) + index + 1,
+      })) || []
+
+    const nextCursor = entries.length === limit ? ((cursor ? Number.parseInt(cursor) : 0) + limit).toString() : null
+
+    return NextResponse.json({ entries, nextCursor })
+  } catch (err) {
+    console.error("[v0] Leaderboard error:", err)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}

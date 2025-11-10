@@ -20,6 +20,8 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { BuybackDrillModal } from "@/components/buyback-drill-modal"
 import { settle } from "@/lib/settlement" // Import the settlement helper
+import { LeaderboardChip } from "@/components/leaderboard-chip"
+import { LeaderboardModal } from "@/components/leaderboard-modal"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -116,6 +118,11 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
   const [drillTier, setDrillTier] = useState(0) // Track which tier
 
   const [isDoubled, setIsDoubled] = useState(false) // Reset doubled flag
+
+  // Leaderboard state
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
+  const [leaderboardScope, setLeaderboardScope] = useState<"global" | "friends">("global")
 
   // Minimum swipe distance (in px)
   const minSwipeDistance = 50
@@ -1111,6 +1118,8 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
         />
       )}
 
+      <LeaderboardModal open={showLeaderboard} onOpenChange={setShowLeaderboard} userId={userId} />
+
       {showLogoutConfirm && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center">
           <div className="bg-card border border-border rounded-2xl p-6 max-w-sm mx-4 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -1323,6 +1332,14 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
                       Overall
                     </button>
                   </div>
+                </div>
+
+                <div className="mt-3">
+                  <LeaderboardChip
+                    onClick={() => setShowLeaderboard(true)}
+                    metric={leaderboardMetric}
+                    scope={leaderboardScope}
+                  />
                 </div>
               </div>
             </div>

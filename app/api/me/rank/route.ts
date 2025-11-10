@@ -1,0 +1,67 @@
+import { createClient } from "@/lib/supabase/server"
+import { type NextRequest, NextResponse } from "next/server"
+
+export async function GET(request: NextRequest) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const searchParams = request.nextUrl.searchParams
+  const scope = searchParams.get("scope") || "global"
+  const metric = searchParams.get("metric") || "balance"
+
+  try {
+    // Get user's stats
+    const { data: userStats, error: userError } = await supabase
+      .from("game_stats")
+      .select("total_money, level")
+      .eq("user_id", user.id)
+      .single()
+
+    if (userError || !userStats) {
+      return NextResponse.json({ rank: null })
+    }
+
+    let query = supabase.from("game_stats").select("user_id", { count: "exact", head: false })
+
+    // Apply scope filter
+    if (scope === "friends") {
+      const { data: friendsData } = await supabase.from("friends").select("friend_user_id").eq("user_id", user.id)
+
+      const friendIds = friendsData?.map((f) => f.friend_user_id) || []
+      friendIds.push(user.id)
+
+      if (friendIds.length === 0) {
+        return NextResponse.json({ rank: 1 })
+      }
+
+      query = query.in("user_id", friendIds)
+    }
+
+    // Count users with better stats
+    if (metric === "balance") {
+      query = query.or(
+        `total_money.gt.${userStats.total_money},and(total_money.eq.${userStats.total_money},level.gt.${userStats.level})`,
+      )
+    } else {
+      query = query.or(
+        `level.gt.${userStats.level},and(level.eq.${userStats.level},total_money.gt.${userStats.total_money})`,
+      )
+    }
+
+    const { count } = await query
+
+    const rank = (count || 0) + 1
+
+    return NextResponse.json({ rank })
+  } catch (err) {
+    console.error("[v0] Rank calculation error:", err)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}

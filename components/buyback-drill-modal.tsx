@@ -364,7 +364,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
                 isCounted ? (
                   <>
                     <Check className="inline h-3 w-3 mr-1" />
-                    Optimal: {optimalMove?.toUpperCase()}. You chose {selectedAction?.toUpperCase()}. +1 streak!
+                    Optimal: {optimalMove?.toUpperCase()}. +1 streak!
                   </>
                 ) : (
                   <>

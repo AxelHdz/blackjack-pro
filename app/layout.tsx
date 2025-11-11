@@ -32,6 +32,7 @@ export const metadata: Metadata = {
     ],
     apple: "/apple-icon.svg",
   },
+    generator: 'v0.app'
 }
 
 export const viewport: Viewport = {

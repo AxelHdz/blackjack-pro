@@ -30,4 +30,3 @@ $$;
 
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION create_bidirectional_friendship(UUID, UUID) TO authenticated;
-

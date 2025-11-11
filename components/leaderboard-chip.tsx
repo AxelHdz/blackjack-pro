@@ -37,8 +37,8 @@ export function LeaderboardChip({ onClick, metric, scope }: LeaderboardChipProps
       aria-label={`Open leaderboard. Current rank ${rank || "unknown"} for ${metric}.`}
       className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-card hover:bg-muted transition-all duration-200 hover:scale-105 active:scale-95"
     >
-      <Trophy className="h-3.5 w-3.5 text-primary" />
-      <span className="text-xs font-medium text-foreground">Leaderboard · #{loading ? "..." : rank || "—"}</span>
+      <Trophy className="h-5 w-5 text-primary" />
+      <span className="text-sm font-medium text-foreground">Leaderboard · #{loading ? "..." : rank || "—"}</span>
     </button>
   )
 }

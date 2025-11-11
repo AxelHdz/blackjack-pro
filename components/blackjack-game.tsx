@@ -22,6 +22,7 @@ import { BuybackDrillModal } from "@/components/buyback-drill-modal"
 import { settle } from "@/lib/settlement" // Import the settlement helper
 import { LeaderboardChip } from "@/components/leaderboard-chip"
 import { LeaderboardModal } from "@/components/leaderboard-modal"
+import { useToast } from "@/hooks/use-toast"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -43,6 +44,7 @@ interface BlackjackGameProps {
 export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
+  const { toast } = useToast()
 
   const [statsLoaded, setStatsLoaded] = useState(false)
 
@@ -144,7 +146,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       // Only save when stats are loaded and balance has a value
       saveUserStats()
     }
-  }, [balance, level, xp, handsPlayed, correctMoves, totalMoves, wins, losses, modeStats, totalWinnings])
+  }, [balance, level, xp, handsPlayed, correctMoves, totalMoves, wins, losses, modeStats, totalWinnings, learningMode])
 
   useEffect(() => {
     const newDeck = createDeck()
@@ -173,6 +175,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             wins: 0,
             losses: 0,
             drill_tier: 0,
+            last_play_mode: "guided",
             learning_hands_played: 0,
             learning_correct_moves: 0,
             learning_total_moves: 0,
@@ -227,6 +230,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setWins(data.wins ?? 0)
         setLosses(data.losses ?? 0)
         setDrillTier(data.drill_tier ?? 0) // Load drill tier
+        
+        // Load last play mode, defaulting to "guided" if not set or invalid
+        const savedMode = data.last_play_mode
+        if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
+          setLearningMode(savedMode)
+        }
 
         setModeStats({
           guided: {
@@ -310,6 +319,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           expert_total_moves: Math.floor(modeStats.expert.totalMoves),
           expert_wins: Math.floor(modeStats.expert.wins),
           expert_losses: Math.floor(modeStats.expert.losses),
+          last_play_mode: learningMode,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", userId)
@@ -1167,11 +1177,59 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       if (response.ok && data.success) {
         console.log("[v0] Friend referral processed successfully")
-        // Don't show toast to avoid interrupting gameplay
-        // The friendship is now established bidirectionally
+        
+        // Fetch friend's username to display in toast
+        try {
+          const { data: profileData, error: profileError } = await supabase
+            .from("user_profiles")
+            .select("display_name")
+            .eq("id", referrerId)
+            .single()
+
+          const friendName = profileData?.display_name || "your friend"
+          
+          toast({
+            title: "Friend Added!",
+            description: `You've successfully connected with ${friendName}!`,
+          })
+        } catch (profileError) {
+          // If we can't fetch the username, show generic message
+          console.error("[v0] Failed to fetch friend's profile:", profileError)
+          toast({
+            title: "Friend Added!",
+            description: "You've successfully connected with your friend!",
+          })
+        }
+      } else if (response.ok && !data.success) {
+        // Handle case where friend is already added or other non-error response
+        if (data.message === "Already friends") {
+          toast({
+            title: "Already Friends",
+            description: "You're already connected with this friend.",
+          })
+        } else if (data.message === "Cannot add yourself") {
+          // Don't show toast for this case
+        } else {
+          toast({
+            title: "Notice",
+            description: data.message || "Friend connection status updated.",
+          })
+        }
+      } else {
+        // Handle error response
+        toast({
+          title: "Error",
+          description: data.error || "Failed to add friend",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("[v0] Failed to process friend referral:", error)
+      toast({
+        title: "Error",
+        description: "Failed to process friend connection",
+        variant: "destructive",
+      })
     }
   }
 

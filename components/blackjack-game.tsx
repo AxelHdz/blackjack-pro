@@ -23,6 +23,7 @@ import { settle } from "@/lib/settlement" // Import the settlement helper
 import { LeaderboardChip } from "@/components/leaderboard-chip"
 import { LeaderboardModal } from "@/components/leaderboard-modal"
 import { useToast } from "@/hooks/use-toast"
+import { getXPNeeded, getCashBonusWithCap, LEVELING_CONFIG } from "@/lib/leveling-config"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -55,6 +56,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [currentBet, setCurrentBet] = useState(0)
   const [balance, setBalance] = useState<number | null>(null)
   const [totalWinnings, setTotalWinnings] = useState(0)
+  const [levelWinnings, setLevelWinnings] = useState(0)
   const [handsPlayed, setHandsPlayed] = useState(0)
   const [showHint, setShowHint] = useState(true)
   const [message, setMessage] = useState("")
@@ -106,7 +108,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [showLevelUp, setShowLevelUp] = useState(false)
   const [levelUpData, setLevelUpData] = useState<{
     newLevel: number
-    totalWinnings: number
+    levelWinnings: number
+    cashBonus: number
     accuracy: number
   } | null>(null)
 
@@ -147,7 +150,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       // Only save when stats are loaded and balance has a value
       saveUserStats()
     }
-  }, [balance, level, xp, handsPlayed, correctMoves, totalMoves, wins, losses, modeStats, totalWinnings, learningMode])
+  }, [balance, level, xp, handsPlayed, correctMoves, totalMoves, wins, losses, modeStats, totalWinnings, levelWinnings, learningMode])
 
   useEffect(() => {
     const newDeck = createDeck()
@@ -203,6 +206,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         // Set default values and mark as loaded
         setBalance(500)
         setTotalWinnings(0)
+        setLevelWinnings(0)
         setLevel(1)
         setXp(0)
         setHandsPlayed(0)
@@ -223,6 +227,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       if (data) {
         setBalance(data.total_money ?? 500)
         setTotalWinnings(data.total_winnings ?? 0)
+        setLevelWinnings(data.level_winnings ?? 0)
         setLevel(data.level ?? 1)
         setXp(data.experience ?? 0)
         setHandsPlayed(data.hands_played ?? 0)
@@ -265,6 +270,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         // If no data, initialize with default values and set statsLoaded to true
         setBalance(500)
         setTotalWinnings(0)
+        setLevelWinnings(0)
         setLevel(1)
         setXp(0)
         setHandsPlayed(0)
@@ -297,6 +303,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         .update({
           total_money: Math.floor(balance),
           total_winnings: Math.floor(totalWinnings),
+          level_winnings: Math.floor(levelWinnings),
           level: Math.floor(level),
           experience: Math.floor(xp),
           hands_played: Math.floor(handsPlayed),
@@ -418,6 +425,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             const msg = "Push! Both Have Blackjack"
             setMessage(msg)
             setBalance((prev) => (prev !== null ? prev + payout : payout))
+            setTotalWinnings((prev) => prev + (payout - betAmount)) // Net change is 0, but track payout
+            // levelWinnings doesn't change for push (no net change)
             setRoundResult({
               message: msg,
               winAmount: 0,
@@ -428,6 +437,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             const msg = "Dealer Blackjack! You Lose"
             setMessage(msg)
             setTotalWinnings((prev) => prev - betAmount)
+            setLevelWinnings((prev) => prev - betAmount)
             setRoundResult({
               message: msg,
               winAmount: -betAmount,
@@ -452,7 +462,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               handsPlayed: prev[learningMode].handsPlayed + 1,
             },
           }))
-          addExperience(3)
+          // No XP awarded for dealer blackjack (push or loss)
           const newRoundCount = roundsSinceReview + 1
           setRoundsSinceReview(newRoundCount)
           if (newRoundCount >= 30) {
@@ -483,13 +493,15 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       setMessage(msg)
       setBalance((prev) => (prev !== null ? prev + payout : payout))
       setTotalWinnings((prev) => prev + profit)
+      setLevelWinnings((prev) => prev + profit)
       setRoundResult({
         message: msg,
         winAmount: profit,
         newBalance: currentBalance + payout,
       })
       setGameState("finished")
-      addExperience(15)
+      // Award XP for blackjack win
+      addExperience(LEVELING_CONFIG.XP_PER_WIN)
       const newRoundCount = roundsSinceReview + 1
       setRoundsSinceReview(newRoundCount)
       if (newRoundCount >= 30) {
@@ -588,6 +600,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setHandsPlayed((prev) => prev + 1)
 
         setLosses((prev) => prev + 1)
+        setTotalWinnings((prev) => prev - activeBet)
+        setLevelWinnings((prev) => prev - activeBet)
         setModeStats((prev) => ({
           ...prev,
           [learningMode]: {
@@ -598,7 +612,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         }))
         setTotalMoves((prev) => prev + 1)
 
-        addExperience(3)
+        // No XP awarded for bust (loss)
         const newRoundCount = roundsSinceReview + 1
         setRoundsSinceReview(newRoundCount)
         if (newRoundCount >= 30) {
@@ -766,6 +780,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     setWins((prev) => prev + handsWon)
     setLosses((prev) => prev + handsLost)
+    setTotalWinnings((prev) => prev + netWinAmount)
+    setLevelWinnings((prev) => prev + netWinAmount)
     setModeStats((prev) => ({
       ...prev,
       [learningMode]: {
@@ -779,13 +795,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setCorrectMoves((prev) => prev + handsWon)
     setTotalMoves((prev) => prev + handsTotal)
 
+    // Only award XP on wins: 2 wins = 2x XP, 1 win = 1x XP, 0 wins = 0 XP
     if (winsCount === 2) {
-      addExperience(12)
+      addExperience(LEVELING_CONFIG.XP_PER_WIN * 2)
     } else if (winsCount === 1) {
-      addExperience(8)
-    } else {
-      addExperience(4)
+      addExperience(LEVELING_CONFIG.XP_PER_WIN)
     }
+    // No XP for 0 wins
 
     const newRoundCount = roundsSinceReview + 1
     setRoundsSinceReview(newRoundCount)
@@ -856,8 +872,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     if (didWin) {
       setWins((prev) => prev + 1)
       setTotalWinnings((prev) => prev + winAmount)
+      setLevelWinnings((prev) => prev + winAmount)
     } else if (result === "loss") {
       setLosses((prev) => prev + 1)
+      setTotalWinnings((prev) => prev + winAmount)
+      setLevelWinnings((prev) => prev + winAmount) // Can be negative
+    } else {
+      // Push - update total winnings but not level winnings (no net change)
       setTotalWinnings((prev) => prev + winAmount)
     }
 
@@ -873,17 +894,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     if (didWin) {
       setCorrectMoves((prev) => prev + 1)
+      // Only award XP on wins
+      addExperience(LEVELING_CONFIG.XP_PER_WIN)
     }
     if (result !== "push") {
       setTotalMoves((prev) => prev + 1)
-    }
-
-    if (didWin) {
-      addExperience(10)
-    } else if (result === "push") {
-      addExperience(5)
-    } else {
-      addExperience(3)
     }
 
     const newRoundCount = roundsSinceReview + 1
@@ -916,6 +931,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       setMessage(msg)
       const totalBetAmount = initialBet * 2
       setTotalWinnings((prev) => prev - totalBetAmount)
+      setLevelWinnings((prev) => prev - totalBetAmount)
       // Use functional update to ensure we have the latest balance (already reduced by additionalBet)
       setBalance((prevBalance) => {
         const calculatedBalance = prevBalance !== null ? prevBalance : 0
@@ -940,7 +956,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         },
       }))
 
-      addExperience(3)
+      // No XP awarded for bust (loss)
       const newRoundCount = roundsSinceReview + 1
       setRoundsSinceReview(newRoundCount)
       if (newRoundCount >= 30) {
@@ -1059,20 +1075,49 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const addExperience = (amount: number) => {
     setXp((prevXp) => {
-      const newXp = prevXp + amount
-      if (newXp >= 100) {
-        const newLevel = level + 1
-        setLevel(newLevel)
+      let currentXp = prevXp + amount
+      let currentLevel = level
+      let levelUpOccurred = false
+      let finalLevel = currentLevel
+      let finalCashBonus = 0
+      const currentLevelWinnings = levelWinnings
+
+      // Handle multiple level-ups if XP exceeds multiple thresholds
+      while (currentXp >= getXPNeeded(currentLevel)) {
+        levelUpOccurred = true
+        const xpNeeded = getXPNeeded(currentLevel)
+        currentXp -= xpNeeded
+        currentLevel += 1
+        finalLevel = currentLevel
+        
+        // Calculate cash bonus based on the level just completed (currentLevel - 1)
+        const bonus = getCashBonusWithCap(currentLevel - 1, LEVELING_CONFIG.cash_cap)
+        finalCashBonus += bonus
+        
+        // Add bonus to balance
+        setBalance((prevBalance) => {
+          if (prevBalance === null) return prevBalance
+          return prevBalance + bonus
+        })
+      }
+
+      // If level-up occurred, update level and show level-up modal
+      if (levelUpOccurred) {
+        setLevel(finalLevel)
+        // Reset level winnings
+        setLevelWinnings(0)
+        
         const accuracy = totalMoves > 0 ? Math.round((correctMoves / totalMoves) * 100) : 0
         setLevelUpData({
-          newLevel,
-          totalWinnings,
+          newLevel: finalLevel,
+          levelWinnings: currentLevelWinnings,
+          cashBonus: finalCashBonus,
           accuracy,
         })
         setShowLevelUp(true)
-        return newXp - 100
       }
-      return newXp
+
+      return currentXp
     })
   }
 
@@ -1300,12 +1345,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
               {/* Stats Display */}
               <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full">
-                {/* Total Winnings Stat */}
+                {/* Level Winnings Stat */}
                 <div className="bg-card/80 backdrop-blur border-2 border-primary/50 rounded-xl p-4 sm:p-6 w-full sm:min-w-[180px] transform hover:scale-105 transition-all duration-300">
                   <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">
-                    ${levelUpData.totalWinnings.toLocaleString()}
+                    ${levelUpData.levelWinnings.toLocaleString()}
                   </div>
-                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Total Winnings</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Level Winnings</div>
+                </div>
+
+                {/* Cash Bonus Stat */}
+                <div className="bg-card/80 backdrop-blur border-2 border-green-500/50 rounded-xl p-4 sm:p-6 w-full sm:min-w-[180px] transform hover:scale-105 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 delay-300">
+                  <div className="text-3xl sm:text-4xl font-bold text-green-500 mb-2">
+                    +${levelUpData.cashBonus.toLocaleString()}
+                  </div>
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Cash Bonus</div>
                 </div>
 
                 {/* Accuracy Stat */}

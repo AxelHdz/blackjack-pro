@@ -248,7 +248,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   const handleCopyUserId = async () => {
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://blackjack.axelhdz.com"
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : (process.env.NEXT_PUBLIC_BASE_URL || "https://blackjack.axelhdz.com")
       const friendLink = `${baseUrl}?friend=${userId}`
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -269,7 +269,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       setCopiedUserId(true)
       toast({
         title: "Copied!",
-        description: "Your friend link has been copied to clipboard",
+        description: "Your friend link has been copied to clipboard. Share it to automatically connect!",
       })
 
       setTimeout(() => setCopiedUserId(false), 2000)

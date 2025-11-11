@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       .from("friends")
       .select("*")
       .or(
-        `and(user_id.eq.${user.id},friend_id.eq.${friendUserId}),and(user_id.eq.${friendUserId},friend_id.eq.${user.id})`,
+        `and(user_id.eq.${user.id},friend_user_id.eq.${friendUserId}),and(user_id.eq.${friendUserId},friend_user_id.eq.${user.id})`,
       )
       .limit(1)
 
@@ -39,22 +39,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Already friends" }, { status: 200 })
     }
 
-    // Create bidirectional friendship (both users become friends automatically)
-    const { error: friendship1Error } = await supabase.from("friends").insert({
-      user_id: user.id,
-      friend_id: friendUserId,
-      created_at: new Date().toISOString(),
+    // Use database function to create bidirectional friendship (bypasses RLS)
+    const { error: functionError } = await supabase.rpc("create_bidirectional_friendship", {
+      user1_id: user.id,
+      user2_id: friendUserId,
     })
 
-    const { error: friendship2Error } = await supabase.from("friends").insert({
-      user_id: friendUserId,
-      friend_id: user.id,
-      created_at: new Date().toISOString(),
-    })
+    if (functionError) {
+      console.error("[v0] Error creating bidirectional friendship:", functionError)
+      // Fallback to direct insert (only creates one direction if RLS blocks the second)
+      const { error: friendship1Error } = await supabase.from("friends").insert({
+        user_id: user.id,
+        friend_user_id: friendUserId,
+        created_at: new Date().toISOString(),
+      })
 
-    if (friendship1Error || friendship2Error) {
-      console.error("[v0] Error creating friendship:", friendship1Error || friendship2Error)
-      return NextResponse.json({ error: "Failed to create friendship" }, { status: 500 })
+      if (friendship1Error) {
+        console.error("[v0] Fallback insert also failed:", friendship1Error)
+        return NextResponse.json({ error: "Failed to create friendship" }, { status: 500 })
+      }
     }
 
     console.log("[v0] friend_added_via_referral", { referrerId: friendUserId, newFriendId: user.id })

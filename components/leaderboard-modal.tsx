@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Copy, UserPlus, X, Check, XIcon } from "lucide-react"
@@ -42,7 +41,6 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
-  const [friendInput, setFriendInput] = useState("")
   const [friends, setFriends] = useState<string[]>([])
   const [showAddFriend, setShowAddFriend] = useState(false)
   const [showRequests, setShowRequests] = useState(false)
@@ -50,7 +48,6 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [copiedUserId, setCopiedUserId] = useState(false)
   const [userDisplayName, setUserDisplayName] = useState<string>("")
   const scrollRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
@@ -74,22 +71,6 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       localStorage.setItem("leaderboard_metric", metric)
     }
   }, [metric, scope])
-
-  useEffect(() => {
-    const handleFocus = () => {
-      if (inputRef.current && window.innerWidth < 768) {
-        setTimeout(() => {
-          inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-        }, 300)
-      }
-    }
-
-    const input = inputRef.current
-    if (input) {
-      input.addEventListener("focus", handleFocus)
-      return () => input.removeEventListener("focus", handleFocus)
-    }
-  }, [showAddFriend])
 
   const loadLeaderboard = async (reset = false) => {
     try {
@@ -147,65 +128,6 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       }
     } catch (error) {
       console.error("[v0] Failed to load user profile:", error)
-    }
-  }
-
-  const handleAddFriend = async () => {
-    if (!friendInput.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a User ID",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (friendInput.trim() === userId) {
-      toast({
-        title: "Error",
-        description: "You cannot add yourself as a friend",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      console.log("[v0] Sending friend request to:", friendInput.trim())
-
-      const response = await fetch("/api/me/friends", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ friendUserId: friendInput.trim() }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        console.error("[v0] Friend request failed:", data.error)
-        toast({
-          title: "Error",
-          description: data.error || "Failed to send friend request",
-          variant: "destructive",
-        })
-        return
-      }
-
-      toast({
-        title: "Success",
-        description: data.message || "Friend request sent",
-      })
-
-      console.log("[v0] friend_request_sent", { friendUserId: friendInput.trim() })
-
-      setFriendInput("")
-      loadFriendRequests()
-    } catch (error) {
-      console.error("[v0] Failed to add friend:", error)
-      toast({
-        title: "Error",
-        description: "Failed to send friend request",
-        variant: "destructive",
-      })
     }
   }
 
@@ -448,7 +370,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
               </div>
             </div>
           ) : (
-            <ScrollArea ref={scrollRef} onScrollCapture={handleScroll} className="flex-1 px-6 min-h-[320px]">
+            <ScrollArea ref={scrollRef} onScrollCapture={handleScroll} className="px-6 h-[360px] md:h-[400px]">
               {loading && entries.length === 0 ? (
                 <div className="space-y-2">
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -465,7 +387,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
               ) : entries.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <p className="text-sm text-muted-foreground">
-                    {scope === "friends" ? "No friends yet — add some using a User ID." : "No leaderboard entries yet."}
+                    {scope === "friends" ? "No friends yet — share your link to connect!" : "No leaderboard entries yet."}
                   </p>
                 </div>
               ) : (
@@ -530,27 +452,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
                   </Button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Input
-                  ref={inputRef}
-                  placeholder="Friend's User ID"
-                  value={friendInput}
-                  onChange={(e) => setFriendInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddFriend()}
-                  className="flex-1 text-sm"
-                  aria-label="Friend's user ID"
-                />
-                <Button
-                  onClick={handleAddFriend}
-                  size="sm"
-                  aria-label="Add friend by user ID"
-                  disabled={!friendInput.trim()}
-                >
-                  <UserPlus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Friends appear in your leaderboard.</p>
+              <p className="text-xs text-muted-foreground">Share your link to automatically connect with friends.</p>
             </div>
           </div>
         )}

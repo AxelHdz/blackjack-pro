@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Copy, UserPlus, X, Check, XIcon } from "lucide-react"
+import { UsernameEditor } from "@/components/username-editor"
 
 interface LeaderboardEntry {
   userId: string
@@ -47,6 +48,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [showRequests, setShowRequests] = useState(false)
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
   const [copiedUserId, setCopiedUserId] = useState(false)
+  const [userDisplayName, setUserDisplayName] = useState<string>("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -56,6 +58,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       loadLeaderboard(true)
       loadFriends()
       loadFriendRequests()
+      loadUserProfile()
 
       const savedScope = localStorage.getItem("leaderboard_scope") as "global" | "friends" | null
       const savedMetric = localStorage.getItem("leaderboard_metric") as "balance" | "level" | null
@@ -132,6 +135,18 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       setFriendRequests(data.requests || [])
     } catch (error) {
       console.error("[v0] Failed to load friend requests:", error)
+    }
+  }
+
+  const loadUserProfile = async () => {
+    try {
+      const response = await fetch("/api/me/profile")
+      const data = await response.json()
+      if (data.profile?.display_name) {
+        setUserDisplayName(data.profile.display_name)
+      }
+    } catch (error) {
+      console.error("[v0] Failed to load user profile:", error)
     }
   }
 
@@ -233,11 +248,14 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   const handleCopyUserId = async () => {
     try {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://blackjack.axelhdz.com"
+      const friendLink = `${baseUrl}?friend=${userId}`
+
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(userId)
+        await navigator.clipboard.writeText(friendLink)
       } else {
         const textArea = document.createElement("textarea")
-        textArea.value = userId
+        textArea.value = friendLink
         textArea.style.position = "fixed"
         textArea.style.left = "-999999px"
         textArea.style.top = "-999999px"
@@ -251,15 +269,15 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       setCopiedUserId(true)
       toast({
         title: "Copied!",
-        description: "Your User ID has been copied to clipboard",
+        description: "Your friend link has been copied to clipboard",
       })
 
       setTimeout(() => setCopiedUserId(false), 2000)
     } catch (error) {
-      console.error("[v0] Failed to copy user ID:", error)
+      console.error("[v0] Failed to copy friend link:", error)
       toast({
         title: "Error",
-        description: "Failed to copy User ID",
+        description: "Failed to copy friend link",
         variant: "destructive",
       })
     }
@@ -285,6 +303,11 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       loadLeaderboard(false)
     }
   }, [loading, nextCursor])
+
+  const handleUsernameUpdate = (newUsername: string) => {
+    setUserDisplayName(newUsername)
+    loadLeaderboard(true) // Reload leaderboard to show updated username
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -425,7 +448,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
               </div>
             </div>
           ) : (
-            <ScrollArea ref={scrollRef} onScrollCapture={handleScroll} className="flex-1 px-6">
+            <ScrollArea ref={scrollRef} onScrollCapture={handleScroll} className="flex-1 px-6 min-h-[320px]">
               {loading && entries.length === 0 ? (
                 <div className="space-y-2">
                   {Array.from({ length: 5 }).map((_, i) => (
@@ -459,7 +482,13 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
                         {entry.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{entry.name}</div>
+                        {entry.userId === userId ? (
+                          <div className="flex items-center gap-1 mb-1">
+                            <UsernameEditor initialUsername={entry.name} onUpdate={handleUsernameUpdate} />
+                          </div>
+                        ) : (
+                          <div className="text-sm font-medium truncate">{entry.name}</div>
+                        )}
                         <div className="text-xs text-muted-foreground">
                           {metric === "balance" ? (
                             <>

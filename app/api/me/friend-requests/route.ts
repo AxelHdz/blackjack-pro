@@ -31,6 +31,18 @@ export async function GET() {
     }
 
     const userIds = requestsData.map((req) => req.from_user_id)
+
+    const { data: profilesData, error: profilesError } = await supabase
+      .from("user_profiles")
+      .select("id, display_name")
+      .in("id", userIds)
+
+    if (profilesError) {
+      console.error("[v0] User profiles fetch error:", profilesError)
+    }
+
+    const profilesMap = new Map(profilesData?.map((profile) => [profile.id, profile]) || [])
+
     const { data: statsData, error: statsError } = await supabase
       .from("game_stats")
       .select("user_id, total_money, level")
@@ -43,11 +55,12 @@ export async function GET() {
     const statsMap = new Map(statsData?.map((stat) => [stat.user_id, stat]) || [])
 
     const requests = requestsData.map((req) => {
+      const profile = profilesMap.get(req.from_user_id)
       const stats = statsMap.get(req.from_user_id)
       return {
         id: req.id,
         fromUserId: req.from_user_id,
-        name: `User ${req.from_user_id.slice(0, 8)}`,
+        name: profile?.display_name || `User ${req.from_user_id.slice(0, 8)}`,
         currentBalance: stats?.total_money || 0,
         level: stats?.level || 1,
         createdAt: req.created_at,

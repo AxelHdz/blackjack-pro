@@ -37,9 +37,10 @@ type StatsView = "overall" | "perMode"
 
 interface BlackjackGameProps {
   userId: string
+  friendReferralId?: string // Add optional friend referral ID prop
 }
 
-export function BlackjackGame({ userId }: BlackjackGameProps) {
+export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
@@ -58,6 +59,7 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
   const [dealerRevealed, setDealerRevealed] = useState(false)
   const [isDealing, setIsDealing] = useState(false)
   const [activeBet, setActiveBet] = useState(0)
+  const [initialBet, setInitialBet] = useState(0)
   const [level, setLevel] = useState(1)
   const [xp, setXp] = useState(0)
 
@@ -132,6 +134,12 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
   }, [userId])
 
   useEffect(() => {
+    if (friendReferralId && friendReferralId !== userId) {
+      handleFriendReferral(friendReferralId)
+    }
+  }, [friendReferralId, userId])
+
+  useEffect(() => {
     if (statsLoaded && balance !== null) {
       // Only save when stats are loaded and balance has a value
       saveUserStats()
@@ -145,11 +153,65 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
 
   const loadUserStats = async () => {
     try {
+      console.log("[v0] Loading stats for user:", userId)
       const { data, error } = await supabase.from("game_stats").select("*").eq("user_id", userId).single()
 
       if (error) {
         console.error("[v0] Error loading stats:", error)
-        // Set statsLoaded to true even on error to avoid infinite loading
+        if (error.code === "PGRST116") {
+          // No rows found - create initial stats
+          console.log("[v0] No stats found, creating initial stats")
+          const { error: insertError } = await supabase.from("game_stats").insert({
+            user_id: userId,
+            total_money: 500,
+            total_winnings: 0,
+            level: 1,
+            experience: 0,
+            hands_played: 0,
+            correct_moves: 0,
+            total_moves: 0,
+            wins: 0,
+            losses: 0,
+            drill_tier: 0,
+            learning_hands_played: 0,
+            learning_correct_moves: 0,
+            learning_total_moves: 0,
+            learning_wins: 0,
+            learning_losses: 0,
+            practice_hands_played: 0,
+            practice_correct_moves: 0,
+            practice_total_moves: 0,
+            practice_wins: 0,
+            practice_losses: 0,
+            expert_hands_played: 0,
+            expert_correct_moves: 0,
+            expert_total_moves: 0,
+            expert_wins: 0,
+            expert_losses: 0,
+          })
+
+          if (insertError) {
+            console.error("[v0] Error creating initial stats:", insertError)
+          } else {
+            console.log("[v0] Successfully created initial stats")
+          }
+        }
+        // Set default values and mark as loaded
+        setBalance(500)
+        setTotalWinnings(0)
+        setLevel(1)
+        setXp(0)
+        setHandsPlayed(0)
+        setCorrectMoves(0)
+        setTotalMoves(0)
+        setWins(0)
+        setLosses(0)
+        setDrillTier(0)
+        setModeStats({
+          guided: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
+          practice: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
+          expert: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
+        })
         setStatsLoaded(true)
         return
       }
@@ -223,31 +285,31 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
       const { error } = await supabase
         .from("game_stats")
         .update({
-          total_money: balance,
-          total_winnings: totalWinnings,
-          level,
-          experience: xp,
-          hands_played: handsPlayed,
-          correct_moves: correctMoves,
-          total_moves: totalMoves,
-          wins,
-          losses,
-          drill_tier: drillTier, // Save drill tier
-          learning_hands_played: modeStats.guided.handsPlayed,
-          learning_correct_moves: modeStats.guided.correctMoves,
-          learning_total_moves: modeStats.guided.totalMoves,
-          learning_wins: modeStats.guided.wins,
-          learning_losses: modeStats.guided.losses,
-          practice_hands_played: modeStats.practice.handsPlayed,
-          practice_correct_moves: modeStats.practice.correctMoves,
-          practice_total_moves: modeStats.practice.totalMoves,
-          practice_wins: modeStats.practice.wins,
-          practice_losses: modeStats.practice.losses,
-          expert_hands_played: modeStats.expert.handsPlayed,
-          expert_correct_moves: modeStats.expert.correctMoves,
-          expert_total_moves: modeStats.expert.totalMoves,
-          expert_wins: modeStats.expert.wins,
-          expert_losses: modeStats.expert.losses,
+          total_money: Math.floor(balance),
+          total_winnings: Math.floor(totalWinnings),
+          level: Math.floor(level),
+          experience: Math.floor(xp),
+          hands_played: Math.floor(handsPlayed),
+          correct_moves: Math.floor(correctMoves),
+          total_moves: Math.floor(totalMoves),
+          wins: Math.floor(wins),
+          losses: Math.floor(losses),
+          drill_tier: Math.floor(drillTier),
+          learning_hands_played: Math.floor(modeStats.guided.handsPlayed),
+          learning_correct_moves: Math.floor(modeStats.guided.correctMoves),
+          learning_total_moves: Math.floor(modeStats.guided.totalMoves),
+          learning_wins: Math.floor(modeStats.guided.wins),
+          learning_losses: Math.floor(modeStats.guided.losses),
+          practice_hands_played: Math.floor(modeStats.practice.handsPlayed),
+          practice_correct_moves: Math.floor(modeStats.practice.correctMoves),
+          practice_total_moves: Math.floor(modeStats.practice.totalMoves),
+          practice_wins: Math.floor(modeStats.practice.wins),
+          practice_losses: Math.floor(modeStats.practice.losses),
+          expert_hands_played: Math.floor(modeStats.expert.handsPlayed),
+          expert_correct_moves: Math.floor(modeStats.expert.correctMoves),
+          expert_total_moves: Math.floor(modeStats.expert.totalMoves),
+          expert_wins: Math.floor(modeStats.expert.wins),
+          expert_losses: Math.floor(modeStats.expert.losses),
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", userId)
@@ -284,10 +346,6 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
   }
 
   const startNewHand = () => {
-    if (currentBet < 50) {
-      setMessage("Minimum bet is $50")
-      return
-    }
     if (currentBet === 0) return
     if (balance === null || balance < currentBet) return // Check if balance is loaded and sufficient
 
@@ -297,6 +355,7 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
     const newBalance = balance - currentBet
     setBalance(newBalance)
     setActiveBet(betAmount)
+    setInitialBet(betAmount)
     setShowFeedback(false)
     setFeedbackData(null)
     setIsSplit(false)
@@ -926,11 +985,7 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
   const clearBet = () => setCurrentBet(0)
   const addToBet = (amount: number) => {
     const newBet = currentBet + amount
-    if (newBet >= 50) {
-      setCurrentBet(Math.min(balance !== null ? balance : 0, newBet))
-    } else {
-      setCurrentBet(Math.min(balance !== null ? balance : 0, newBet))
-    }
+    setCurrentBet(Math.min(balance !== null ? balance : 0, newBet))
   }
   const setMaxBet = () => setCurrentBet(Math.min(balance !== null ? balance : 0, 25000))
 
@@ -950,10 +1005,11 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
     setFirstHandCards([])
     setShowBustMessage(false)
     setViewHandIndex(0) // Reset view hand index
+    setInitialBet(0) // Reset initial bet
   }
 
   const repeatBet = () => {
-    setCurrentBet(activeBet)
+    setCurrentBet(initialBet)
     setRoundResult(null)
     setPlayerHand([])
     setDealerHand([])
@@ -968,7 +1024,7 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
     setViewHandIndex(0)
     setIsDoubled(false) // Reset doubled flag
 
-    if (activeBet > 0 && balance !== null && balance >= activeBet) {
+    if (initialBet > 0 && balance !== null && balance >= initialBet) {
       // Check if balance is loaded
       startNewHand()
     }
@@ -1095,6 +1151,28 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
 
   const closeDrill = () => {
     setShowBuybackDrill(false)
+  }
+
+  const handleFriendReferral = async (referrerId: string) => {
+    try {
+      console.log("[v0] Processing friend referral from:", referrerId)
+
+      const response = await fetch("/api/me/friends/auto-add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ friendUserId: referrerId }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        console.log("[v0] Friend referral processed successfully")
+        // Don't show toast to avoid interrupting gameplay
+        // The friendship is now established bidirectionally
+      }
+    } catch (error) {
+      console.error("[v0] Failed to process friend referral:", error)
+    }
   }
 
   if (!statsLoaded || balance === null) {
@@ -1639,7 +1717,6 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
             <div className="text-2xl font-bold transition-all duration-500 ease-out">
               ${currentBet.toLocaleString()}
             </div>
-            {currentBet > 0 && currentBet < 50 && <div className="text-xs text-error mt-1">Minimum bet is $50</div>}
           </div>
 
           <div className="flex justify-center gap-2 mb-2">
@@ -1653,7 +1730,7 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
             </Button>
             <Button
               onClick={startNewHand}
-              disabled={currentBet < 50 || isDealing || balance === null || balance < currentBet}
+              disabled={currentBet === 0 || isDealing || balance === null || balance < currentBet}
               size="sm"
               className="h-10 px-6 transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 bg-success hover:bg-success/90"
             >
@@ -1674,14 +1751,15 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
             </div>
           ) : (
             <div className="flex justify-center gap-2 flex-wrap max-w-md mx-auto">
+              {/* Replace $50 with user's balance if balance is less than $50 */}
               <Button
-                onClick={() => addToBet(50)}
-                disabled={balance === null || 50 > balance}
+                onClick={() => addToBet(balance !== null && balance < 50 ? balance : 50)}
+                disabled={balance === null || balance === 0}
                 variant="outline"
                 size="lg"
                 className="h-16 px-8 bg-transparent transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 text-lg font-semibold"
               >
-                $50
+                ${balance !== null && balance < 50 ? balance : 50}
               </Button>
               <Button
                 onClick={() => addToBet(100)}
@@ -1722,9 +1800,9 @@ export function BlackjackGame({ userId }: BlackjackGameProps) {
                 onClick={repeatBet}
                 className="flex-1 transition-all duration-200 hover:scale-[1.02] h-14 px-10 text-base"
                 size="lg"
-                disabled={balance < activeBet}
+                disabled={balance < initialBet}
               >
-                Repeat Bet (${activeBet.toLocaleString()})
+                Repeat Bet (${initialBet.toLocaleString()})
               </Button>
             </div>
           ) : (

@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
   const limit = 50
 
   try {
+    console.log("[v0] Leaderboard query - scope:", scope, "metric:", metric)
+
     let query = supabase.from("game_stats").select(`
         user_id,
         total_money,
@@ -28,14 +30,23 @@ export async function GET(request: NextRequest) {
 
     // Apply scope filter
     if (scope === "friends") {
-      const { data: friendsData } = await supabase.from("friends").select("friend_user_id").eq("user_id", user.id)
+      const { data: friendsData, error: friendsError } = await supabase
+        .from("friends")
+        .select("friend_user_id")
+        .eq("user_id", user.id)
+
+      console.log("[v0] Friends data:", friendsData)
+      console.log("[v0] Friends error:", friendsError)
 
       const friendIds = friendsData?.map((f) => f.friend_user_id) || []
       // Include user's own ID to see themselves in friends view
       friendIds.push(user.id)
 
-      if (friendIds.length === 0) {
-        return NextResponse.json({ entries: [], nextCursor: null })
+      console.log("[v0] Friend IDs to filter:", friendIds)
+
+      if (friendIds.length === 1) {
+        // Only the user themselves, no friends
+        console.log("[v0] No friends found, returning only user")
       }
 
       query = query.in("user_id", friendIds)

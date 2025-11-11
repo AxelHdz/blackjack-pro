@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get("code")
+  const friendId = requestUrl.searchParams.get("friend") // Preserve friend parameter
   const origin = requestUrl.origin
 
   if (code) {
@@ -11,6 +12,6 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // Redirect to home page after successful OAuth login
-  return NextResponse.redirect(`${origin}/`)
+  const redirectPath = friendId ? `/?friend=${friendId}` : "/"
+  return NextResponse.redirect(`${origin}${redirectPath}`)
 }

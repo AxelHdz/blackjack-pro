@@ -56,8 +56,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Cannot add yourself as a friend" }, { status: 400 })
     }
 
-    // The friend request will be created regardless, and the recipient can accept/reject when they log in
-
     // Check if already friends
     const { data: existingFriend } = await supabase
       .from("friends")
@@ -70,19 +68,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Already friends" }, { status: 409 })
     }
 
-    // Check if request already exists
+    // Check if pending request already exists
     const { data: existingRequest } = await supabase
       .from("friend_requests")
       .select("id, status")
       .eq("from_user_id", user.id)
       .eq("to_user_id", friendUserId)
+      .eq("status", "pending") // Only check for pending requests
       .maybeSingle()
 
     if (existingRequest) {
-      if (existingRequest.status === "pending") {
-        return NextResponse.json({ error: "Friend request already sent" }, { status: 409 })
-      }
+      return NextResponse.json({ error: "Friend request already sent" }, { status: 409 })
     }
+
+    // Delete any old rejected/accepted requests to allow re-sending
+    await supabase
+      .from("friend_requests")
+      .delete()
+      .eq("from_user_id", user.id)
+      .eq("to_user_id", friendUserId)
+      .neq("status", "pending")
 
     // Create friend request - allow it even if user doesn't exist yet
     const { error: insertError } = await supabase

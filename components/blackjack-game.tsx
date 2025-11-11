@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
@@ -122,6 +122,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [drillTier, setDrillTier] = useState(0) // Track which tier
 
   const [isDoubled, setIsDoubled] = useState(false) // Reset doubled flag
+  const isDoubledRef = useRef(false) // Ref to track doubled status synchronously
 
   // Leaderboard state
   const [showLeaderboard, setShowLeaderboard] = useState(false)
@@ -376,6 +377,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setShowBustMessage(false)
     setViewHandIndex(0) // Reset view hand index
     setIsDoubled(false) // Reset doubled flag
+    isDoubledRef.current = false // Reset ref
+    isDoubledRef.current = false // Reset ref
 
     let deckCopy = [...deck]
 
@@ -823,17 +826,30 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       resultMessage = "Push! It's A Tie"
     }
 
-    const payout = settle({ result, baseBet: activeBet, isDoubled, isBlackjack: false })
-    const winAmount = payout - (isDoubled ? activeBet * 2 : activeBet)
-    const newBalance = balance !== null ? balance + payout : payout
-
-    setBalance(newBalance)
-    setMessage(resultMessage)
-    setRoundResult({
-      message: resultMessage,
-      winAmount: winAmount,
-      newBalance: newBalance,
+    // Use ref to check if doubled to avoid closure issues with async state updates
+    const wasDoubled = isDoubledRef.current
+    const payout = settle({ result, baseBet: initialBet, isDoubled: wasDoubled, isBlackjack: false })
+    const totalBetAmount = wasDoubled ? initialBet * 2 : initialBet
+    const winAmount = payout - totalBetAmount
+    
+    // Use functional update to ensure we have the latest balance (important after doubleDown)
+    setBalance((prevBalance) => {
+      const calculatedNewBalance = prevBalance !== null ? prevBalance + payout : payout
+      setRoundResult({
+        message: resultMessage,
+        winAmount: winAmount,
+        newBalance: calculatedNewBalance,
+      })
+      // Check if balance is zero after this update
+      if (calculatedNewBalance === 0) {
+        setTimeout(() => {
+          setGameState("betting")
+          setShowModeSelector(true)
+        }, 2000)
+      }
+      return calculatedNewBalance
     })
+    setMessage(resultMessage)
     setGameState("finished")
     setHandsPlayed((prev) => prev + 1)
 
@@ -876,13 +892,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       setShowRoundSummary(true)
       setRoundsSinceReview(0)
     }
-
-    if (newBalance === 0) {
-      setTimeout(() => {
-        setGameState("betting")
-        setShowModeSelector(true)
-      }, 2000)
-    }
   }
 
   const doubleDown = () => {
@@ -891,6 +900,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     if (balance === null || balance < activeBet) return // Check if balance is loaded and sufficient
 
     setIsDoubled(true)
+    isDoubledRef.current = true // Update ref synchronously
     const additionalBet = activeBet
     setBalance((prev) => (prev !== null ? prev - additionalBet : -additionalBet))
     const newActiveBet = activeBet * 2
@@ -904,11 +914,17 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     if (value > 21) {
       const msg = "Bust! You Lose"
       setMessage(msg)
-      setTotalWinnings((prev) => prev - newActiveBet)
-      setRoundResult({
-        message: msg,
-        winAmount: -newActiveBet,
-        newBalance: balance !== null ? balance - additionalBet : 0,
+      const totalBetAmount = initialBet * 2
+      setTotalWinnings((prev) => prev - totalBetAmount)
+      // Use functional update to ensure we have the latest balance (already reduced by additionalBet)
+      setBalance((prevBalance) => {
+        const calculatedBalance = prevBalance !== null ? prevBalance : 0
+        setRoundResult({
+          message: msg,
+          winAmount: -totalBetAmount,
+          newBalance: calculatedBalance,
+        })
+        return calculatedBalance
       })
       setGameState("finished")
       setDealerRevealed(true)
@@ -1033,6 +1049,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setShowBustMessage(false)
     setViewHandIndex(0)
     setIsDoubled(false) // Reset doubled flag
+    isDoubledRef.current = false // Reset ref
 
     if (initialBet > 0 && balance !== null && balance >= initialBet) {
       // Check if balance is loaded

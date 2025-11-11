@@ -23,7 +23,7 @@ import { settle } from "@/lib/settlement" // Import the settlement helper
 import { LeaderboardChip } from "@/components/leaderboard-chip"
 import { LeaderboardModal } from "@/components/leaderboard-modal"
 import { useToast } from "@/hooks/use-toast"
-import { getXPNeeded, getCashBonusWithCap, LEVELING_CONFIG } from "@/lib/leveling-config"
+import { getXPNeeded, getCashBonusWithCap, getXPPerWin, getXPPerWinWithBet, LEVELING_CONFIG } from "@/lib/leveling-config"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -66,6 +66,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [initialBet, setInitialBet] = useState(0)
   const [level, setLevel] = useState(1)
   const [xp, setXp] = useState(0)
+  // Use a ref to track level for XP calculations to avoid stale closure issues
+  const levelRef = useRef(1)
 
   const [isSplit, setIsSplit] = useState(false)
   const [splitHand, setSplitHand] = useState<CardType[]>([])
@@ -208,6 +210,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setTotalWinnings(0)
         setLevelWinnings(0)
         setLevel(1)
+        levelRef.current = 1
         setXp(0)
         setHandsPlayed(0)
         setCorrectMoves(0)
@@ -228,7 +231,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setBalance(data.total_money ?? 500)
         setTotalWinnings(data.total_winnings ?? 0)
         setLevelWinnings(data.level_winnings ?? 0)
-        setLevel(data.level ?? 1)
+        const loadedLevel = data.level ?? 1
+        setLevel(loadedLevel)
+        levelRef.current = loadedLevel
         setXp(data.experience ?? 0)
         setHandsPlayed(data.hands_played ?? 0)
         setCorrectMoves(data.correct_moves ?? 0)
@@ -272,6 +277,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setTotalWinnings(0)
         setLevelWinnings(0)
         setLevel(1)
+        levelRef.current = 1
         setXp(0)
         setHandsPlayed(0)
         setCorrectMoves(0)
@@ -500,8 +506,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         newBalance: currentBalance + payout,
       })
       setGameState("finished")
-      // Award XP for blackjack win
-      addExperience(LEVELING_CONFIG.XP_PER_WIN)
+      // Award XP for blackjack win (scaled by level and bet amount)
+      addExperience(getXPPerWinWithBet(level, betAmount))
       const newRoundCount = roundsSinceReview + 1
       setRoundsSinceReview(newRoundCount)
       if (newRoundCount >= 30) {
@@ -795,11 +801,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setCorrectMoves((prev) => prev + handsWon)
     setTotalMoves((prev) => prev + handsTotal)
 
-    // Only award XP on wins: 2 wins = 2x XP, 1 win = 1x XP, 0 wins = 0 XP
+    // Only award XP on wins: 2 wins = 2x XP, 1 win = 1x XP, 0 wins = 0 XP (scaled by level and bet)
+    // For split hands, use activeBet per hand (each hand gets XP based on its bet)
+    const xpPerWin = getXPPerWinWithBet(level, activeBet)
     if (winsCount === 2) {
-      addExperience(LEVELING_CONFIG.XP_PER_WIN * 2)
+      addExperience(xpPerWin * 2) // Two wins = two hands won
     } else if (winsCount === 1) {
-      addExperience(LEVELING_CONFIG.XP_PER_WIN)
+      addExperience(xpPerWin) // One win = one hand won
     }
     // No XP for 0 wins
 
@@ -894,8 +902,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     if (didWin) {
       setCorrectMoves((prev) => prev + 1)
-      // Only award XP on wins
-      addExperience(LEVELING_CONFIG.XP_PER_WIN)
+      // Only award XP on wins (scaled by level and bet amount)
+      // Use totalBetAmount to account for doubling
+      addExperience(getXPPerWinWithBet(level, totalBetAmount))
     }
     if (result !== "push") {
       setTotalMoves((prev) => prev + 1)
@@ -1076,7 +1085,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const addExperience = (amount: number) => {
     setXp((prevXp) => {
       let currentXp = prevXp + amount
-      let currentLevel = level
+      // Use ref to get current level (avoids stale closure issues)
+      let currentLevel = levelRef.current
       let levelUpOccurred = false
       let finalLevel = currentLevel
       let finalCashBonus = 0
@@ -1103,6 +1113,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       // If level-up occurred, update level and show level-up modal
       if (levelUpOccurred) {
+        levelRef.current = finalLevel // Update ref immediately
         setLevel(finalLevel)
         // Reset level winnings
         setLevelWinnings(0)
@@ -1389,7 +1400,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               <div className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all duration-500 ease-in-out"
-                  style={{ width: `${xp}%` }}
+                  style={{ 
+                    // Calculate progress percentage: (current XP / XP needed for next level) * 100
+                    width: `${Math.min(100, Math.max(0, (xp / getXPNeeded(level)) * 100))}%` 
+                  }}
                 />
               </div>
             </div>

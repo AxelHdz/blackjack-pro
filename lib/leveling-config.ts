@@ -17,8 +17,17 @@ export const LEVELING_CONFIG = {
   MIN_BET: 50,   // Minimum cash bonus
   cash_cap: undefined as number | undefined, // Optional cap (unset by default)
   
-  // XP awarded per win
-  XP_PER_WIN: 10,
+  // XP awarded per win (base amount, scales with level)
+  XP_PER_WIN_BASE: 10,
+  
+  // XP scaling formula: XP_PER_WIN_BASE * (1 + level * SCALING_FACTOR)
+  // Alternative: use SCALING_EXPONENT for power scaling: XP_PER_WIN_BASE * level^SCALING_EXPONENT
+  XP_SCALING_FACTOR: 0.1,  // Linear scaling: 10% increase per level
+  // XP_SCALING_EXPONENT: 0.5,  // Square root scaling (uncomment to use instead)
+  
+  // Bet scaling for XP
+  MIN_BET_AMOUNT: 5,  // Minimum bet amount (lowest chip value)
+  BET_XP_SCALING: 0.02,  // XP multiplier per bet unit (2% per $1 above minimum)
 } as const
 
 /**
@@ -59,6 +68,58 @@ export function getCashBonusWithCap(level: number, cap?: number): number {
     return Math.min(bonus, cap)
   }
   return bonus
+}
+
+/**
+ * Calculate XP awarded per win, scaled by level
+ * Formula: XP_PER_WIN_BASE * (1 + level * XP_SCALING_FACTOR)
+ * 
+ * This ensures higher level players earn more XP per win, helping to balance
+ * the exponentially increasing XP requirements.
+ * 
+ * Examples:
+ * - Level 1: 10 * (1 + 1 * 0.1) = 11 XP
+ * - Level 5: 10 * (1 + 5 * 0.1) = 15 XP
+ * - Level 10: 10 * (1 + 10 * 0.1) = 20 XP
+ * - Level 15: 10 * (1 + 15 * 0.1) = 25 XP
+ * 
+ * @param level Current level (1-indexed)
+ * @returns XP awarded for a win at this level (base, without bet scaling)
+ */
+export function getXPPerWin(level: number): number {
+  const { XP_PER_WIN_BASE, XP_SCALING_FACTOR } = LEVELING_CONFIG
+  // Ensure minimum level of 1
+  const safeLevel = Math.max(1, level)
+  return Math.floor(XP_PER_WIN_BASE * (1 + safeLevel * XP_SCALING_FACTOR))
+}
+
+/**
+ * Calculate XP awarded per win, scaled by level AND bet amount
+ * Formula: getXPPerWin(level) * (1 + (betAmount - MIN_BET_AMOUNT) * BET_XP_SCALING)
+ * 
+ * Higher bets reward more XP, incentivizing riskier play.
+ * 
+ * Examples (at Level 1, base XP = 11):
+ * - $5 bet: 11 * (1 + (5-5) * 0.02) = 11 XP
+ * - $50 bet: 11 * (1 + (50-5) * 0.02) = 11 * 1.9 = 20.9 ≈ 20 XP
+ * - $100 bet: 11 * (1 + (100-5) * 0.02) = 11 * 2.9 = 31.9 ≈ 31 XP
+ * - $500 bet: 11 * (1 + (500-5) * 0.02) = 11 * 10.9 = 119.9 ≈ 119 XP
+ * 
+ * @param level Current level (1-indexed)
+ * @param betAmount The bet amount placed for this win
+ * @returns XP awarded for a win at this level with this bet
+ */
+export function getXPPerWinWithBet(level: number, betAmount: number): number {
+  const baseXP = getXPPerWin(level)
+  const { MIN_BET_AMOUNT, BET_XP_SCALING } = LEVELING_CONFIG
+  
+  // Ensure bet is at least minimum
+  const safeBet = Math.max(MIN_BET_AMOUNT, betAmount)
+  
+  // Calculate bet multiplier: 1 + (bet - min_bet) * scaling_factor
+  const betMultiplier = 1 + (safeBet - MIN_BET_AMOUNT) * BET_XP_SCALING
+  
+  return Math.floor(baseXP * betMultiplier)
 }
 
 /**

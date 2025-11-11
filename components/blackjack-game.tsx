@@ -972,13 +972,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     switch (action) {
       case "hit":
-        return `Need more cards with ${playerValue} vs ${dealerCard}`
+        return `${playerValue} vs ${dealerCard} - need more cards`
       case "stand":
-        return `Your ${playerValue} is strong enough against dealer's ${dealerCard}`
+        return `${playerValue} vs ${dealerCard} - strong enough`
       case "double":
-        return `Perfect spot to double down - favorable odds with ${playerValue} vs ${dealerCard}`
+        return `${playerValue} vs ${dealerCard} - favorable spot`
       case "split":
-        return `Splitting this pair gives you better winning chances`
+        return `Splitting improves odds`
     }
   }
 
@@ -1199,17 +1199,17 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       <LeaderboardModal open={showLeaderboard} onOpenChange={setShowLeaderboard} userId={userId} />
 
       {showLogoutConfirm && (
-        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm mx-4 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <h3 className="text-xl font-semibold text-foreground mb-2 text-center">Log Out?</h3>
-            <p className="text-sm text-muted-foreground mb-6 text-center">
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-sm w-full mx-4 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2 text-center">Log Out?</h3>
+            <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6 text-center">
               Are you sure you want to log out? Your progress has been saved.
             </p>
-            <div className="flex gap-3">
-              <Button onClick={cancelLogout} variant="outline" className="flex-1 h-11 bg-transparent">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <Button onClick={cancelLogout} variant="outline" className="flex-1 h-10 sm:h-11 bg-transparent text-sm sm:text-base">
                 Cancel
               </Button>
-              <Button onClick={confirmLogout} variant="destructive" className="flex-1 h-11">
+              <Button onClick={confirmLogout} variant="destructive" className="flex-1 h-10 sm:h-11 text-sm sm:text-base">
                 Log Out
               </Button>
             </div>
@@ -1218,25 +1218,25 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       )}
 
       {showLevelUp && levelUpData && (
-        <div className="absolute inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center">
-          <div className="flex flex-col items-center justify-center">
-            <div className="text-center space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-              <div className="text-6xl font-bold text-white mb-8">Level {levelUpData.newLevel}</div>
+        <div className="absolute inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="flex flex-col items-center justify-center w-full max-w-md">
+            <div className="text-center space-y-4 sm:space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+              <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-8">Level {levelUpData.newLevel}</div>
 
               {/* Stats Display */}
-              <div className="flex gap-6">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 w-full">
                 {/* Total Winnings Stat */}
-                <div className="bg-card/80 backdrop-blur border-2 border-primary/50 rounded-xl p-6 min-w-[180px] transform hover:scale-105 transition-all duration-300">
-                  <div className="text-4xl font-bold text-primary mb-2">
+                <div className="bg-card/80 backdrop-blur border-2 border-primary/50 rounded-xl p-4 sm:p-6 w-full sm:min-w-[180px] transform hover:scale-105 transition-all duration-300">
+                  <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">
                     ${levelUpData.totalWinnings.toLocaleString()}
                   </div>
-                  <div className="text-sm text-muted-foreground font-medium">Total Winnings</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Total Winnings</div>
                 </div>
 
                 {/* Accuracy Stat */}
-                <div className="bg-card/80 backdrop-blur border-2 border-primary/50 rounded-xl p-6 min-w-[180px] transform hover:scale-105 transition-all duration-300">
-                  <div className="text-4xl font-bold text-primary mb-2">{levelUpData.accuracy}%</div>
-                  <div className="text-sm text-muted-foreground font-medium">Accuracy</div>
+                <div className="bg-card/80 backdrop-blur border-2 border-primary/50 rounded-xl p-4 sm:p-6 w-full sm:min-w-[180px] transform hover:scale-105 transition-all duration-300">
+                  <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">{levelUpData.accuracy}%</div>
+                  <div className="text-xs sm:text-sm text-muted-foreground font-medium">Accuracy</div>
                 </div>
               </div>
 
@@ -1244,7 +1244,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               <Button
                 onClick={closeLevelUp}
                 size="lg"
-                className="mt-8 px-12 h-14 text-lg font-semibold animate-in fade-in duration-1000 delay-500"
+                className="mt-4 sm:mt-8 px-8 sm:px-12 h-12 sm:h-14 text-base sm:text-lg font-semibold animate-in fade-in duration-1000 delay-500 w-full sm:w-auto"
               >
                 Continue
               </Button>
@@ -1253,12 +1253,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         </div>
       )}
 
-      <div className="flex items-center justify-between px-4 py-4 border-b border-border flex-shrink-0 transition-all duration-300">
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <div className="text-base font-medium text-white">Level {level}</div>
-              <div className="h-2.5 w-24 bg-muted rounded-full overflow-hidden">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-4 border-b border-border flex-shrink-0 transition-all duration-300">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex flex-col gap-1.5 sm:gap-2">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="text-sm sm:text-base font-medium text-white">Level {level}</div>
+              <div className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary transition-all duration-500 ease-in-out"
                   style={{ width: `${xp}%` }}
@@ -1268,65 +1268,65 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="text-lg font-bold text-white transition-all duration-300">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="text-base sm:text-lg font-bold text-white transition-all duration-300">
             ${balance !== null ? balance.toLocaleString() : "..."}
           </div>
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 w-9 p-0 transition-all duration-200 hover:scale-110"
+            className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
             onClick={() => setShowModeSelector(!showModeSelector)}
             disabled={showModeSelector || gameState === "betting"}
           >
-            <ModeIcon className="h-5 w-5" />
+            <ModeIcon className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-9 w-9 p-0 transition-all duration-200 hover:scale-110"
+            className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
             onClick={promptLogout}
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
         </div>
       </div>
 
       <div
-        className={`flex-1 flex flex-col px-3 py-4 min-h-0 relative ${gameState === "betting" || showModeSelector ? "justify-center items-center" : "justify-evenly"}`}
+        className={`flex-1 flex flex-col px-2 sm:px-3 py-2 sm:py-4 min-h-0 relative ${gameState === "betting" || showModeSelector ? "justify-center items-center" : "justify-evenly"}`}
       >
         {/* Dealer Section */}
         <div className="flex justify-center">
           {!showModeSelector && dealerHand.length > 0 && (
             <div className="text-center">
-              <div className="text-sm text-white mb-2">Dealer</div>
+              <div className="text-xs sm:text-sm text-white mb-1 sm:mb-2">Dealer</div>
               {dealerRevealed ? (
                 (() => {
                   const handInfo = getHandValueInfo(dealerHand)
                   return handInfo.isSoft ? (
-                    <div className="flex gap-2 justify-center mb-4">
-                      <Badge variant="secondary" className="text-lg font-bold px-3 py-1.5 min-w-[60px]">
+                    <div className="flex gap-1.5 sm:gap-2 justify-center mb-2 sm:mb-4">
+                      <Badge variant="secondary" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px]">
                         {handInfo.hardValue}
                       </Badge>
-                      <Badge variant="default" className="text-lg font-bold px-3 py-1.5 min-w-[60px] bg-primary">
+                      <Badge variant="default" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px] bg-primary">
                         {handInfo.value}
                       </Badge>
                     </div>
                   ) : (
-                    <Badge variant="secondary" className="mb-4 text-xl font-bold px-3 py-1.5 min-w-[70px]">
+                    <Badge variant="secondary" className="mb-2 sm:mb-4 text-lg sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px]">
                       {handInfo.value}
                     </Badge>
                   )
                 })()
               ) : (
-                <Badge variant="secondary" className="mb-4 text-xl font-bold px-3 py-1.5 min-w-[70px]">
+                <Badge variant="secondary" className="mb-2 sm:mb-4 text-lg sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px]">
                   ?
                 </Badge>
               )}
               <div className="flex justify-start">
-                <div className={`flex justify-start ${dealerHand.length >= 4 ? "" : "gap-2"}`}>
+                <div className={`flex justify-start ${dealerHand.length >= 4 ? "" : "gap-1.5 sm:gap-2"}`}>
                   {dealerHand.map((card, index) => (
-                    <div key={index} className={dealerHand.length >= 4 && index > 0 ? "-ml-20" : ""}>
+                    <div key={index} className={dealerHand.length >= 4 && index > 0 ? "-ml-12 sm:-ml-20" : ""}>
                       <PlayingCard card={card} hidden={index === 1 && !dealerRevealed} delay={0} owner="dealer" />
                     </div>
                   ))}
@@ -1335,10 +1335,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             </div>
           )}
           {gameState === "betting" || showModeSelector ? (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="w-full h-full flex items-center justify-center px-2 sm:px-4">
               <div className="w-full max-w-sm mx-auto flex flex-col items-center justify-center">
-                <div className="text-sm font-semibold text-white mb-3 text-center">Select Play Mode</div>
-                <div className="space-y-2 w-full">
+                <div className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 text-center">Select Play Mode</div>
+                <div className="space-y-1.5 sm:space-y-2 w-full">
                   {[
                     {
                       mode: "guided" as LearningMode,
@@ -1355,14 +1355,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                         setLearningMode(mode)
                         setShowModeSelector(false)
                       }}
-                      className={`w-full text-left px-4 py-3 rounded-lg text-sm transition-all duration-200 ease-in-out ${
+                      className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-xs sm:text-sm transition-all duration-200 ease-in-out ${
                         learningMode === mode
                           ? "bg-primary text-primary-foreground scale-[1.02]"
                           : "bg-card border border-border hover:bg-muted hover:scale-[1.02]"
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <Icon className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <Icon className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                         <div className="flex-1">
                           <div className="font-semibold">{title}</div>
                           <div className="text-xs opacity-80">{desc}</div>
@@ -1372,26 +1372,26 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                   ))}
                 </div>
 
-                <div className="mt-6 grid grid-cols-3 gap-3 w-full">
-                  <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-3 text-center">
-                    <div className="text-2xl font-bold text-primary">{displayStats.handsPlayed}</div>
+                <div className="mt-4 sm:mt-6 grid grid-cols-3 gap-2 sm:gap-3 w-full">
+                  <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-2 sm:p-3 text-center">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">{displayStats.handsPlayed}</div>
                     <div className="text-xs text-muted-foreground mt-1">Hands Played</div>
                   </div>
-                  <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-3 text-center">
-                    <div className="text-2xl font-bold text-primary">{displayStats.accuracy}%</div>
+                  <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-2 sm:p-3 text-center">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">{displayStats.accuracy}%</div>
                     <div className="text-xs text-muted-foreground mt-1">Accuracy</div>
                   </div>
-                  <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-3 text-center">
-                    <div className="text-2xl font-bold text-primary">{displayStats.winRate}%</div>
+                  <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-2 sm:p-3 text-center">
+                    <div className="text-xl sm:text-2xl font-bold text-primary">{displayStats.winRate}%</div>
                     <div className="text-xs text-muted-foreground mt-1">Win Rate</div>
                   </div>
                 </div>
 
-                <div className="mt-3 flex justify-center">
-                  <div className="inline-flex rounded-lg border border-border p-1 bg-card">
+                <div className="mt-2 sm:mt-3 flex justify-center">
+                  <div className="inline-flex rounded-lg border border-border p-0.5 sm:p-1 bg-card">
                     <button
                       onClick={() => setStatsView("perMode")}
-                      className={`px-3 py-1 text-xs font-medium rounded transition-all ${
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-all ${
                         statsView === "perMode"
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -1401,7 +1401,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     </button>
                     <button
                       onClick={() => setStatsView("overall")}
-                      className={`px-3 py-1 text-xs font-medium rounded transition-all ${
+                      className={`px-2 sm:px-3 py-1 text-xs font-medium rounded transition-all ${
                         statsView === "overall"
                           ? "bg-primary text-primary-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -1412,7 +1412,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                   </div>
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-2 sm:mt-3">
                   <LeaderboardChip
                     onClick={() => setShowLeaderboard(true)}
                     metric={leaderboardMetric}
@@ -1425,7 +1425,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         </div>
 
         {(gameState === "playing" || gameState === "dealer") && activeBet > 0 && (
-          <div className="absolute top-4 left-4 text-sm text-white bg-black/50 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-border">
+          <div className="absolute top-2 left-2 sm:top-4 sm:left-4 text-xs sm:text-sm text-white bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
             Bet:{" "}
             <span className="font-semibold text-foreground">
               ${isSplit ? (activeBet * 2).toLocaleString() : activeBet.toLocaleString()}
@@ -1436,17 +1436,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         {!showModeSelector && (
           <>
             {/* Message Section */}
-            <div className="flex items-center justify-center px-3">
-              <div className="w-full max-w-md">
-                <div className="border border-muted/30 rounded-lg h-[100px] flex items-center justify-center relative backdrop-blur-sm overflow-hidden">
-                  <div
-                    className={`absolute inset-0 bg-destructive/20 border border-destructive rounded-lg flex items-center justify-center transition-opacity duration-300 ease-in ${
-                      showBustMessage ? "opacity-100 z-20" : "opacity-0 pointer-events-none"
-                    }`}
-                  >
-                    <div className="text-lg font-bold text-destructive">Hand 1 Busts!</div>
-                  </div>
-
+            {(gameState === "finished" && roundResult) ||
+            (learningMode === "guided" && showHint && optimalMove && gameState === "playing" && !isDealing) ||
+            (showFeedback && feedbackData && learningMode === "practice" && gameState !== "finished") ? (
+              <div className="flex items-center justify-center px-2 sm:px-3">
+                <div className="w-full max-w-md">
+                  <div className="border border-muted/30 rounded-lg min-h-[80px] sm:h-[100px] flex items-center justify-center relative backdrop-blur-sm overflow-hidden">
                   {/* Result Message - Combined with Feedback in Practice Mode */}
                   <div
                     className={`absolute inset-0 rounded-lg flex items-center justify-center transition-opacity duration-300 ease-in ${
@@ -1454,47 +1449,40 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     }`}
                   >
                     {roundResult && (
-                      <div className="text-center w-full h-full">
+                      <div className="text-center w-full">
                         {learningMode === "practice" && feedbackData ? (
-                          <div className="flex items-center justify-between h-full w-full">
+                          <div className="flex items-stretch w-full gap-1.5 sm:gap-2 px-1.5 sm:px-2">
                             {/* Left: Feedback */}
                             <div
-                              className={`flex-1 h-full flex items-center py-4 pl-2 pr-4 rounded-l-lg ${
-                                feedbackData.isCorrect ? "bg-success/20" : "bg-error/20"
+                              className={`flex-1 flex items-center py-2 sm:py-2.5 px-2 sm:px-3 rounded-l-lg ${
+                                feedbackData.isCorrect ? "bg-success/10 border border-success" : "bg-error/10 border border-error"
                               }`}
                             >
-                              <div className="flex items-start gap-2 w-full">
-                                {feedbackData.isCorrect ? (
-                                  <Lightbulb className="h-4 w-4 mt-0.5 flex-shrink-0 text-success" />
-                                ) : (
-                                  <X className="h-4 w-4 mt-0.5 flex-shrink-0 text-error" />
-                                )}
-                                <div className="text-sm">
-                                  <p className="font-semibold">{feedbackData.isCorrect ? "Correct!" : "Not Optimal"}</p>
-                                  <p className="text-xs opacity-80 text-left">
-                                    {!feedbackData.isCorrect &&
-                                      `You chose ${feedbackData.playerAction.toUpperCase()}, but ${feedbackData.optimalAction.toUpperCase()} is optimal. `}
-                                    {feedbackData.explanation}
-                                  </p>
-                                </div>
+                              <div className="text-xs sm:text-sm text-left w-full">
+                                <p className="font-semibold leading-tight">{feedbackData.isCorrect ? "Correct!" : "Not Optimal"}</p>
+                                <p className="text-xs opacity-80 leading-tight">
+                                  {!feedbackData.isCorrect &&
+                                    `Should be ${feedbackData.optimalAction.toUpperCase()}. `}
+                                  {feedbackData.explanation}
+                                </p>
                               </div>
                             </div>
 
                             {/* Vertical divider */}
-                            <div className="h-full w-px bg-border" />
+                            <div className="w-px bg-border self-stretch" />
 
                             {/* Right: Result */}
                             <div
-                              className={`flex-1 h-full flex items-center justify-center py-4 px-4 rounded-r-lg ${
+                              className={`flex-1 flex items-center justify-center py-2 sm:py-2.5 px-2 sm:px-3 rounded-r-lg ${
                                 roundResult.winAmount > 0
-                                  ? "bg-success/20"
+                                  ? "bg-success/10 border border-success"
                                   : roundResult.winAmount < 0
-                                    ? "bg-error/20"
-                                    : "bg-muted/20 border border-white"
+                                    ? "bg-error/10 border border-error"
+                                    : "bg-muted/10 border border-muted"
                               }`}
                             >
                               <div
-                                className={`font-bold ${
+                                className={`text-center ${
                                   roundResult.winAmount > 0
                                     ? "text-success"
                                     : roundResult.winAmount < 0
@@ -1502,8 +1490,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                                       : "text-foreground"
                                 }`}
                               >
-                                <div className="text-sm">{roundResult.message}</div>
-                                <div className="text-xl mt-1">
+                                <div className="text-xs sm:text-sm font-semibold">{roundResult.message}</div>
+                                <div className="text-base sm:text-lg lg:text-xl font-bold mt-0.5">
                                   {roundResult.winAmount > 0 ? "+" : roundResult.winAmount < 0 ? "-" : ""}$
                                   {Math.abs(roundResult.winAmount).toLocaleString()}
                                 </div>
@@ -1512,29 +1500,31 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                           </div>
                         ) : (
                           // Show result only in other modes
-                          <div
-                            className={`h-full w-full flex items-center justify-center rounded-lg ${
-                              roundResult.winAmount > 0
-                                ? "bg-success/20 border border-success"
-                                : roundResult.winAmount < 0
-                                  ? "bg-error/20 border border-error"
-                                  : "bg-muted/20 border border-muted"
-                            }`}
-                          >
+                          <div className="w-full flex items-center justify-center">
                             <div
-                              className={`text-lg font-bold ${
+                              className={`inline-flex items-center justify-center rounded-lg py-2 sm:py-3 px-3 sm:px-4 min-w-[200px] sm:min-w-[240px] ${
                                 roundResult.winAmount > 0
-                                  ? "text-success"
+                                  ? "bg-success/20 border border-success"
                                   : roundResult.winAmount < 0
-                                    ? "text-error"
-                                    : "text-foreground"
+                                    ? "bg-error/20 border border-error"
+                                    : "bg-muted/20 border border-muted"
                               }`}
                             >
-                              {roundResult.message}{" "}
-                              <span className="text-xl">
-                                {roundResult.winAmount > 0 ? "+" : ""}$
-                                {Math.abs(roundResult.winAmount).toLocaleString()}
-                              </span>
+                              <div
+                                className={`text-lg font-bold whitespace-nowrap ${
+                                  roundResult.winAmount > 0
+                                    ? "text-success"
+                                    : roundResult.winAmount < 0
+                                      ? "text-error"
+                                      : "text-foreground"
+                                }`}
+                              >
+                                {roundResult.message}{" "}
+                                <span className="text-xl">
+                                  {roundResult.winAmount > 0 ? "+" : ""}$
+                                  {Math.abs(roundResult.winAmount).toLocaleString()}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -1544,18 +1534,18 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
                   {/* Optimal Hint Message */}
                   <div
-                    className={`absolute inset-0 bg-success/10 border border-success rounded-lg p-4 flex items-center justify-center transition-opacity duration-300 ease-in ${
+                    className={`absolute left-1.5 right-1.5 sm:left-2 sm:right-2 bottom-2 sm:bottom-4 bg-success/10 border border-success rounded-lg px-2 sm:px-3 py-2 sm:py-2.5 flex items-center justify-center transition-opacity duration-300 ease-in ${
                       learningMode === "guided" && showHint && optimalMove && gameState === "playing" && !isDealing
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                     }`}
                   >
                     {optimalMove && (
-                      <div className="flex items-start gap-2">
-                        <Lightbulb className="h-4 w-4 mt-0.5 flex-shrink-0 text-success" />
-                        <div className="text-base">
+                      <div className="flex items-start gap-1 sm:gap-1.5">
+                        <Lightbulb className="h-3 w-3 sm:h-3.5 sm:w-3.5 mt-0.5 flex-shrink-0 text-success" />
+                        <div className="text-xs sm:text-sm">
                           <p className="font-semibold">Optimal: {optimalMove.toUpperCase()}</p>
-                          <p className="text-sm opacity-80">{getActionExplanation(optimalMove)}</p>
+                          <p className="text-xs opacity-80 leading-tight">{getActionExplanation(optimalMove)}</p>
                         </div>
                       </div>
                     )}
@@ -1563,40 +1553,38 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
                   {/* Practice Mode Feedback */}
                   <div
-                    className={`absolute inset-0 border rounded-lg p-4 flex items-center justify-center transition-opacity duration-300 ease-in ${
+                    className={`absolute left-1.5 right-1.5 sm:left-2 sm:right-2 bottom-2 sm:bottom-4 rounded-lg px-2 sm:px-3 py-2 sm:py-2.5 flex items-center justify-center transition-opacity duration-300 ease-in ${
                       showFeedback && feedbackData && learningMode === "practice" && gameState !== "finished"
                         ? "opacity-100"
                         : "opacity-0 pointer-events-none"
                     } ${
                       feedbackData && feedbackData.isCorrect
-                        ? "bg-success/10 border-success"
-                        : "bg-error/10 border-error"
+                        ? "bg-success/10 border border-success"
+                        : "bg-error/10 border border-error"
                     }`}
                   >
                     {feedbackData && (
-                      <div className="flex items-start justify-between gap-2 w-full">
-                        <div className="flex-1 text-sm">
+                      <div className="flex items-start gap-1 sm:gap-1.5 w-full">
+                        {feedbackData.isCorrect ? (
+                          <Lightbulb className="h-3 w-3 sm:h-3.5 sm:w-3.5 mt-0.5 flex-shrink-0 text-success" />
+                        ) : (
+                          <X className="h-3 w-3 sm:h-3.5 sm:w-3.5 mt-0.5 flex-shrink-0 text-error" />
+                        )}
+                        <div className="text-xs sm:text-sm flex-1">
                           <p className="font-semibold">{feedbackData.isCorrect ? "Correct!" : "Not Optimal"}</p>
-                          <p className="text-xs opacity-80">
+                          <p className="text-xs opacity-80 leading-tight">
                             {!feedbackData.isCorrect &&
-                              `You chose ${feedbackData.playerAction.toUpperCase()}, but ${feedbackData.optimalAction.toUpperCase()} is optimal. `}
+                              `Should be ${feedbackData.optimalAction.toUpperCase()}. `}
                             {feedbackData.explanation}
                           </p>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-4 w-4 p-0 transition-all duration-200 hover:scale-110"
-                          onClick={() => setShowFeedback(false)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
             </div>
+            ) : null}
 
             {/* Player Section */}
             <div className="flex justify-center items-center gap-3">
@@ -1606,29 +1594,29 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                   disabled={viewHandIndex === 0}
                   className="disabled:opacity-30 transition-all hover:scale-110 disabled:hover:scale-100"
                 >
-                  <ChevronLeft className="h-8 w-8 text-white" />
+                  <ChevronLeft className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                 </button>
               )}
 
               <div className="text-center">
                 {playerHand.length > 0 && (
                   <>
-                    <div className="text-sm text-white mb-2 flex items-center justify-center gap-2">
+                    <div className="text-xs sm:text-sm text-white mb-1 sm:mb-2 flex items-center justify-center gap-2">
                       {isSplit && gameState === "finished" ? `Hand ${viewHandIndex + 1}` : "Your Hand"}
                     </div>
                     {(() => {
                       const handInfo = getHandValueInfo(playerHand)
                       return handInfo.isSoft ? (
-                        <div className="flex gap-2 justify-center mb-4">
-                          <Badge variant="outline" className="text-lg font-bold px-3 py-1.5 min-w-[60px]">
+                        <div className="flex gap-1.5 sm:gap-2 justify-center mb-2 sm:mb-4">
+                          <Badge variant="outline" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px]">
                             {handInfo.hardValue}
                           </Badge>
-                          <Badge variant="default" className="text-lg font-bold px-3 py-1.5 min-w-[60px] bg-primary">
+                          <Badge variant="default" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px] bg-primary">
                             {handInfo.value}
                           </Badge>
                         </div>
                       ) : (
-                        <Badge variant="default" className="mb-4 text-xl font-bold px-3 py-1.5 min-w-[70px] bg-primary">
+                        <Badge variant="default" className="mb-2 sm:mb-4 text-lg sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px] bg-primary">
                           {handInfo.value}
                         </Badge>
                       )
@@ -1639,9 +1627,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                       onTouchMove={onTouchMove}
                       onTouchEnd={onTouchEnd}
                     >
-                      <div className={`flex justify-start ${playerHand.length >= 4 ? "" : "gap-2"}`}>
+                      <div className={`flex justify-start ${playerHand.length >= 4 ? "" : "gap-1.5 sm:gap-2"}`}>
                         {playerHand.map((card, index) => (
-                          <div key={index} className={playerHand.length >= 4 && index > 0 ? "-ml-20" : ""}>
+                          <div key={index} className={playerHand.length >= 4 && index > 0 ? "-ml-12 sm:-ml-20" : ""}>
                             <PlayingCard card={card} delay={0} owner="player" />
                           </div>
                         ))}
@@ -1657,7 +1645,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                   disabled={viewHandIndex === 1}
                   className="disabled:opacity-30 transition-all hover:scale-110 disabled:hover:scale-100"
                 >
-                  <ChevronRight className="h-8 w-8 text-white" />
+                  <ChevronRight className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                 </button>
               )}
             </div>
@@ -1666,24 +1654,24 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       </div>
 
       {(gameState === "playing" || gameState === "dealer") && !showModeSelector && (
-        <div className="px-3 py-3 flex justify-center gap-2 flex-shrink-0 border-t border-border">
+        <div className="px-2 sm:px-3 py-2 sm:py-3 flex justify-center gap-1.5 sm:gap-2 flex-shrink-0 border-t border-border">
           {canSplit(playerHand) && playerHand.length === 2 && !isSplit && (
             <Button
               onClick={split}
               disabled={isDealing || gameState === "dealer" || balance === null || balance < activeBet}
               variant={learningMode === "guided" && optimalMove === "split" ? "default" : "outline"}
               size="lg"
-              className="flex-1 h-14 text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+              className="flex-1 h-12 sm:h-14 text-sm sm:text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
             >
               Split
             </Button>
           )}
           <Button
-            onClick={stand}
+            onClick={() => stand()}
             disabled={isDealing || gameState === "dealer"}
             variant={learningMode === "guided" && optimalMove === "stand" ? "default" : "secondary"}
             size="lg"
-            className="flex-1 h-14 text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+            className="flex-1 h-12 sm:h-14 text-sm sm:text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
           >
             Stand
           </Button>
@@ -1692,7 +1680,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             disabled={isDealing || gameState === "dealer"}
             variant={learningMode === "guided" && optimalMove === "hit" ? "default" : "outline"}
             size="lg"
-            className="flex-1 h-14 text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+            className="flex-1 h-12 sm:h-14 text-sm sm:text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
           >
             Hit
           </Button>
@@ -1702,7 +1690,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               disabled={isDealing || gameState === "dealer" || balance === null || balance < activeBet}
               variant={learningMode === "guided" && optimalMove === "double" ? "default" : "outline"}
               size="lg"
-              className="flex-1 h-14 text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+              className="flex-1 h-12 sm:h-14 text-sm sm:text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
             >
               Double
             </Button>
@@ -1711,20 +1699,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       )}
 
       {gameState === "betting" && (
-        <div className="px-3 py-2 flex-shrink-0 border-t border-border animate-in slide-in-from-bottom-4 fade-in duration-500 ease-out">
+        <div className="px-2 sm:px-3 py-2 sm:py-2 flex-shrink-0 border-t border-border animate-in slide-in-from-bottom-4 fade-in duration-500 ease-out">
           <div className="text-center mb-2">
             <div className="text-xs text-white mb-1">Place Your Bet</div>
-            <div className="text-2xl font-bold transition-all duration-500 ease-out">
+            <div className="text-xl sm:text-2xl font-bold transition-all duration-500 ease-out">
               ${currentBet.toLocaleString()}
             </div>
           </div>
 
-          <div className="flex justify-center gap-2 mb-2">
+          <div className="flex justify-center gap-1.5 sm:gap-2 mb-2">
             <Button
               onClick={clearBet}
               variant="destructive"
               size="sm"
-              className="h-10 px-4 transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100"
+              className="h-9 sm:h-10 px-3 sm:px-4 text-sm sm:text-base transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100"
             >
               Clear
             </Button>
@@ -1732,7 +1720,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               onClick={startNewHand}
               disabled={currentBet === 0 || isDealing || balance === null || balance < currentBet}
               size="sm"
-              className="h-10 px-6 transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 bg-success hover:bg-success/90"
+              className="h-9 sm:h-10 px-4 sm:px-6 text-sm sm:text-base transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 bg-success hover:bg-success/90"
             >
               Deal
             </Button>
@@ -1744,20 +1732,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                 onClick={startBuybackDrill}
                 variant="default"
                 size="lg"
-                className="w-full h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-lg font-semibold"
+                className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
               >
                 Start $0 Buyback Drill
               </Button>
             </div>
           ) : (
-            <div className="flex justify-center gap-2 flex-wrap max-w-md mx-auto">
+            <div className="flex justify-center gap-1.5 sm:gap-2 flex-wrap max-w-md mx-auto">
               {/* Replace $50 with user's balance if balance is less than $50 */}
               <Button
                 onClick={() => addToBet(balance !== null && balance < 50 ? balance : 50)}
                 disabled={balance === null || balance === 0}
                 variant="outline"
                 size="lg"
-                className="h-16 px-8 bg-transparent transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 text-lg font-semibold"
+                className="h-14 sm:h-16 px-4 sm:px-8 bg-transparent transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 text-base sm:text-lg font-semibold"
               >
                 ${balance !== null && balance < 50 ? balance : 50}
               </Button>
@@ -1766,7 +1754,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                 disabled={balance === null || 100 > balance}
                 variant="outline"
                 size="lg"
-                className="h-16 px-8 bg-transparent transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 text-lg font-semibold"
+                className="h-14 sm:h-16 px-4 sm:px-8 bg-transparent transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 text-base sm:text-lg font-semibold"
               >
                 $100
               </Button>
@@ -1775,7 +1763,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                 disabled={balance === null || 500 > balance}
                 variant="outline"
                 size="lg"
-                className="h-16 px-8 bg-transparent transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 text-lg font-semibold"
+                className="h-14 sm:h-16 px-4 sm:px-8 bg-transparent transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 text-base sm:text-lg font-semibold"
               >
                 $500
               </Button>
@@ -1785,20 +1773,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       )}
 
       {gameState === "finished" && !showRoundSummary && (
-        <div className="px-3 py-3 flex-shrink-0 border-t border-border animate-in slide-in-from-bottom-4 fade-in duration-400 ease-out">
+        <div className="px-2 sm:px-3 py-2 sm:py-3 flex-shrink-0 border-t border-border animate-in slide-in-from-bottom-4 fade-in duration-400 ease-out">
           {balance !== null && balance > 0 ? (
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 sm:gap-2">
               <Button
                 onClick={continueToNextHand}
                 variant="outline"
-                className="flex-1 bg-transparent transition-all duration-200 hover:scale-[1.02] h-14 px-8 text-base"
+                className="flex-1 bg-transparent transition-all duration-200 hover:scale-[1.02] h-12 sm:h-14 px-4 sm:px-8 text-sm sm:text-base"
                 size="lg"
               >
                 Change Bet
               </Button>
               <Button
                 onClick={repeatBet}
-                className="flex-1 transition-all duration-200 hover:scale-[1.02] h-14 px-10 text-base"
+                className="flex-1 transition-all duration-200 hover:scale-[1.02] h-12 sm:h-14 px-4 sm:px-10 text-sm sm:text-base"
                 size="lg"
                 disabled={balance < initialBet}
               >
@@ -1811,7 +1799,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                 onClick={startBuybackDrill}
                 variant="default"
                 size="lg"
-                className="w-full h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-lg font-semibold"
+                className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
               >
                 Start $0 Buyback Drill
               </Button>

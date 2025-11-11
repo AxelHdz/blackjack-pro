@@ -8,26 +8,27 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
-  generator: "v0.app",
+  title: "Blackjack Mastery",
+  description: "Master optimal blackjack strategy through interactive gameplay",
   themeColor: "#18181b",
   icons: {
     icon: [
       {
-        url: "/icon-light-32x32.png",
+        url: "/icon-light.svg",
         media: "(prefers-color-scheme: light)",
+        type: "image/svg+xml",
       },
       {
-        url: "/icon-dark-32x32.png",
+        url: "/icon-dark.svg",
         media: "(prefers-color-scheme: dark)",
+        type: "image/svg+xml",
       },
       {
         url: "/icon.svg",
         type: "image/svg+xml",
       },
     ],
-    apple: "/apple-icon.png",
+    apple: "/apple-icon.svg",
   },
 }
 

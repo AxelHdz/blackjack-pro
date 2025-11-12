@@ -16,6 +16,7 @@ interface FeedbackModalProps {
     tip: string
     why: string
     originalPlayerHand: Card[]
+    moveCount: number
   }
   playerHand: Card[]
   dealerUpcard: Card
@@ -85,9 +86,11 @@ export function FeedbackModal({ onClose, feedbackData, playerHand, dealerUpcard,
                 <Badge variant="default" className="mb-2 text-base font-bold px-3 py-1 bg-primary">
                   {playerValue}
                 </Badge>
-                <div className="flex justify-center gap-1 scale-75">
+                <div className={`flex justify-center scale-75 ${originalHand.length >= 2 ? "" : "gap-1"}`}>
                   {originalHand.map((card, index) => (
-                    <PlayingCard key={index} card={card} delay={0} owner="player" />
+                    <div key={index} className={originalHand.length >= 2 && index > 0 ? (originalHand.length >= 4 ? "-ml-20" : "-ml-[42px] md:-ml-[45px]") : ""}>
+                      <PlayingCard card={card} delay={0} owner="player" />
+                    </div>
                   ))}
                 </div>
               </div>
@@ -101,11 +104,13 @@ export function FeedbackModal({ onClose, feedbackData, playerHand, dealerUpcard,
                     P: {playerValue} vs D: {dealerUpcard.rank}
                   </span>
                 </div>
-                <div className={`text-xs font-semibold ${
-                  isCorrect ? "text-success" : "text-error"
-                }`}>
-                  You: {feedbackData.playerAction.toUpperCase()} → Optimal: {feedbackData.optimalAction.toUpperCase()}
-                </div>
+                {!isGuidedMode && (
+                  <div className={`text-xs font-semibold ${
+                    isCorrect ? "text-success" : "text-error"
+                  }`}>
+                    You: {feedbackData.playerAction.toUpperCase()} → Optimal: {feedbackData.optimalAction.toUpperCase()}
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-primary">{feedbackData.tip}</p>

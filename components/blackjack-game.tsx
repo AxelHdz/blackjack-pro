@@ -86,6 +86,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     tip: string
     why: string
     originalPlayerHand: CardType[] // Store the hand before the action
+    moveCount: number // Track which move this feedback corresponds to
   } | null>(null)
   const [correctMoves, setCorrectMoves] = useState(0)
   const [totalMoves, setTotalMoves] = useState(0)
@@ -758,6 +759,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         tip: feedback.tip,
         why: feedback.why,
         originalPlayerHand: [...handToCheck],
+        moveCount: totalMoves + 1, // Store the move count this feedback corresponds to
       })
       setShowFeedback(true)
     }
@@ -822,12 +824,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         }
       }
     } else if (value === 21) {
-      stand(newHand)
+      stand(newHand, true)
     }
   }
 
-  const stand = (finalPlayerHand?: CardType[]) => {
-    checkPlayerAction("stand")
+  const stand = (finalPlayerHand?: CardType[], isAutomatic = false) => {
+    if (!isAutomatic) {
+      checkPlayerAction("stand")
+    }
 
     if (isSplit && currentHandIndex === 0) {
       const handToUse = finalPlayerHand || playerHand
@@ -1692,7 +1696,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       </div>
 
       <div
-        className={`flex-1 flex flex-col px-2 sm:px-3 py-2 sm:py-4 min-h-0 relative ${gameState === "betting" || showModeSelector ? "justify-center items-center" : "justify-start gap-4"}`}
+        className={`flex-1 flex flex-col px-2 sm:px-3 py-2 sm:py-4 min-h-0 relative ${gameState === "betting" || showModeSelector ? "justify-center items-center" : "justify-center"}`}
       >
         {/* Dealer Section */}
         <div className="flex justify-center">
@@ -1993,6 +1997,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                                 tip: feedback.tip,
                                 why: feedback.why,
                                 originalPlayerHand: [...playerHand],
+                                moveCount: 0, // Guided mode hint, no moves made yet
                               })
                               setShowFeedbackModal(true)
                             }}
@@ -2007,7 +2012,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                   )}
 
                   {/* Practice Mode Feedback */}
-                  {feedbackData && learningMode === "practice" && gameState === "playing" && (
+                  {feedbackData && learningMode === "practice" && gameState === "playing" && feedbackData.moveCount === totalMoves && (
                     <div
                       className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 rounded-lg py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center transition-opacity duration-300 ease-in min-w-[120px] sm:min-w-[140px] ${
                         feedbackData.isCorrect

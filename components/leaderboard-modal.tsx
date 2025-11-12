@@ -50,34 +50,42 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (open) {
-      console.log("[v0] leaderboard_opened", { scope, metric })
-      loadLeaderboard(true)
-      loadFriends()
-      loadFriendRequests()
-      loadUserProfile()
+    if (!open) return
 
-      const savedScope = localStorage.getItem("leaderboard_scope") as "global" | "friends" | null
-      const savedMetric = localStorage.getItem("leaderboard_metric") as "balance" | "level" | null
-      if (savedScope) setScope(savedScope)
-      if (savedMetric) setMetric(savedMetric)
+    console.log("[v0] leaderboard_opened", { scope, metric })
+    const savedScope =
+      typeof window !== "undefined" ? (localStorage.getItem("leaderboard_scope") as "global" | "friends" | null) : null
+    const savedMetric =
+      typeof window !== "undefined" ? (localStorage.getItem("leaderboard_metric") as "balance" | "level" | null) : null
+
+    const scopeToUse = savedScope ?? scope
+    const metricToUse = savedMetric ?? metric
+
+    if (savedScope && savedScope !== scope) {
+      setScope(savedScope)
     }
+    if (savedMetric && savedMetric !== metric) {
+      setMetric(savedMetric)
+    }
+
+    void loadLeaderboard(true, scopeToUse, metricToUse)
+    void loadFriends()
+    void loadFriendRequests()
+    void loadUserProfile()
   }, [open])
 
-  useEffect(() => {
-    if (open) {
-      loadLeaderboard(true)
-      localStorage.setItem("leaderboard_scope", scope)
-      localStorage.setItem("leaderboard_metric", metric)
-    }
-  }, [metric, scope])
-
-  const loadLeaderboard = async (reset = false) => {
+  const loadLeaderboard = async (
+    reset = false,
+    scopeOverride?: "global" | "friends",
+    metricOverride?: "balance" | "level",
+  ) => {
     try {
       setLoading(true)
+      const scopeToUse = scopeOverride ?? scope
+      const metricToUse = metricOverride ?? metric
       const cursor = reset ? null : nextCursor
       const response = await fetch(
-        `/api/leaderboard?scope=${scope}&metric=${metric}${cursor ? `&cursor=${cursor}` : ""}`,
+        `/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`,
       )
       const data = await response.json()
 
@@ -209,12 +217,21 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     if (value && (value === "balance" || value === "level")) {
       console.log("[v0] leaderboard_metric_changed", { from: metric, to: value })
       setMetric(value)
+      if (typeof window !== "undefined") {
+        localStorage.setItem("leaderboard_metric", value)
+      }
+      void loadLeaderboard(true, scope, value)
     }
   }
 
   const handleScopeChange = (value: string) => {
-    console.log("[v0] leaderboard_scope_changed", { from: scope, to: value })
-    setScope(value as "global" | "friends")
+    const nextScope = value as "global" | "friends"
+    console.log("[v0] leaderboard_scope_changed", { from: scope, to: nextScope })
+    setScope(nextScope)
+    if (typeof window !== "undefined") {
+      localStorage.setItem("leaderboard_scope", nextScope)
+    }
+    void loadLeaderboard(true, nextScope, metric)
   }
 
   const handleScroll = useCallback(() => {
@@ -224,7 +241,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     if (scrollTop + clientHeight >= scrollHeight - 100) {
       loadLeaderboard(false)
     }
-  }, [loading, nextCursor])
+  }, [loading, nextCursor, loadLeaderboard])
 
   const handleUsernameUpdate = (newUsername: string) => {
     setUserDisplayName(newUsername)

@@ -338,7 +338,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
           <div className="min-h-[40px] flex items-center justify-center">
             {showFeedback && (
               <div
-                className={`p-2 rounded-lg border text-xs w-full ${
+                className={`p-2 rounded-lg border text-xs w-auto min-w-[200px] ${
                   isCorrect
                     ? isCounted
                       ? "bg-success/10 border-success"

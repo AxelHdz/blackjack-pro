@@ -15,7 +15,7 @@ import {
   getCardValue,
   isSoftHand,
 } from "@/lib/card-utils"
-import { Lightbulb, X, GraduationCap, Target, Trophy, ChevronLeft, ChevronRight, LogOut } from "lucide-react"
+import { Lightbulb, X, GraduationCap, Target, Trophy, ChevronLeft, ChevronRight, LogOut, Home } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { BuybackDrillModal } from "@/components/buyback-drill-modal"
@@ -1487,53 +1487,59 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         </div>
       )}
 
-      <div className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-4 border-b border-border flex-shrink-0 transition-all duration-300">
-        <div className="flex items-center gap-2 sm:gap-4">
-          <div className="flex flex-col gap-1.5 sm:gap-2">
-            <div className="flex items-center gap-2 sm:gap-3 relative">
-              <div className="text-sm sm:text-base font-medium text-white">Level {level}</div>
-              <div className="relative" ref={xpProgressBarRef}>
+      <div className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-4 border-b border-border flex-shrink-0 transition-all duration-300 relative">
+        {/* Left side - Home icon during gameplay, Level and progress bar */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {(gameState === "playing" || gameState === "dealer") && !showModeSelector && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
+              onClick={() => setShowModeSelector(true)}
+              aria-label="Return to mode selection"
+            >
+              <Home className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          )}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="text-sm sm:text-base font-medium text-white">Level {level}</div>
+            <div className="relative" ref={xpProgressBarRef}>
+              <div
+                className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden cursor-pointer"
+                onClick={() => {
+                  if (xpPopupTimeoutRef.current) {
+                    clearTimeout(xpPopupTimeoutRef.current)
+                  }
+                  setShowXpPopup(true)
+                  xpPopupTimeoutRef.current = setTimeout(closeXpPopup, 3000)
+                }}
+              >
                 <div
-                  className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden cursor-pointer"
-                  onClick={() => {
-                    if (xpPopupTimeoutRef.current) {
-                      clearTimeout(xpPopupTimeoutRef.current)
-                    }
-                    setShowXpPopup(true)
-                    xpPopupTimeoutRef.current = setTimeout(closeXpPopup, 3000)
+                  className="h-full bg-primary transition-all duration-500 ease-in-out"
+                  style={{ 
+                    // Calculate progress percentage: (current XP / XP needed for next level) * 100
+                    width: `${Math.min(100, Math.max(0, (xp / getXPNeeded(level)) * 100))}%` 
                   }}
-                >
-                  <div
-                    className="h-full bg-primary transition-all duration-500 ease-in-out"
-                    style={{ 
-                      // Calculate progress percentage: (current XP / XP needed for next level) * 100
-                      width: `${Math.min(100, Math.max(0, (xp / getXPNeeded(level)) * 100))}%` 
-                    }}
-                  />
-                </div>
-                {showXpPopup && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-card border border-border rounded-md shadow-lg text-xs text-foreground whitespace-nowrap z-50">
-                    {xp.toLocaleString()} / {getXPNeeded(level).toLocaleString()} XP
-                  </div>
-                )}
+                />
               </div>
+              {showXpPopup && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-card border border-border rounded-md shadow-lg text-xs text-foreground whitespace-nowrap z-50">
+                  {xp.toLocaleString()} / {getXPNeeded(level).toLocaleString()} XP
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Center - Balance */}
+        <div className="absolute left-1/2 -translate-x-1/2">
           <div className="text-base sm:text-lg font-bold text-white transition-all duration-300">
             ${balance !== null ? balance.toLocaleString() : "..."}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
-            onClick={() => setShowModeSelector(!showModeSelector)}
-            disabled={showModeSelector || gameState === "betting"}
-          >
-            <ModeIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-          </Button>
+        </div>
+
+        {/* Right side - Logout button */}
+        <div className="flex items-center">
           <Button
             variant="ghost"
             size="sm"

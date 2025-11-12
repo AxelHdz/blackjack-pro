@@ -272,9 +272,11 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
                             <Badge variant="default" className="mb-2 text-base font-bold px-3 py-1 bg-primary">
                               {playerValue}
                             </Badge>
-                            <div className="flex justify-center gap-1 scale-75">
+                            <div className={`flex justify-center scale-75 ${mistake.playerHand.length >= 2 ? "" : "gap-1"}`}>
                               {mistake.playerHand.map((card, cardIndex) => (
-                                <PlayingCard key={cardIndex} card={card} delay={0} owner="player" />
+                                <div key={cardIndex} className={mistake.playerHand.length >= 2 && cardIndex > 0 ? (mistake.playerHand.length >= 4 ? "-ml-20" : "-ml-[42px] md:-ml-[45px]") : ""}>
+                                  <PlayingCard card={card} delay={0} owner="player" />
+                                </div>
                               ))}
                             </div>
                           </div>
@@ -412,9 +414,11 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
             <Badge variant="default" className="mb-0 text-base font-bold px-3 py-1 bg-primary">
               {calculateHandValue(playerHand)}
             </Badge>
-            <div className="flex justify-center gap-1 scale-75">
+            <div className={`flex justify-center scale-75 ${playerHand.length >= 2 ? "" : "gap-1"}`}>
               {playerHand.map((card, index) => (
-                <PlayingCard key={index} card={card} delay={0} owner="player" />
+                <div key={index} className={playerHand.length >= 2 && index > 0 ? (playerHand.length >= 4 ? "-ml-20" : "-ml-[42px] md:-ml-[45px]") : ""}>
+                  <PlayingCard card={card} delay={0} owner="player" />
+                </div>
               ))}
             </div>
           </div>

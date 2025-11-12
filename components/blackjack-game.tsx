@@ -135,6 +135,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
   const [leaderboardScope, setLeaderboardScope] = useState<"global" | "friends">("global")
 
+  // XP popup state
+  const [showXpPopup, setShowXpPopup] = useState(false)
+  const xpPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const xpProgressBarRef = useRef<HTMLDivElement>(null)
+
+  // Helper to close popup and clear timeout
+  const closeXpPopup = useCallback(() => {
+    setShowXpPopup(false)
+    if (xpPopupTimeoutRef.current) {
+      clearTimeout(xpPopupTimeoutRef.current)
+      xpPopupTimeoutRef.current = null
+    }
+  }, [])
+
   // Minimum swipe distance (in px)
   const minSwipeDistance = 50
 
@@ -147,6 +161,34 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       handleFriendReferral(friendReferralId)
     }
   }, [friendReferralId, userId])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (xpPopupTimeoutRef.current) {
+        clearTimeout(xpPopupTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    if (!showXpPopup) return
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (xpProgressBarRef.current && !xpProgressBarRef.current.contains(event.target as Node)) {
+        closeXpPopup()
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside)
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
+    }
+  }, [showXpPopup, closeXpPopup])
 
   useEffect(() => {
     const newDeck = createDeck()
@@ -1448,16 +1490,32 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       <div className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-4 border-b border-border flex-shrink-0 transition-all duration-300">
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="flex flex-col gap-1.5 sm:gap-2">
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 relative">
               <div className="text-sm sm:text-base font-medium text-white">Level {level}</div>
-              <div className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden">
+              <div className="relative" ref={xpProgressBarRef}>
                 <div
-                  className="h-full bg-primary transition-all duration-500 ease-in-out"
-                  style={{ 
-                    // Calculate progress percentage: (current XP / XP needed for next level) * 100
-                    width: `${Math.min(100, Math.max(0, (xp / getXPNeeded(level)) * 100))}%` 
+                  className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden cursor-pointer"
+                  onClick={() => {
+                    if (xpPopupTimeoutRef.current) {
+                      clearTimeout(xpPopupTimeoutRef.current)
+                    }
+                    setShowXpPopup(true)
+                    xpPopupTimeoutRef.current = setTimeout(closeXpPopup, 3000)
                   }}
-                />
+                >
+                  <div
+                    className="h-full bg-primary transition-all duration-500 ease-in-out"
+                    style={{ 
+                      // Calculate progress percentage: (current XP / XP needed for next level) * 100
+                      width: `${Math.min(100, Math.max(0, (xp / getXPNeeded(level)) * 100))}%` 
+                    }}
+                  />
+                </div>
+                {showXpPopup && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-card border border-border rounded-md shadow-lg text-xs text-foreground whitespace-nowrap z-50">
+                    {xp.toLocaleString()} / {getXPNeeded(level).toLocaleString()} XP
+                  </div>
+                )}
               </div>
             </div>
           </div>

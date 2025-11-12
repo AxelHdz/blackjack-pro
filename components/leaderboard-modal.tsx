@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { Copy, UserPlus, X, Check, XIcon } from "lucide-react"
+import { Copy, UserPlus, X, Check, XIcon, Trophy } from "lucide-react"
 import { UsernameEditor } from "@/components/username-editor"
 
 interface LeaderboardEntry {
@@ -416,7 +416,17 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
                         entry.userId === userId ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/50"
                       }`}
                     >
-                      <div className="w-8 text-sm font-bold text-muted-foreground">#{entry.rank}</div>
+                      <div className="w-8 flex items-center justify-center">
+                        {entry.rank === 1 ? (
+                          <Trophy className="h-5 w-5 text-yellow-500" />
+                        ) : entry.rank === 2 ? (
+                          <Trophy className="h-5 w-5 text-gray-400" />
+                        ) : entry.rank === 3 ? (
+                          <Trophy className="h-5 w-5 text-amber-800" />
+                        ) : (
+                          <span className="text-sm font-bold text-muted-foreground">#{entry.rank}</span>
+                        )}
+                      </div>
                       <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-semibold text-primary">
                         {entry.name.slice(0, 2).toUpperCase()}
                       </div>

@@ -121,6 +121,53 @@ export default function LoginPage() {
     setError(null)
 
     try {
+      const { data: existingUser, error: checkError } = await supabase.auth.admin.getUserByEmail(email)
+
+      // If we can't check (no admin access), or if there's an error, try the regular flow
+      // But in most cases, we want to check if user exists first
+
+      // Try to check if user exists by attempting a sign in with incorrect password
+      // This is a workaround since we don't have admin access in client-side code
+      const { error: testError } = await supabase.auth.signInWithPassword({
+        email,
+        password: "test-if-exists-check",
+      })
+
+      // If error message indicates user doesn't exist, redirect to password signup
+      if (
+        testError &&
+        (testError.message.includes("Email not confirmed") || testError.message.includes("Invalid login credentials"))
+      ) {
+        // Check if it's "Email not confirmed" which means user exists
+        if (testError.message.includes("Email not confirmed")) {
+          // User exists but email not confirmed, they can use magic link
+          const friendId = searchParams.get("friend")
+          const redirectTo = friendId
+            ? `${window.location.origin}/auth/callback?friend=${friendId}`
+            : `${window.location.origin}/auth/callback`
+
+          const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+            email,
+            options: {
+              emailRedirectTo: redirectTo,
+              shouldCreateUser: false, // Don't create new user
+            },
+          })
+
+          if (magicLinkError) throw magicLinkError
+
+          setMagicLinkSent(true)
+          setIsLoading(false)
+          return
+        } else {
+          // User doesn't exist - show error and suggest password signup
+          setError("No account found with this email. Please create an account using the Password tab.")
+          setIsLoading(false)
+          return
+        }
+      }
+
+      // If we get here, send the magic link
       const friendId = searchParams.get("friend")
       const redirectTo = friendId
         ? `${window.location.origin}/auth/callback?friend=${friendId}`
@@ -130,11 +177,21 @@ export default function LoginPage() {
         email,
         options: {
           emailRedirectTo: redirectTo,
-          shouldCreateUser: true,
+          shouldCreateUser: false, // Don't create new users via magic link
         },
       })
 
-      if (magicLinkError) throw magicLinkError
+      if (magicLinkError) {
+        if (
+          magicLinkError.message.includes("Signups not allowed") ||
+          magicLinkError.message.includes("User not found")
+        ) {
+          setError("No account found with this email. Please create an account using the Password tab.")
+          setIsLoading(false)
+          return
+        }
+        throw magicLinkError
+      }
 
       setMagicLinkSent(true)
       setIsLoading(false)

@@ -75,4 +75,3 @@ END $$;
 
 -- Drop the temporary function
 DROP FUNCTION IF EXISTS calculate_level_from_wins(INTEGER);
-

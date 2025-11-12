@@ -5,4 +5,3 @@ alter table public.game_stats add column if not exists level_winnings integer de
 
 -- Add comment for documentation
 comment on column public.game_stats.level_winnings is 'Winnings accrued since current level began. Resets to 0 on level-up.';
-

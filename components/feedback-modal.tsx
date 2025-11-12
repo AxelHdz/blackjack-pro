@@ -131,4 +131,3 @@ export function FeedbackModal({ onClose, feedbackData, playerHand, dealerUpcard,
     </div>
   )
 }
-

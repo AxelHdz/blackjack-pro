@@ -151,4 +151,3 @@ export function verifyLevelingCalculations(): boolean {
   
   return valid
 }
-

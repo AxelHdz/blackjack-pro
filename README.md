@@ -226,6 +226,8 @@ Rewards scale by tier:
 - Tier 2: $300 (6 correct)
 - Tier 3+: $350 (7+ correct)
 
+Tiers reset to Tier 1 after 24 hours have passed since the last successful drill completion.
+
 ### Statistics Tracking
 
 The game tracks comprehensive statistics:

@@ -247,25 +247,61 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
             {mistakesLog.length > 0 && (
               <div className="space-y-3">
                 <h3 className="text-lg font-semibold text-foreground">Why these moves weren't optimal</h3>
-                <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
-                  {mistakesLog.slice(-5).map((mistake, index) => (
-                    <div key={index} className="bg-muted/30 border border-border rounded-lg p-3 text-sm">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex gap-2 items-center">
-                          <span className="text-xs font-mono bg-background px-2 py-1 rounded">
-                            P: {calculateHandValue(mistake.playerHand)} vs D: {mistake.dealerUpcard.rank}
-                          </span>
+                <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                  {mistakesLog.slice(-5).map((mistake, index) => {
+                    const playerValue = calculateHandValue(mistake.playerHand)
+                    const dealerValue = calculateHandValue([mistake.dealerUpcard])
+                    return (
+                      <div key={index} className="space-y-3">
+                        {/* Dealer and Player Cards - Side by Side */}
+                        <div className="flex items-center justify-center gap-4 w-full">
+                          {/* Dealer Hand */}
+                          <div className="text-center flex-1 flex flex-col items-center">
+                            <div className="text-xs text-muted-foreground mb-1">Dealer Shows</div>
+                            <Badge variant="secondary" className="mb-2 text-base font-bold px-3 py-1">
+                              {dealerValue}
+                            </Badge>
+                            <div className="flex justify-center scale-75">
+                              <PlayingCard card={mistake.dealerUpcard} delay={0} owner="dealer" />
+                            </div>
+                          </div>
+
+                          {/* Player Hand */}
+                          <div className="text-center flex-1 flex flex-col items-center">
+                            <div className="text-xs text-muted-foreground mb-1">Your Hand</div>
+                            <Badge variant="default" className="mb-2 text-base font-bold px-3 py-1 bg-primary">
+                              {playerValue}
+                            </Badge>
+                            <div className="flex justify-center gap-1 scale-75">
+                              {mistake.playerHand.map((card, cardIndex) => (
+                                <PlayingCard key={cardIndex} card={card} delay={0} owner="player" />
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-xs text-error font-semibold">
-                          You: {mistake.playerMove.toUpperCase()} → Optimal: {mistake.optimalMove.toUpperCase()}
+
+                        {/* Feedback - Matching FeedbackModal format */}
+                        <div className="bg-muted/30 border border-border rounded-lg p-3 text-sm">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex gap-2 items-center">
+                              <span className="text-xs font-mono bg-background px-2 py-1 rounded">
+                                P: {playerValue} vs D: {mistake.dealerUpcard.rank}
+                              </span>
+                            </div>
+                            <div className="text-sm text-error font-semibold">
+                              You: {mistake.playerMove.toUpperCase()} → Optimal: {mistake.optimalMove.toUpperCase()}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-primary">{mistake.tip}</p>
+                            <p className="text-xs text-muted-foreground whitespace-normal break-words">
+                              {mistake.why}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-semibold text-primary">{mistake.tip}</p>
-                        <p className="text-xs text-muted-foreground">{mistake.why}</p>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

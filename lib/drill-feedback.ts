@@ -68,7 +68,9 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
   messageKey += `_${ctx.optimalMove}`
 
   // Guardrail: if template doesn't match optimal move, use fallback
-  if (!tipMatchesOptimal || !feedbackMatchesOptimal) {
+  // Use detailed feedback if EITHER tip or feedback matches (not both)
+  // This ensures we show detailed explanations even if one message doesn't contain keywords
+  if (!tipMatchesOptimal && !feedbackMatchesOptimal) {
     console.log(`[v0] Feedback mismatch detected for ${messageKey}. Using fallback.`)
     return {
       tip: `Optimal: ${ctx.optimalMove.toUpperCase()}.`,
@@ -81,10 +83,86 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
   // Log telemetry
   console.log(`[v0] Feedback resolved: ${messageKey}, normalized_upcard: ${normalizedUp}, template_matches: true`)
 
+  // Generate feedback specific to the player's actual move
+  // If the player's move doesn't match the optimal move, tailor the feedback
+  let finalTip = strategyTip
+  let finalWhy = strategyFeedback
+
+  // Check if feedback mentions the player's actual move incorrectly
+  const playerMoveLower = ctx.playerMove.toLowerCase()
+  const feedbackMentionsPlayerMove = moveKeywords[playerMoveLower].some((keyword) => feedbackLower.includes(keyword))
+  
+  // If the player's move doesn't match optimal AND the feedback mentions the player's move (wrong context),
+  // OR if the feedback doesn't address why the player's move was wrong, generate specific feedback
+  if (ctx.playerMove !== ctx.optimalMove) {
+    // Always generate player-specific feedback when moves don't match
+    finalWhy = generatePlayerMoveFeedback(ctx.playerMove, ctx.optimalMove, strategyFeedback, playerValue, isSoft, isPair)
+  }
+
   return {
-    tip: strategyTip,
-    why: strategyFeedback,
+    tip: finalTip,
+    why: finalWhy,
     templateMatchesOptimal: true,
     selectedMessageKey: messageKey,
   }
+}
+
+/**
+ * Generate feedback explaining why the player's specific move was wrong
+ */
+function generatePlayerMoveFeedback(
+  playerMove: GameAction,
+  optimalMove: GameAction,
+  optimalFeedback: string,
+  playerValue: number,
+  isSoft: boolean,
+  isPair: boolean
+): string {
+  // If the optimal feedback already explains why the player's move is wrong, use it
+  // Otherwise, generate a specific explanation
+  
+  const moveExplanations: Record<GameAction, Record<GameAction, string>> = {
+    hit: {
+      stand: playerValue >= 17 && playerValue <= 20
+        ? `Hitting on ${playerValue}${isSoft ? " (soft)" : ""} is too risky. ${playerValue} is already a strong hand that beats most dealer outcomes. Taking another card significantly increases your bust risk (you can only improve to 21, but risk busting on any card 2 or higher) without enough benefit.`
+        : `Hitting on ${playerValue}${isSoft ? " (soft)" : ""} is too risky here. ${playerValue} is strong enough to beat the dealer's likely outcomes. Taking another card increases your bust risk without enough benefit.`,
+      double: `Hitting here wastes the opportunity to double down. Doubling maximizes your win when you have an advantage, while hitting only bets the original amount.`,
+      split: isPair 
+        ? `Hitting on a pair wastes the chance to split. Splitting creates two hands, each with better winning potential than hitting the pair together.`
+        : `Hitting isn't optimal here. The optimal move would give you better expected value.`,
+    },
+    stand: {
+      hit: `Standing on ${playerValue}${isSoft ? " (soft)" : ""} is too conservative. You need to improve your hand to have a better chance of winning. The dealer's upcard suggests you should take another card.`,
+      double: `Standing wastes the opportunity to double down. Doubling maximizes your win when you have an advantage, while standing only bets the original amount.`,
+      split: isPair
+        ? `Standing on a pair wastes the chance to split. Splitting creates two hands, each with better winning potential than standing on the pair.`
+        : `Standing isn't optimal here. The optimal move would give you better expected value.`,
+    },
+    double: {
+      hit: `Doubling isn't available here (you've already drawn cards), so you should hit instead.`,
+      stand: `Doubling isn't available here (you've already drawn cards), so you should stand instead.`,
+      split: isPair
+        ? `Doubling on a pair wastes the chance to split. Splitting creates two hands, each with better winning potential than doubling on the pair.`
+        : `Doubling isn't optimal here. The optimal move would give you better expected value.`,
+    },
+    split: {
+      hit: isPair
+        ? `Splitting this pair isn't optimal. ${optimalFeedback.includes("split") ? "" : "You should hit instead to improve your hand."}`
+        : `Splitting isn't available here (not a pair). You should hit instead.`,
+      stand: isPair
+        ? `Splitting this pair isn't optimal. ${optimalFeedback.includes("split") ? "" : "You should stand instead on this strong hand."}`
+        : `Splitting isn't available here (not a pair). You should stand instead.`,
+      double: isPair
+        ? `Splitting this pair isn't optimal. ${optimalFeedback.includes("split") ? "" : "You should double instead to maximize your advantage."}`
+        : `Splitting isn't available here (not a pair). You should double instead.`,
+    },
+  }
+
+  // Return specific explanation if available, otherwise use the optimal feedback
+  if (moveExplanations[playerMove] && moveExplanations[playerMove][optimalMove]) {
+    return moveExplanations[playerMove][optimalMove]
+  }
+
+  // Fallback: use the optimal feedback but frame it as why the player's move was wrong
+  return optimalFeedback
 }

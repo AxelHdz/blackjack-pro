@@ -17,7 +17,7 @@ export function PlayingCard({ card, hidden = false, delay = 0, owner = "player" 
   return (
     <div
       className={cn(
-        "relative w-28 h-36 md:w-32 md:h-44 rounded-xl border-2 border-gray-300 bg-white shadow-xl",
+        "relative w-28 h-36 md:w-[7.5rem] md:h-[10.5rem] rounded-xl border-2 border-gray-300 bg-white shadow-xl",
         "transition-all duration-500 ease-out hover:scale-105 hover:shadow-2xl",
       )}
       style={{
@@ -40,10 +40,10 @@ export function PlayingCard({ card, hidden = false, delay = 0, owner = "player" 
         <div className="absolute inset-0 flex flex-col">
           {/* Top-left rank and suit */}
           <div className="absolute top-1 left-1.5 md:top-1.5 md:left-2 flex flex-col items-center">
-            <div className={cn("text-xl md:text-2xl font-bold leading-none", isRed ? "text-red-600" : "text-gray-900")}>
+            <div className={cn("text-xl md:text-xl font-bold leading-none", isRed ? "text-red-600" : "text-gray-900")}>
               {card.rank}
             </div>
-            <div className={cn("text-xl md:text-2xl leading-none -mt-0.5", isRed ? "text-red-600" : "text-gray-900")}>
+            <div className={cn("text-xl md:text-xl leading-none -mt-0.5", isRed ? "text-red-600" : "text-gray-900")}>
               {card.suit}
             </div>
           </div>
@@ -51,14 +51,14 @@ export function PlayingCard({ card, hidden = false, delay = 0, owner = "player" 
           {/* Center suit symbols for number cards */}
           {!isFaceCard && card.rank !== "A" && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className={cn("text-5xl md:text-6xl", isRed ? "text-red-600" : "text-gray-900")}>{card.suit}</div>
+              <div className={cn("text-5xl md:text-5xl", isRed ? "text-red-600" : "text-gray-900")}>{card.suit}</div>
             </div>
           )}
 
           {/* Center suit for Ace */}
           {card.rank === "A" && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className={cn("text-6xl md:text-7xl", isRed ? "text-red-600" : "text-gray-900")}>{card.suit}</div>
+              <div className={cn("text-6xl md:text-6xl", isRed ? "text-red-600" : "text-gray-900")}>{card.suit}</div>
             </div>
           )}
 
@@ -66,20 +66,20 @@ export function PlayingCard({ card, hidden = false, delay = 0, owner = "player" 
           {isFaceCard && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="flex flex-col items-center gap-1">
-                <div className={cn("text-5xl md:text-6xl font-bold", isRed ? "text-red-600" : "text-gray-900")}>
+                <div className={cn("text-5xl md:text-5xl font-bold", isRed ? "text-red-600" : "text-gray-900")}>
                   {card.rank}
                 </div>
-                <div className={cn("text-4xl md:text-5xl", isRed ? "text-red-600" : "text-gray-900")}>{card.suit}</div>
+                <div className={cn("text-4xl md:text-4xl", isRed ? "text-red-600" : "text-gray-900")}>{card.suit}</div>
               </div>
             </div>
           )}
 
           {/* Bottom-right rank and suit - mirrored */}
           <div className="absolute bottom-1 right-1.5 md:bottom-1.5 md:right-2 flex flex-col items-center rotate-180">
-            <div className={cn("text-xl md:text-2xl font-bold leading-none", isRed ? "text-red-600" : "text-gray-900")}>
+            <div className={cn("text-xl md:text-xl font-bold leading-none", isRed ? "text-red-600" : "text-gray-900")}>
               {card.rank}
             </div>
-            <div className={cn("text-xl md:text-2xl leading-none -mt-0.5", isRed ? "text-red-600" : "text-gray-900")}>
+            <div className={cn("text-xl md:text-xl leading-none -mt-0.5", isRed ? "text-red-600" : "text-gray-900")}>
               {card.suit}
             </div>
           </div>

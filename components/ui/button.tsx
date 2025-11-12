@@ -47,11 +47,14 @@ function Button({
     asChild?: boolean
   }) {
   const Comp = asChild ? Slot : 'button'
+  
+  // Ensure className is always a valid value (cn handles conversion to string)
+  const resolvedClassName = cn(buttonVariants({ variant, size, className }))
 
   return (
     <Comp
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={resolvedClassName}
       {...props}
     />
   )

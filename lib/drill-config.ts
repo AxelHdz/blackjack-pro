@@ -12,7 +12,7 @@ export const DRILL_CONFIG = {
   count_all_correct: true,
   rules: {
     include_surrender: false,
-    table_variant: "S17" as "S17" | "H17",
+    table_variant: "H17" as "S17" | "H17",
   },
 } as const
 

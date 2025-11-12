@@ -711,8 +711,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       const dealerValue = calculateHandValue(currentDealerHand)
       const dealerIsSoft = isSoftHand(currentDealerHand)
 
-      if (dealerValue >= 17) {
-        console.log("[v0] Dealer finished, hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft)
+      // H17: Hit on soft 17, stand on hard 17+
+      if (dealerValue > 17 || (dealerValue === 17 && !dealerIsSoft)) {
+        console.log("[v0] Dealer finished (H17 rule), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: STAND")
         if (isSplit) {
           finishSplitHand(firstHandCards, playerHand, currentDealerHand)
         } else {
@@ -721,7 +722,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         return
       }
 
-      // Dealer must hit on 16 or less
+      // H17: Dealer hits on soft 17 or less
+      if (dealerValue === 17 && dealerIsSoft) {
+        console.log("[v0] Dealer hits soft 17 (H17 rule), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: HIT")
+      } else {
+        console.log("[v0] Dealer hits (value < 17), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: HIT")
+      }
+
+      // Dealer must hit on 16 or less, or soft 17 (H17 rule)
       setTimeout(() => {
         const [newHand, newDeck] = dealCard(currentDealerHand, currentDeck)
         currentDealerHand = newHand
@@ -1915,14 +1923,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
           {balance === 0 ? (
             <div className="flex justify-center">
-              <Button
-                onClick={startBuybackDrill}
-                variant="default"
-                size="lg"
-                className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
-              >
-                Start $0 Buyback Drill
-              </Button>
+              <div className="w-full max-w-sm mx-auto">
+                <Button
+                  onClick={startBuybackDrill}
+                  variant="default"
+                  size="lg"
+                  className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
+                >
+                  Start $0 Buyback Drill
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex justify-center gap-1.5 sm:gap-2 flex-wrap max-w-md mx-auto">
@@ -1982,14 +1992,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             </div>
           ) : (
             <div className="flex justify-center">
-              <Button
-                onClick={startBuybackDrill}
-                variant="default"
-                size="lg"
-                className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
-              >
-                Start $0 Buyback Drill
-              </Button>
+              <div className="w-full max-w-sm mx-auto">
+                <Button
+                  onClick={startBuybackDrill}
+                  variant="default"
+                  size="lg"
+                  className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
+                >
+                  Start $0 Buyback Drill
+                </Button>
+              </div>
             </div>
           )}
         </div>

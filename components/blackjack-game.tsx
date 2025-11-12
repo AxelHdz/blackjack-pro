@@ -15,15 +15,17 @@ import {
   getCardValue,
   isSoftHand,
 } from "@/lib/card-utils"
-import { Lightbulb, X, GraduationCap, Target, Trophy, ChevronLeft, ChevronRight, LogOut } from "lucide-react"
+import { Lightbulb, X, GraduationCap, Target, Trophy, ChevronLeft, ChevronRight, LogOut, Home, HelpCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { BuybackDrillModal } from "@/components/buyback-drill-modal"
+import { FeedbackModal } from "@/components/feedback-modal"
 import { settle } from "@/lib/settlement" // Import the settlement helper
 import { LeaderboardChip } from "@/components/leaderboard-chip"
 import { LeaderboardModal } from "@/components/leaderboard-modal"
 import { useToast } from "@/hooks/use-toast"
 import { getXPNeeded, getCashBonusWithCap, getXPPerWin, getXPPerWinWithBet, LEVELING_CONFIG } from "@/lib/leveling-config"
+import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -81,7 +83,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     playerAction: GameAction
     optimalAction: GameAction
     isCorrect: boolean
-    explanation: string
+    tip: string
+    why: string
+    originalPlayerHand: CardType[] // Store the hand before the action
   } | null>(null)
   const [correctMoves, setCorrectMoves] = useState(0)
   const [totalMoves, setTotalMoves] = useState(0)
@@ -125,6 +129,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [showBuybackDrill, setShowBuybackDrill] = useState(false)
   const [drillTier, setDrillTier] = useState(0) // Track which tier
+  const [lastDrillCompletedAt, setLastDrillCompletedAt] = useState<Date | null>(null) // Track last drill completion timestamp
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false) // Track feedback modal visibility
 
   const [isDoubled, setIsDoubled] = useState(false) // Reset doubled flag
   const isDoubledRef = useRef(false) // Ref to track doubled status synchronously
@@ -134,6 +140,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
   const [leaderboardScope, setLeaderboardScope] = useState<"global" | "friends">("global")
+
+  // XP popup state
+  const [showXpPopup, setShowXpPopup] = useState(false)
+  const xpPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const xpProgressBarRef = useRef<HTMLDivElement>(null)
+
+  // Helper to close popup and clear timeout
+  const closeXpPopup = useCallback(() => {
+    setShowXpPopup(false)
+    if (xpPopupTimeoutRef.current) {
+      clearTimeout(xpPopupTimeoutRef.current)
+      xpPopupTimeoutRef.current = null
+    }
+  }, [])
 
   // Minimum swipe distance (in px)
   const minSwipeDistance = 50
@@ -148,10 +168,36 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }, [friendReferralId, userId])
 
+  // Cleanup timeout on unmount
   useEffect(() => {
-    const newDeck = createDeck()
-    setDeck(newDeck)
+    return () => {
+      if (xpPopupTimeoutRef.current) {
+        clearTimeout(xpPopupTimeoutRef.current)
+      }
+    }
   }, [])
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    if (!showXpPopup) return
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (xpProgressBarRef.current && !xpProgressBarRef.current.contains(event.target as Node)) {
+        closeXpPopup()
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside)
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
+    }
+  }, [showXpPopup, closeXpPopup])
+
+  // Deck is now loaded from database in loadUserStats
+  // No need to initialize here - it will be loaded or created when stats are loaded
 
   const loadUserStats = async () => {
     try {
@@ -163,6 +209,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         if (error.code === "PGRST116") {
           // No rows found - create initial stats
           console.log("[v0] No stats found, creating initial stats")
+          const newDeck = createDeck()
           const { error: insertError } = await supabase.from("game_stats").insert({
             user_id: userId,
             total_money: 500,
@@ -175,6 +222,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             wins: 0,
             losses: 0,
             drill_tier: 0,
+            last_drill_completed_at: null,
             last_play_mode: "guided",
             learning_hands_played: 0,
             learning_correct_moves: 0,
@@ -191,6 +239,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             expert_total_moves: 0,
             expert_wins: 0,
             expert_losses: 0,
+            deck: newDeck, // Include deck in initial insert
           })
 
           if (insertError) {
@@ -198,27 +247,29 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           } else {
             console.log("[v0] Successfully created initial stats")
           }
+          
+          // Set default values and mark as loaded
+          setBalance(500)
+          setTotalWinnings(0)
+          setLevelWinnings(0)
+          setLevel(1)
+          levelRef.current = 1
+          setXp(0)
+          setHandsPlayed(0)
+          setCorrectMoves(0)
+          setTotalMoves(0)
+          setWins(0)
+          setLosses(0)
+          setDrillTier(0)
+          setModeStats({
+            guided: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
+            practice: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
+            expert: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
+          })
+          setDeck(newDeck)
+          setStatsLoaded(true)
+          return
         }
-        // Set default values and mark as loaded
-        setBalance(500)
-        setTotalWinnings(0)
-        setLevelWinnings(0)
-        setLevel(1)
-        levelRef.current = 1
-        setXp(0)
-        setHandsPlayed(0)
-        setCorrectMoves(0)
-        setTotalMoves(0)
-        setWins(0)
-        setLosses(0)
-        setDrillTier(0)
-        setModeStats({
-          guided: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-          practice: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-          expert: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-        })
-        setStatsLoaded(true)
-        return
       }
 
       if (data) {
@@ -234,12 +285,58 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setTotalMoves(data.total_moves ?? 0)
         setWins(data.wins ?? 0)
         setLosses(data.losses ?? 0)
-        setDrillTier(data.drill_tier ?? 0) // Load drill tier
+        
+        // Load and check drill tier with 24-hour reset logic
+        const loadedLastDrillCompletedAt = data.last_drill_completed_at 
+          ? new Date(data.last_drill_completed_at) 
+          : null
+        setLastDrillCompletedAt(loadedLastDrillCompletedAt)
+        
+        // Check if 24 hours have passed since last drill completion
+        const shouldResetTier = loadedLastDrillCompletedAt 
+          ? (Date.now() - loadedLastDrillCompletedAt.getTime()) >= 24 * 60 * 60 * 1000
+          : false
+        
+        if (shouldResetTier) {
+          setDrillTier(0) // Reset to tier 1
+          setLastDrillCompletedAt(null) // Reset timestamp
+        } else {
+          setDrillTier(data.drill_tier ?? 0) // Load drill tier
+        }
         
         // Load last play mode, defaulting to "guided" if not set or invalid
         const savedMode = data.last_play_mode
         if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
           setLearningMode(savedMode)
+        }
+
+        // Load deck from database, or create new one if missing/invalid
+        if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
+          // Validate deck structure (check if it has valid card objects)
+          const isValidDeck = data.deck.every(
+            (card: any) => card && typeof card === "object" && card.suit && card.rank
+          )
+          if (isValidDeck) {
+            setDeck(data.deck as CardType[])
+          } else {
+            // Invalid deck structure, create new one and save it
+            const newDeck = createDeck()
+            setDeck(newDeck)
+            // Save the new deck immediately
+            await supabase
+              .from("game_stats")
+              .update({ deck: newDeck })
+              .eq("user_id", userId)
+          }
+        } else {
+          // No deck in database, create new one and save it
+          const newDeck = createDeck()
+          setDeck(newDeck)
+          // Save the new deck immediately
+          await supabase
+            .from("game_stats")
+            .update({ deck: newDeck })
+            .eq("user_id", userId)
         }
 
         setModeStats({
@@ -284,6 +381,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           practice: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
           expert: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
         })
+        // Create new deck when no data exists
+        const newDeck = createDeck()
+        setDeck(newDeck)
       }
 
       setStatsLoaded(true)
@@ -291,6 +391,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       console.error("[v0] Error in loadUserStats:", err)
       setStatsLoaded(true) // Ensure loading state is updated
       setBalance(500) // Fallback balance
+      // Create a new deck as fallback if loading fails
+      const newDeck = createDeck()
+      setDeck(newDeck)
     }
   }
 
@@ -312,6 +415,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           wins: Math.floor(wins),
           losses: Math.floor(losses),
           drill_tier: Math.floor(drillTier),
+          last_drill_completed_at: lastDrillCompletedAt?.toISOString() || null,
           learning_hands_played: Math.floor(modeStats.guided.handsPlayed),
           learning_correct_moves: Math.floor(modeStats.guided.correctMoves),
           learning_total_moves: Math.floor(modeStats.guided.totalMoves),
@@ -328,6 +432,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           expert_wins: Math.floor(modeStats.expert.wins),
           expert_losses: Math.floor(modeStats.expert.losses),
           last_play_mode: learningMode,
+          deck: deck, // Save deck state to database
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", userId)
@@ -341,7 +446,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }, [
     balance,
     correctMoves,
+    deck,
     drillTier,
+    lastDrillCompletedAt,
     handsPlayed,
     learningMode,
     level,
@@ -377,6 +484,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }, [
     balance,
     correctMoves,
+    deck,
     handsPlayed,
     learningMode,
     level,
@@ -390,6 +498,22 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     wins,
     xp,
   ])
+
+  // Check for 24-hour tier reset when returning to home screen
+  useEffect(() => {
+    if (!statsLoaded || !lastDrillCompletedAt) return
+
+    // Check reset when gameState becomes "betting" or showModeSelector becomes true
+    if (gameState === "betting" || showModeSelector) {
+      const timeSinceLastDrill = Date.now() - lastDrillCompletedAt.getTime()
+      const twentyFourHours = 24 * 60 * 60 * 1000
+
+      if (timeSinceLastDrill >= twentyFourHours) {
+        setDrillTier(0) // Reset to tier 1
+        setLastDrillCompletedAt(null) // Reset timestamp
+      }
+    }
+  }, [gameState, showModeSelector, statsLoaded, lastDrillCompletedAt])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -409,9 +533,19 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     handleLogout()
   }
 
+  // Helper function to ensure deck has cards, reshuffle if empty
+  const ensureDeckHasCards = (currentDeck: CardType[]): CardType[] => {
+    if (currentDeck.length === 0) {
+      return createDeck()
+    }
+    return currentDeck
+  }
+
   const dealCard = (hand: CardType[], deckCopy: CardType[]): [CardType[], CardType[]] => {
-    const card = deckCopy.pop()!
-    return [[...hand, card], deckCopy]
+    // Ensure deck has cards before dealing
+    const deckWithCards = ensureDeckHasCards(deckCopy)
+    const card = deckWithCards.pop()!
+    return [[...hand, card], deckWithCards]
   }
 
   const startNewHand = () => {
@@ -440,7 +574,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     let deckCopy = [...deck]
 
-    if (deckCopy.length < 20) {
+    // Reshuffle if deck is empty (will be handled by dealCard, but ensure initial deck is ready)
+    if (deckCopy.length === 0) {
       deckCopy = createDeck()
     }
 
@@ -583,10 +718,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }
 
-  const checkPlayerAction = (action: GameAction) => {
+  const checkPlayerAction = (action: GameAction, originalHand?: CardType[]) => {
     if (learningMode === "guided") return true
 
-    const optimal = getOptimalMove(playerHand, dealerHand[0])
+    // Use original hand if provided (for split), otherwise use current hand
+    const handToCheck = originalHand || playerHand
+    const optimal = getOptimalMove(handToCheck, dealerHand[0])
     const isCorrect = action === optimal
 
     setTotalMoves((prev) => prev + 1)
@@ -604,11 +741,23 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
 
     if (learningMode === "practice") {
+      // Use the same feedback system for both correct and incorrect moves
+      // This ensures consistent messaging following H17 basic strategy rules
+      const feedbackCtx: FeedbackContext = {
+        playerHand: [...handToCheck],
+        dealerUpcard: dealerHand[0],
+        optimalMove: optimal,
+        playerMove: action,
+        tableVariant: "H17",
+      }
+      const feedback = resolveFeedback(feedbackCtx)
       setFeedbackData({
         playerAction: action,
         optimalAction: optimal,
-        isCorrect,
-        explanation: getActionExplanation(optimal),
+        isCorrect: isCorrect,
+        tip: feedback.tip,
+        why: feedback.why,
+        originalPlayerHand: [...handToCheck],
       })
       setShowFeedback(true)
     }
@@ -619,7 +768,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const hit = () => {
     checkPlayerAction("hit")
 
-    const [newHand, newDeck] = dealCard(playerHand, [...deck])
+    const deckCopy = ensureDeckHasCards([...deck])
+    const [newHand, newDeck] = dealCard(playerHand, deckCopy)
     setPlayerHand(newHand)
     setDeck(newDeck)
 
@@ -698,7 +848,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const playDealerHand = (finalPlayerHand: CardType[]) => {
     let currentDealerHand = [...dealerHand]
-    let currentDeck = [...deck]
+    let currentDeck = ensureDeckHasCards([...deck])
 
     console.log(
       "[v0] playDealerHand called with player hand:",
@@ -711,8 +861,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       const dealerValue = calculateHandValue(currentDealerHand)
       const dealerIsSoft = isSoftHand(currentDealerHand)
 
-      if (dealerValue >= 17) {
-        console.log("[v0] Dealer finished, hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft)
+      // H17: Hit on soft 17, stand on hard 17+
+      if (dealerValue > 17 || (dealerValue === 17 && !dealerIsSoft)) {
+        console.log("[v0] Dealer finished (H17 rule), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: STAND")
         if (isSplit) {
           finishSplitHand(firstHandCards, playerHand, currentDealerHand)
         } else {
@@ -721,8 +872,17 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         return
       }
 
-      // Dealer must hit on 16 or less
+      // H17: Dealer hits on soft 17 or less
+      if (dealerValue === 17 && dealerIsSoft) {
+        console.log("[v0] Dealer hits soft 17 (H17 rule), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: HIT")
+      } else {
+        console.log("[v0] Dealer hits (value < 17), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: HIT")
+      }
+
+      // Dealer must hit on 16 or less, or soft 17 (H17 rule)
       setTimeout(() => {
+        // Ensure deck has cards before dealing
+        currentDeck = ensureDeckHasCards(currentDeck)
         const [newHand, newDeck] = dealCard(currentDealerHand, currentDeck)
         currentDealerHand = newHand
         currentDeck = newDeck
@@ -975,7 +1135,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const newActiveBet = activeBet * 2
     setActiveBet(newActiveBet)
 
-    const [newHand, newDeck] = dealCard(playerHand, [...deck])
+    const deckCopy = ensureDeckHasCards([...deck])
+    const [newHand, newDeck] = dealCard(playerHand, deckCopy)
     setPlayerHand(newHand)
     setDeck(newDeck)
 
@@ -1018,7 +1179,21 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setRoundsSinceReview(0)
       }
     } else {
-      stand(newHand)
+      // After doubling, automatically stand but don't call checkPlayerAction again
+      // The feedback was already set when double was called
+      if (isSplit && currentHandIndex === 0) {
+        setFirstHandCards(newHand)
+        setFirstHandResult({ value: calculateHandValue(newHand), busted: false })
+        setCurrentHandIndex(1) // Move to the second hand
+        setPlayerHand(splitHand) // Load the second hand cards for playing
+        setMessage("Playing second hand...")
+        console.log("[v0] Finished Hand 1, cards:", newHand, "value:", calculateHandValue(newHand))
+      } else {
+        setGameState("dealer")
+        setDealerRevealed(true)
+        console.log("[v0] Standing on Hand 2 after double, cards:", newHand, "value:", calculateHandValue(newHand))
+        playDealerHand(newHand)
+      }
     }
   }
 
@@ -1035,6 +1210,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     if (!canSplit(playerHand)) return
     if (balance === null || balance < activeBet) return
 
+    // Store the original hand before splitting
+    const originalHand = [...playerHand]
+
     // Deduct the additional bet for the second hand
     setBalance((prev) => (prev !== null ? prev - activeBet : -activeBet))
     setIsSplit(true)
@@ -1044,7 +1222,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const secondHand = [playerHand[1]]
 
     // Deal a new card to each hand
-    const deckCopy = [...deck]
+    const deckCopy = ensureDeckHasCards([...deck])
     const [newFirstHand, deck1] = dealCard(firstHand, deckCopy)
     const [newSecondHand, deck2] = dealCard(secondHand, deck1)
 
@@ -1054,7 +1232,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setCurrentHandIndex(0)
     setMessage("Playing first hand...")
 
-    checkPlayerAction("split")
+    checkPlayerAction("split", originalHand)
   }
 
   const optimalMove =
@@ -1274,6 +1452,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const handleDrillSuccess = (amount: number) => {
     setBalance((prev) => (prev !== null ? prev + amount : amount))
     setDrillTier((prev) => Math.min(prev + 1, 2)) // Advance tier, max at tier 3 (index 2)
+    setLastDrillCompletedAt(new Date()) // Track successful drill completion timestamp
     setShowBuybackDrill(false)
   }
 
@@ -1374,6 +1553,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       <LeaderboardModal open={showLeaderboard} onOpenChange={setShowLeaderboard} userId={userId} />
 
+      {showFeedbackModal && feedbackData && feedbackData.originalPlayerHand.length > 0 && dealerHand.length > 0 && (
+        <FeedbackModal
+          onClose={() => setShowFeedbackModal(false)}
+          feedbackData={feedbackData}
+          playerHand={feedbackData.originalPlayerHand}
+          dealerUpcard={dealerHand[0]}
+          isGuidedMode={learningMode === "guided"}
+        />
+      )}
+
       {showLogoutConfirm && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-sm w-full mx-4 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -1437,12 +1626,22 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         </div>
       )}
 
-      <div className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-4 border-b border-border flex-shrink-0 transition-all duration-300">
-        <div className="flex items-center gap-2 sm:gap-4">
-          <div className="flex flex-col gap-1.5 sm:gap-2">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="text-sm sm:text-base font-medium text-white">Level {level}</div>
-              <div className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-3 sm:py-4 border-b border-border flex-shrink-0 transition-all duration-300 relative">
+        {/* Left side - Level and progress bar */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="text-sm sm:text-base font-medium text-white">Level {level}</div>
+            <div className="relative" ref={xpProgressBarRef}>
+              <div
+                className="h-2 sm:h-2.5 w-16 sm:w-24 bg-muted rounded-full overflow-hidden cursor-pointer"
+                onClick={() => {
+                  if (xpPopupTimeoutRef.current) {
+                    clearTimeout(xpPopupTimeoutRef.current)
+                  }
+                  setShowXpPopup(true)
+                  xpPopupTimeoutRef.current = setTimeout(closeXpPopup, 3000)
+                }}
+              >
                 <div
                   className="h-full bg-primary transition-all duration-500 ease-in-out"
                   style={{ 
@@ -1451,62 +1650,75 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                   }}
                 />
               </div>
+              {showXpPopup && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-card border border-border rounded-md shadow-lg text-xs text-foreground whitespace-nowrap z-50">
+                  {xp.toLocaleString()} / {getXPNeeded(level).toLocaleString()} XP
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Center - Balance */}
+        <div className="absolute left-1/2 -translate-x-1/2">
           <div className="text-base sm:text-lg font-bold text-white transition-all duration-300">
             ${balance !== null ? balance.toLocaleString() : "..."}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
-            onClick={() => setShowModeSelector(!showModeSelector)}
-            disabled={showModeSelector || gameState === "betting"}
-          >
-            <ModeIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
-            onClick={promptLogout}
-          >
-            <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
-          </Button>
+        </div>
+
+        {/* Right side - Logout icon when betting/selecting mode, Home icon during gameplay */}
+        <div className="flex items-center">
+          {gameState === "betting" || showModeSelector ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
+              onClick={promptLogout}
+            >
+              <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
+              onClick={() => setShowModeSelector(true)}
+              aria-label="Return to mode selection"
+            >
+              <Home className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          )}
         </div>
       </div>
 
       <div
-        className={`flex-1 flex flex-col px-2 sm:px-3 py-2 sm:py-4 min-h-0 relative ${gameState === "betting" || showModeSelector ? "justify-center items-center" : "justify-evenly"}`}
+        className={`flex-1 flex flex-col px-2 sm:px-3 py-2 sm:py-4 min-h-0 relative ${gameState === "betting" || showModeSelector ? "justify-center items-center" : "justify-start gap-4"}`}
       >
         {/* Dealer Section */}
         <div className="flex justify-center">
           {!showModeSelector && dealerHand.length > 0 && (
             <div className="text-center">
-              <div className="text-xs sm:text-sm text-white mb-1 sm:mb-2">Dealer</div>
+              <div className="text-sm sm:text-sm text-white mb-1 sm:mb-2">Dealer</div>
               {dealerRevealed ? (
                 (() => {
                   const handInfo = getHandValueInfo(dealerHand)
                   return handInfo.isSoft ? (
                     <div className="flex gap-1.5 sm:gap-2 justify-center mb-2 sm:mb-4">
-                      <Badge variant="secondary" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px]">
+                      <Badge variant="secondary" className="text-lg sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px]">
                         {handInfo.hardValue}
                       </Badge>
-                      <Badge variant="default" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px] bg-primary">
+                      <Badge variant="default" className="text-lg sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px] bg-primary">
                         {handInfo.value}
                       </Badge>
                     </div>
                   ) : (
-                    <Badge variant="secondary" className="mb-2 sm:mb-4 text-lg sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px]">
+                    <Badge variant="secondary" className="mb-2 sm:mb-4 text-xl sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px]">
                       {handInfo.value}
                     </Badge>
                   )
                 })()
               ) : (
-                <Badge variant="secondary" className="mb-2 sm:mb-4 text-lg sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px]">
+                <Badge variant="secondary" className="mb-3 sm:mb-5 text-xl sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px]">
                   ?
                 </Badge>
               )}
@@ -1522,7 +1734,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             </div>
           )}
           {gameState === "betting" || showModeSelector ? (
-            <div className="w-full h-full flex items-center justify-center px-2 sm:px-4">
+            <div className="absolute inset-0 flex items-center justify-center px-2 sm:px-4">
               <div className="w-full max-w-sm mx-auto flex flex-col items-center justify-center">
                 <div className="text-xs sm:text-sm font-semibold text-white mb-2 sm:mb-3 text-center">Select Play Mode</div>
                 <div className="space-y-1.5 sm:space-y-2 w-full">
@@ -1612,7 +1824,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         </div>
 
         {(gameState === "playing" || gameState === "dealer") && activeBet > 0 && (
-          <div className="absolute top-2 left-2 sm:top-4 sm:left-4 text-xs sm:text-sm text-white bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
+          <div className="absolute top-2 left-2 sm:top-4 sm:left-4 text-sm text-white bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
             Bet:{" "}
             <span className="font-semibold text-foreground">
               ${isSplit ? (activeBet * 2).toLocaleString() : activeBet.toLocaleString()}
@@ -1620,15 +1832,46 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           </div>
         )}
 
+        {/* Card Counter */}
+        {(gameState === "playing" || gameState === "dealer" || gameState === "finished") && (
+          <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-3 sm:gap-4 bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
+            {/* Two overlapped card outline icons */}
+            <div className="relative w-3 h-4 sm:w-3.5 sm:h-4.5">
+              <svg
+                className="absolute top-0 left-0 w-3 h-4 sm:w-3.5 sm:h-4.5 text-white/80"
+                viewBox="0 0 24 32"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="1" y="1" width="22" height="30" rx="2" />
+              </svg>
+              <svg
+                className="absolute top-0.5 left-0.5 sm:top-0.5 sm:left-1 w-3 h-4 sm:w-3.5 sm:h-4.5 text-white/60"
+                viewBox="0 0 24 32"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="1" y="1" width="22" height="30" rx="2" />
+              </svg>
+            </div>
+            <span className="text-sm font-semibold text-foreground">
+              {deck.length}
+            </span>
+          </div>
+        )}
+
         {!showModeSelector && (
           <>
             {/* Message Section */}
-            {(gameState === "finished" && roundResult) ||
-            (learningMode === "guided" && showHint && optimalMove && gameState === "playing" && !isDealing) ||
-            (showFeedback && feedbackData && learningMode === "practice" && gameState !== "finished") ? (
-              <div className="flex items-center justify-center px-2 sm:px-3">
-                <div className="w-full max-w-md">
-                  <div className="border border-muted/30 rounded-lg min-h-[80px] sm:h-[100px] flex items-center justify-center relative backdrop-blur-sm overflow-hidden">
+            <div className="flex items-center justify-center px-2 sm:px-3">
+              <div className="w-full max-w-md">
+                <div className="rounded-lg h-[80px] sm:h-[100px] flex items-center justify-center relative backdrop-blur-sm overflow-hidden">
                   {/* Result Message - Combined with Feedback in Practice Mode */}
                   <div
                     className={`absolute inset-0 rounded-lg flex items-center justify-center transition-opacity duration-300 ease-in ${
@@ -1639,26 +1882,32 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                       <div className="text-center w-full">
                         {learningMode === "practice" && feedbackData ? (
                           <div className="flex items-stretch w-full gap-1.5 sm:gap-2 px-1.5 sm:px-2">
-                            {/* Left: Feedback */}
+                            {/* Left: Feedback Header Only */}
                             <div
-                              className={`flex-1 flex items-center py-2 sm:py-2.5 px-2 sm:px-3 rounded-l-lg ${
+                              className={`flex-1 flex items-center justify-center py-2 sm:py-2.5 px-2 sm:px-3 rounded-l-lg ${
                                 feedbackData.isCorrect ? "bg-success/10 border border-success" : "bg-error/10 border border-error"
                               }`}
                             >
-                              <div className="text-xs sm:text-sm text-left w-full">
-                                <p className="font-semibold leading-tight">{feedbackData.isCorrect ? "Correct!" : "Not Optimal"}</p>
-                                <p className="text-xs opacity-80 leading-tight">
-                                  {!feedbackData.isCorrect &&
-                                    `Should be ${feedbackData.optimalAction.toUpperCase()}. `}
-                                  {feedbackData.explanation}
-                                </p>
+                              <div className="text-l font-semibold text-center w-full flex items-center justify-center gap-1">
+                                {feedbackData.isCorrect ? "Correct!" : "Not Optimal"}
+                                <button
+                                  onClick={() => setShowFeedbackModal(true)}
+                                  className={`inline-flex items-center justify-center rounded-full p-0.5 transition-colors ${
+                                    feedbackData.isCorrect
+                                      ? "hover:bg-success/20"
+                                      : "hover:bg-error/20"
+                                  }`}
+                                  aria-label="Show feedback details"
+                                >
+                                  <HelpCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                                </button>
                               </div>
                             </div>
 
                             {/* Vertical divider */}
                             <div className="w-px bg-border self-stretch" />
 
-                            {/* Right: Result */}
+                            {/* Right: Amount Only */}
                             <div
                               className={`flex-1 flex items-center justify-center py-2 sm:py-2.5 px-2 sm:px-3 rounded-r-lg ${
                                 roundResult.winAmount > 0
@@ -1669,7 +1918,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                               }`}
                             >
                               <div
-                                className={`text-center ${
+                                className={`text-center text-xl font-bold ${
                                   roundResult.winAmount > 0
                                     ? "text-success"
                                     : roundResult.winAmount < 0
@@ -1677,11 +1926,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                                       : "text-foreground"
                                 }`}
                               >
-                                <div className="text-xs sm:text-sm font-semibold">{roundResult.message}</div>
-                                <div className="text-base sm:text-lg lg:text-xl font-bold mt-0.5">
-                                  {roundResult.winAmount > 0 ? "+" : roundResult.winAmount < 0 ? "-" : ""}$
-                                  {Math.abs(roundResult.winAmount).toLocaleString()}
-                                </div>
+                                {roundResult.winAmount === 0 ? (
+                                  "Push"
+                                ) : (
+                                  <>
+                                    {roundResult.winAmount > 0 ? "+" : "-"}$
+                                    {Math.abs(roundResult.winAmount).toLocaleString()}
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1698,7 +1950,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                               }`}
                             >
                               <div
-                                className={`text-lg font-bold whitespace-nowrap ${
+                                className={`text-xl font-bold whitespace-nowrap ${
                                   roundResult.winAmount > 0
                                     ? "text-success"
                                     : roundResult.winAmount < 0
@@ -1707,10 +1959,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                                 }`}
                               >
                                 {roundResult.message}{" "}
-                                <span className="text-xl">
-                                  {roundResult.winAmount > 0 ? "+" : ""}$
-                                  {Math.abs(roundResult.winAmount).toLocaleString()}
-                                </span>
+                                {roundResult.winAmount > 0 ? "+" : roundResult.winAmount < 0 ? "-" : ""}$
+                                {roundResult.winAmount !== 0 && Math.abs(roundResult.winAmount).toLocaleString()}
                               </div>
                             </div>
                           </div>
@@ -1720,58 +1970,68 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                   </div>
 
                   {/* Optimal Hint Message */}
-                  <div
-                    className={`absolute left-1.5 right-1.5 sm:left-2 sm:right-2 bottom-2 sm:bottom-4 bg-success/10 border border-success rounded-lg px-2 sm:px-3 py-2 sm:py-2.5 flex items-center justify-center transition-opacity duration-300 ease-in ${
-                      learningMode === "guided" && showHint && optimalMove && gameState === "playing" && !isDealing
-                        ? "opacity-100"
-                        : "opacity-0 pointer-events-none"
-                    }`}
-                  >
-                    {optimalMove && (
-                      <div className="flex items-start gap-1 sm:gap-1.5">
-                        <Lightbulb className="h-3 w-3 sm:h-3.5 sm:w-3.5 mt-0.5 flex-shrink-0 text-success" />
-                        <div className="text-xs sm:text-sm">
-                          <p className="font-semibold">Optimal: {optimalMove.toUpperCase()}</p>
-                          <p className="text-xs opacity-80 leading-tight">{getActionExplanation(optimalMove)}</p>
+                  {learningMode === "guided" && showHint && optimalMove && gameState === "playing" && !isDealing && (
+                    <div className="absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 rounded-lg py-3 px-3 sm:px-4 flex items-center justify-center transition-opacity duration-300 ease-in min-w-[120px] sm:min-w-[140px] bg-success/10 border border-success">
+                      <div className="flex items-center justify-center">
+                        <div className="text-l font-semibold text-center flex items-center justify-center gap-1 whitespace-nowrap">
+                          Optimal: {optimalMove.toUpperCase()}
+                          <button
+                            onClick={() => {
+                              // Generate feedback data for guided mode optimal hint
+                              const feedbackCtx: FeedbackContext = {
+                                playerHand: [...playerHand],
+                                dealerUpcard: dealerHand[0],
+                                optimalMove: optimalMove,
+                                playerMove: optimalMove, // In guided mode, we're showing the optimal move
+                                tableVariant: "H17",
+                              }
+                              const feedback = resolveFeedback(feedbackCtx)
+                              setFeedbackData({
+                                playerAction: optimalMove,
+                                optimalAction: optimalMove,
+                                isCorrect: true,
+                                tip: feedback.tip,
+                                why: feedback.why,
+                                originalPlayerHand: [...playerHand],
+                              })
+                              setShowFeedbackModal(true)
+                            }}
+                            className="inline-flex items-center justify-center rounded-full hover:bg-success/20 p-0.5 transition-colors"
+                            aria-label="Show feedback details"
+                          >
+                            <HelpCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Practice Mode Feedback */}
-                  <div
-                    className={`absolute left-1.5 right-1.5 sm:left-2 sm:right-2 bottom-2 sm:bottom-4 rounded-lg px-2 sm:px-3 py-2 sm:py-2.5 flex items-center justify-center transition-opacity duration-300 ease-in ${
-                      showFeedback && feedbackData && learningMode === "practice" && gameState !== "finished"
-                        ? "opacity-100"
-                        : "opacity-0 pointer-events-none"
-                    } ${
-                      feedbackData && feedbackData.isCorrect
-                        ? "bg-success/10 border border-success"
-                        : "bg-error/10 border border-error"
-                    }`}
-                  >
-                    {feedbackData && (
-                      <div className="flex items-start gap-1 sm:gap-1.5 w-full">
-                        {feedbackData.isCorrect ? (
-                          <Lightbulb className="h-3 w-3 sm:h-3.5 sm:w-3.5 mt-0.5 flex-shrink-0 text-success" />
-                        ) : (
-                          <X className="h-3 w-3 sm:h-3.5 sm:w-3.5 mt-0.5 flex-shrink-0 text-error" />
-                        )}
-                        <div className="text-xs sm:text-sm flex-1">
-                          <p className="font-semibold">{feedbackData.isCorrect ? "Correct!" : "Not Optimal"}</p>
-                          <p className="text-xs opacity-80 leading-tight">
-                            {!feedbackData.isCorrect &&
-                              `Should be ${feedbackData.optimalAction.toUpperCase()}. `}
-                            {feedbackData.explanation}
-                          </p>
+                  {feedbackData && learningMode === "practice" && gameState === "playing" && (
+                    <div
+                      className={`absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 rounded-lg py-2 sm:py-2.5 px-2 sm:px-3 flex items-center justify-center transition-opacity duration-300 ease-in min-w-[120px] sm:min-w-[140px] ${
+                        feedbackData.isCorrect
+                          ? "bg-success/10 border border-success"
+                          : "bg-error/10 border border-error"
+                      }`}
+                    >
+                      <div className="flex items-center justify-center">
+                        <div className="text-l font-semibold text-center flex items-center justify-center gap-1 whitespace-nowrap">
+                          {feedbackData.isCorrect ? "Correct!" : "Not Optimal"}
+                          <button
+                            onClick={() => setShowFeedbackModal(true)}
+                            className="inline-flex items-center justify-center rounded-full hover:bg-error/20 p-0.5 transition-colors"
+                            aria-label="Show feedback details"
+                          >
+                            <HelpCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-            ) : null}
 
             {/* Player Section */}
             <div className="flex justify-center items-center gap-3">
@@ -1788,22 +2048,22 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               <div className="text-center">
                 {playerHand.length > 0 && (
                   <>
-                    <div className="text-xs sm:text-sm text-white mb-1 sm:mb-2 flex items-center justify-center gap-2">
+                    <div className="text-sm sm:text-sm text-white mb-1 sm:mb-2 flex items-center justify-center gap-2">
                       {isSplit && gameState === "finished" ? `Hand ${viewHandIndex + 1}` : "Your Hand"}
                     </div>
                     {(() => {
                       const handInfo = getHandValueInfo(playerHand)
                       return handInfo.isSoft ? (
-                        <div className="flex gap-1.5 sm:gap-2 justify-center mb-2 sm:mb-4">
-                          <Badge variant="outline" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px]">
+                        <div className="flex gap-1.5 sm:gap-2 justify-center mb-3 sm:mb-5">
+                          <Badge variant="outline" className="text-lg sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px]">
                             {handInfo.hardValue}
                           </Badge>
-                          <Badge variant="default" className="text-base sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px] bg-primary">
+                          <Badge variant="default" className="text-lg sm:text-lg font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[50px] sm:min-w-[60px] bg-primary">
                             {handInfo.value}
                           </Badge>
                         </div>
                       ) : (
-                        <Badge variant="default" className="mb-2 sm:mb-4 text-lg sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px] bg-primary">
+                        <Badge variant="default" className="mb-3 sm:mb-5 text-xl sm:text-xl font-bold px-2 sm:px-3 py-1 sm:py-1.5 min-w-[60px] sm:min-w-[70px] bg-primary">
                           {handInfo.value}
                         </Badge>
                       )
@@ -1841,7 +2101,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       </div>
 
       {(gameState === "playing" || gameState === "dealer") && !showModeSelector && (
-        <div className="px-2 sm:px-3 py-2 sm:py-3 flex justify-center gap-1.5 sm:gap-2 flex-shrink-0 border-t border-border">
+        <div className="sticky bottom-0 bg-black z-10 px-2 sm:px-3 py-2 sm:py-3 flex justify-center gap-1.5 sm:gap-2 flex-shrink-0 border-t border-border">
           {canSplit(playerHand) && playerHand.length === 2 && !isSplit && (
             <Button
               onClick={split}
@@ -1915,14 +2175,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
           {balance === 0 ? (
             <div className="flex justify-center">
-              <Button
-                onClick={startBuybackDrill}
-                variant="default"
-                size="lg"
-                className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
-              >
-                Start $0 Buyback Drill
-              </Button>
+              <div className="w-full max-w-sm mx-auto">
+                <Button
+                  onClick={startBuybackDrill}
+                  variant="default"
+                  size="lg"
+                  className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
+                >
+                  Start $0 Buyback Drill
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex justify-center gap-1.5 sm:gap-2 flex-wrap max-w-md mx-auto">
@@ -1982,14 +2244,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             </div>
           ) : (
             <div className="flex justify-center">
-              <Button
-                onClick={startBuybackDrill}
-                variant="default"
-                size="lg"
-                className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
-              >
-                Start $0 Buyback Drill
-              </Button>
+              <div className="w-full max-w-sm mx-auto">
+                <Button
+                  onClick={startBuybackDrill}
+                  variant="default"
+                  size="lg"
+                  className="w-full h-14 sm:h-16 bg-primary hover:bg-primary/90 transition-all duration-300 ease-out hover:scale-105 text-base sm:text-lg font-semibold"
+                >
+                  Start $0 Buyback Drill
+                </Button>
+              </div>
             </div>
           )}
         </div>

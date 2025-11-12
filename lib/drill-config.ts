@@ -12,7 +12,7 @@ export const DRILL_CONFIG = {
   count_all_correct: true,
   rules: {
     include_surrender: false,
-    table_variant: "S17" as "S17" | "H17",
+    table_variant: "H17" as "S17" | "H17",
   },
 } as const
 
@@ -22,7 +22,7 @@ export function getReward(tierIndex: number): number {
 
   if (tierIndex === 0) return base // Tier 1: $250
   if (tierIndex === 1) return base + step // Tier 2: $300
-  return base + 2 * step // Tier 3+: $350
+  return base // Tier 3+: $250
 }
 
 export function getStreakRequired(tierIndex: number): number {

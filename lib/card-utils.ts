@@ -35,76 +35,42 @@ export function getCardValue(card: Card): number {
   return Number.parseInt(card.rank)
 }
 
-export function calculateHandValue(hand: Card[]): number {
-  if (!Array.isArray(hand) || hand.length === 0) return 0
+function evaluateHandTotals(hand: Card[]): { total: number; softAces: number; aceCount: number } {
+  if (!Array.isArray(hand) || hand.length === 0) {
+    return { total: 0, softAces: 0, aceCount: 0 }
+  }
 
-  let value = 0
-  let aces = 0
+  let total = 0
+  let aceCount = 0
 
   for (const card of hand) {
-    const cardValue = getCardValue(card)
-    value += cardValue
-    if (card.rank === "A") aces++
+    total += getCardValue(card)
+    if (card.rank === "A") aceCount++
   }
 
-  // Adjust for aces
-  while (value > 21 && aces > 0) {
-    value -= 10
-    aces--
+  let softAces = aceCount
+  while (total > 21 && softAces > 0) {
+    total -= 10
+    softAces--
   }
 
-  return value
+  return { total, softAces, aceCount }
+}
+
+export function calculateHandValue(hand: Card[]): number {
+  return evaluateHandTotals(hand).total
 }
 
 export function getHandValueInfo(hand: Card[]): { value: number; isSoft: boolean; hardValue: number } {
-  if (!Array.isArray(hand) || hand.length === 0) return { value: 0, isSoft: false, hardValue: 0 }
+  const { total, softAces, aceCount } = evaluateHandTotals(hand)
+  const isSoft = aceCount > 0 && softAces > 0
+  const hardValue = total - softAces * 10
 
-  let value = 0
-  let aces = 0
-
-  for (const card of hand) {
-    const cardValue = getCardValue(card)
-    value += cardValue
-    if (card.rank === "A") aces++
-  }
-
-  const originalAces = aces
-
-  // Adjust for aces
-  while (value > 21 && aces > 0) {
-    value -= 10
-    aces--
-  }
-
-  // It's soft if we have at least one ace counted as 11
-  const isSoft = originalAces > 0 && aces > 0
-
-  // Hard value is the current value minus 10 for each ace still counted as 11
-  const hardValue = isSoft ? value - 10 : value
-
-  return { value, isSoft, hardValue }
+  return { value: total, isSoft, hardValue }
 }
 
 export function isSoftHand(hand: Card[]): boolean {
-  if (!Array.isArray(hand) || hand.length === 0) return false
-
-  let value = 0
-  let aces = 0
-
-  for (const card of hand) {
-    value += getCardValue(card)
-    if (card.rank === "A") aces++
-  }
-
-  // Adjust for aces if over 21
-  let acesUsedAs11 = aces
-  while (value > 21 && acesUsedAs11 > 0) {
-    value -= 10
-    acesUsedAs11--
-  }
-
-  // It's soft if we have at least one ace AND at least one ace is still counted as 11
-  return aces > 0 && acesUsedAs11 > 0 && value <= 21
+  return evaluateHandTotals(hand).softAces > 0
 }
 
 export function isPair(hand: Card[]): boolean {

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
@@ -128,6 +128,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const [isDoubled, setIsDoubled] = useState(false) // Reset doubled flag
   const isDoubledRef = useRef(false) // Ref to track doubled status synchronously
+  const saveStatsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Leaderboard state
   const [showLeaderboard, setShowLeaderboard] = useState(false)
@@ -146,13 +147,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       handleFriendReferral(friendReferralId)
     }
   }, [friendReferralId, userId])
-
-  useEffect(() => {
-    if (statsLoaded && balance !== null) {
-      // Only save when stats are loaded and balance has a value
-      saveUserStats()
-    }
-  }, [balance, level, xp, handsPlayed, correctMoves, totalMoves, wins, losses, modeStats, totalWinnings, levelWinnings, learningMode])
 
   useEffect(() => {
     const newDeck = createDeck()
@@ -300,7 +294,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }
 
-  const saveUserStats = async () => {
+  const saveUserStats = useCallback(async () => {
     if (balance === null) return // Don't save if balance is not yet loaded
 
     try {
@@ -344,7 +338,58 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     } catch (err) {
       console.error("[v0] Error in saveUserStats:", err)
     }
-  }
+  }, [
+    balance,
+    correctMoves,
+    drillTier,
+    handsPlayed,
+    learningMode,
+    level,
+    levelWinnings,
+    losses,
+    modeStats,
+    supabase,
+    totalMoves,
+    totalWinnings,
+    userId,
+    wins,
+    xp,
+  ])
+
+  useEffect(() => {
+    if (!statsLoaded || balance === null) return
+
+    if (saveStatsTimeoutRef.current) {
+      clearTimeout(saveStatsTimeoutRef.current)
+    }
+
+    saveStatsTimeoutRef.current = setTimeout(() => {
+      saveStatsTimeoutRef.current = null
+      void saveUserStats()
+    }, 750)
+
+    return () => {
+      if (saveStatsTimeoutRef.current) {
+        clearTimeout(saveStatsTimeoutRef.current)
+        saveStatsTimeoutRef.current = null
+      }
+    }
+  }, [
+    balance,
+    correctMoves,
+    handsPlayed,
+    learningMode,
+    level,
+    levelWinnings,
+    losses,
+    modeStats,
+    saveUserStats,
+    statsLoaded,
+    totalMoves,
+    totalWinnings,
+    wins,
+    xp,
+  ])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()

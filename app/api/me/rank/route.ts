@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ rank: null })
     }
 
-    let query = supabase.from("game_stats").select("user_id", { count: "exact", head: false })
+    let query = supabase.from("game_stats").select("user_id", { count: "exact", head: true })
 
     // Apply scope filter
     if (scope === "friends") {
@@ -36,11 +36,6 @@ export async function GET(request: NextRequest) {
 
       const friendIds = friendsData?.map((f) => f.friend_user_id) || []
       friendIds.push(user.id)
-
-      if (friendIds.length === 0) {
-        return NextResponse.json({ rank: 1 })
-      }
-
       query = query.in("user_id", friendIds)
     }
 

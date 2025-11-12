@@ -26,7 +26,7 @@ export default function LoginPage() {
   useEffect(() => {
     const errorParam = searchParams.get("error")
     if (errorParam) {
-      setError(decodeURIComponent(errorParam))
+      setError(errorParam)
       // Clean up URL by removing error parameter
       const newUrl = new URL(window.location.href)
       newUrl.searchParams.delete("error")
@@ -63,7 +63,35 @@ export default function LoginPage() {
             },
           })
 
-          if (signUpError) throw signUpError
+          if (signUpError) {
+            // Check if signup failed because user already exists (magic-link user)
+            if (
+              signUpError.message.includes("User already registered") ||
+              signUpError.message.includes("already registered")
+            ) {
+              // User exists but doesn't have a password - send magic link to set password
+              const friendId = searchParams.get("friend")
+              const redirectTo = friendId
+                ? `${window.location.origin}/auth/callback?setPassword=true&friend=${friendId}`
+                : `${window.location.origin}/auth/callback?setPassword=true`
+
+              const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+                email,
+                options: {
+                  emailRedirectTo: redirectTo,
+                  shouldCreateUser: false,
+                },
+              })
+
+              if (magicLinkError) throw magicLinkError
+
+              // Show success message
+              setMagicLinkSent(true)
+              setIsLoading(false)
+              return
+            }
+            throw signUpError
+          }
 
           // After successful signup, sign in automatically
           const { error: autoSignInError } = await supabase.auth.signInWithPassword({
@@ -124,7 +152,7 @@ export default function LoginPage() {
             <CardHeader className="space-y-2 text-center pb-4">
               <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">Check Your Email</CardTitle>
               <CardDescription className="text-sm sm:text-base text-muted-foreground">
-                We've sent you a magic link to sign in. Click the link in your email to continue.
+                We've sent you a magic link. Click it to set your password and sign in.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

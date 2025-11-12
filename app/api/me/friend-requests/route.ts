@@ -110,16 +110,13 @@ export async function POST(request: NextRequest) {
 
     // If accepted, add to friends table (bidirectional)
     if (action === "accept") {
-      const { error: friendError1 } = await supabase
-        .from("friends")
-        .insert({ user_id: user.id, friend_user_id: requestData.from_user_id })
+      const { error: friendshipError } = await supabase.rpc("create_bidirectional_friendship", {
+        user1_id: user.id,
+        user2_id: requestData.from_user_id,
+      })
 
-      const { error: friendError2 } = await supabase
-        .from("friends")
-        .insert({ user_id: requestData.from_user_id, friend_user_id: user.id })
-
-      if (friendError1 || friendError2) {
-        console.error("[v0] Friend add error:", friendError1 || friendError2)
+      if (friendshipError) {
+        console.error("[v0] Friend add error:", friendshipError)
         return NextResponse.json({ error: "Failed to add friend" }, { status: 500 })
       }
     }

@@ -8,9 +8,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, Suspense } from "react"
 
-export default function SetPasswordPage() {
+function SetPasswordContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [password, setPassword] = useState("")
@@ -91,17 +91,7 @@ export default function SetPasswordPage() {
 
   // Show loading state while checking authentication
   if (isAuthenticated === null) {
-    return (
-      <div className="flex h-dvh w-full items-center justify-center overflow-hidden bg-background p-2 sm:p-4 touch-none overscroll-none">
-        <div className="w-full max-w-sm">
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-            <CardContent className="pt-6">
-              <p className="text-sm text-center text-muted-foreground">Loading...</p>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
+    return <SetPasswordFallback />
   }
 
   // Don't render form if not authenticated (will redirect)
@@ -178,5 +168,27 @@ export default function SetPasswordPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+function SetPasswordFallback() {
+  return (
+    <div className="flex h-dvh w-full items-center justify-center overflow-hidden bg-background p-2 sm:p-4 touch-none overscroll-none">
+      <div className="w-full max-w-sm">
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+          <CardContent className="pt-6">
+            <p className="text-sm text-center text-muted-foreground">Loading...</p>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+export default function SetPasswordPage() {
+  return (
+    <Suspense fallback={<SetPasswordFallback />}>
+      <SetPasswordContent />
+    </Suspense>
   )
 }

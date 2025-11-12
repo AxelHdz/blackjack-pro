@@ -12,7 +12,6 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Blackjack Mastery",
   description: "Master optimal blackjack strategy through interactive gameplay",
-  themeColor: "#18181b",
   icons: {
     icon: [
       {
@@ -40,6 +39,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: "#18181b",
 }
 
 export default function RootLayout({

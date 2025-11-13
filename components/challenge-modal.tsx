@@ -24,6 +24,7 @@ interface ChallengeModalProps {
   onOpenChange: (open: boolean) => void
   challengedUserId?: string
   challengedUserName?: string
+  challengedUserBalance?: number
   challenge?: Challenge | null
   mode?: "create" | "accept" | "counter"
   userBalance?: number
@@ -36,6 +37,7 @@ export function ChallengeModal({
   onOpenChange,
   challengedUserId,
   challengedUserName,
+  challengedUserBalance = 0,
   challenge,
   mode: initialMode,
   userBalance = 0,
@@ -105,10 +107,21 @@ export function ChallengeModal({
       return
     }
 
+    // Check challenger has enough balance
     if (wager > userBalance) {
       toast({
         title: "Error",
         description: "Insufficient balance",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check wager doesn't exceed challenged user's balance
+    if (challengedUserBalance > 0 && wager > challengedUserBalance) {
+      toast({
+        title: "Error",
+        description: `Wager cannot exceed ${challengedUserName}'s balance of $${challengedUserBalance.toLocaleString()}`,
         variant: "destructive",
       })
       return
@@ -299,10 +312,31 @@ export function ChallengeModal({
                     onChange={(e) => setWagerAmount(e.target.value)}
                     className="pl-9"
                     min="1"
-                    max={userBalance}
+                    max={challengedUserBalance > 0 ? Math.min(userBalance, challengedUserBalance) : userBalance}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">Your balance: ${userBalance.toLocaleString()}</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground">Your balance: ${userBalance.toLocaleString()}</p>
+                  {mode === "create" && challengedUserBalance > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        const maxWager = Math.min(userBalance, challengedUserBalance)
+                        setWagerAmount(maxWager.toString())
+                      }}
+                    >
+                      Max Wager
+                    </Button>
+                  )}
+                </div>
+                {mode === "create" && challengedUserBalance > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {challengedUserName}'s balance: ${challengedUserBalance.toLocaleString()}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

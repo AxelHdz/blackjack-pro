@@ -51,6 +51,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [showChallengeModal, setShowChallengeModal] = useState(false)
   const [challengedUserId, setChallengedUserId] = useState<string>("")
   const [challengedUserName, setChallengedUserName] = useState<string>("")
+  const [challengedUserBalance, setChallengedUserBalance] = useState<number>(0)
   const [userBalance, setUserBalance] = useState<number>(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -160,6 +161,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const handleChallengeClick = (entry: LeaderboardEntry) => {
     setChallengedUserId(entry.userId)
     setChallengedUserName(entry.name)
+    setChallengedUserBalance(entry.currentBalance)
     setShowChallengeModal(true)
     void loadUserBalance()
   }
@@ -481,11 +483,12 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-8 w-8 p-0"
+                          className="h-9 px-2 border border-white/20 rounded flex items-center gap-1.5"
                           onClick={() => handleChallengeClick(entry)}
                           aria-label={`Challenge ${entry.name}`}
                         >
-                          <Swords className="h-4 w-4" />
+                          <span className="text-xs font-medium">Challenge</span>
+                          <Swords className="h-6 w-6" />
                         </Button>
                       )}
                     </div>
@@ -526,6 +529,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
         onOpenChange={setShowChallengeModal}
         challengedUserId={challengedUserId}
         challengedUserName={challengedUserName}
+        challengedUserBalance={challengedUserBalance}
         userBalance={userBalance}
         mode="create"
         onChallengeCreated={() => {

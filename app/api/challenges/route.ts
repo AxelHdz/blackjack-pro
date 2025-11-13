@@ -141,6 +141,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Insufficient balance" }, { status: 400 })
     }
 
+    // Check if challenged user has sufficient balance
+    const { data: challengedStats, error: challengedStatsError } = await supabase
+      .from("game_stats")
+      .select("total_money")
+      .eq("user_id", challengedId)
+      .single()
+
+    if (challengedStatsError || !challengedStats) {
+      console.error("[v0] Failed to fetch challenged user stats:", challengedStatsError)
+      return NextResponse.json({ error: "Failed to fetch challenged user balance" }, { status: 500 })
+    }
+
+    if (challengedStats.total_money < wagerAmount) {
+      return NextResponse.json({ 
+        error: `Wager cannot exceed challenged user's balance of $${challengedStats.total_money.toLocaleString()}` 
+      }, { status: 400 })
+    }
+
     // Check if challenger already has an active/pending challenge
     const { data: existingChallenge, error: existingError } = await supabase
       .from("challenges")

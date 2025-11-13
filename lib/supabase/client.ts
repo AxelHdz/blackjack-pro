@@ -4,9 +4,26 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 let client: SupabaseClient | undefined
 
 export function createClient() {
-  if (client) return client
+  if (client) {
+    return client
+  }
 
-  client = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
+  client = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      flowType: "pkce",
+    },
+    global: {
+      headers: {
+        "X-Client-Info": "supabase-js-web",
+      },
+    },
+  })
 
   return client
 }

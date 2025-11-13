@@ -142,6 +142,19 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
   const [leaderboardScope, setLeaderboardScope] = useState<"global" | "friends">("global")
 
+  // Challenge state
+  const [activeChallenge, setActiveChallenge] = useState<{
+    id: string
+    challengerId: string
+    challengerName: string
+    challengedId: string
+    challengedName: string
+    wagerAmount: number
+    durationMinutes: number
+    expiresAt: string
+  } | null>(null)
+  const [challengeTimeRemaining, setChallengeTimeRemaining] = useState<number | null>(null)
+
   // XP popup state
   const [showXpPopup, setShowXpPopup] = useState(false)
   const xpPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -161,7 +174,91 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   useEffect(() => {
     loadUserStats()
+    fetchActiveChallenge()
   }, [userId])
+
+  // Fetch active challenge
+  const fetchActiveChallenge = async () => {
+    try {
+      const response = await fetch("/api/challenges/active")
+      const data = await response.json()
+      if (data.challenge && data.challenge.status === "active") {
+        setActiveChallenge(data.challenge)
+        // Force expert mode if challenge is active
+        if (learningMode !== "expert") {
+          setLearningMode("expert")
+        }
+      } else {
+        setActiveChallenge(null)
+      }
+    } catch (error) {
+      console.error("[v0] Failed to fetch active challenge:", error)
+    }
+  }
+
+  // Poll challenge completion
+  useEffect(() => {
+    if (!activeChallenge) return
+
+    const checkChallengeCompletion = async () => {
+      const expiresAt = new Date(activeChallenge.expiresAt)
+      const now = new Date()
+
+      if (now >= expiresAt) {
+        // Challenge expired, complete it
+        try {
+          const response = await fetch(`/api/challenges/${activeChallenge.id}/complete`, {
+            method: "POST",
+          })
+          const data = await response.json()
+
+          if (response.ok) {
+            toast({
+              title: data.isTie ? "Challenge Tied!" : data.winnerId === userId ? "Challenge Won!" : "Challenge Lost",
+              description: data.isTie
+                ? "The challenge ended in a tie. Wager refunded."
+                : data.winnerId === userId
+                  ? `You won $${activeChallenge.wagerAmount.toLocaleString()}!`
+                  : `You lost $${activeChallenge.wagerAmount.toLocaleString()}.`,
+            })
+            setActiveChallenge(null)
+            void fetchActiveChallenge()
+          }
+        } catch (error) {
+          console.error("[v0] Failed to complete challenge:", error)
+        }
+      } else {
+        // Update time remaining
+        const diff = expiresAt.getTime() - now.getTime()
+        setChallengeTimeRemaining(Math.floor(diff / 1000))
+      }
+    }
+
+    checkChallengeCompletion()
+    const interval = setInterval(checkChallengeCompletion, 30000) // Check every 30 seconds
+
+    return () => clearInterval(interval)
+  }, [activeChallenge, userId, toast])
+
+  // Update challenge timer display
+  useEffect(() => {
+    if (!activeChallenge || !activeChallenge.expiresAt) {
+      setChallengeTimeRemaining(null)
+      return
+    }
+
+    const updateTimer = () => {
+      const expiresAt = new Date(activeChallenge.expiresAt)
+      const now = new Date()
+      const diff = Math.max(0, expiresAt.getTime() - now.getTime())
+      setChallengeTimeRemaining(Math.floor(diff / 1000))
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+
+    return () => clearInterval(interval)
+  }, [activeChallenge])
 
   useEffect(() => {
     if (friendReferralId && friendReferralId !== userId) {
@@ -306,9 +403,18 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         }
         
         // Load last play mode, defaulting to "guided" if not set or invalid
+        // But check for active challenge first - if active, force expert mode
         const savedMode = data.last_play_mode
         if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
-          setLearningMode(savedMode)
+          // Check for active challenge after loading stats
+          const challengeResponse = await fetch("/api/challenges/active")
+          const challengeData = await challengeResponse.json()
+          if (challengeData.challenge && challengeData.challenge.status === "active") {
+            setLearningMode("expert")
+            setActiveChallenge(challengeData.challenge)
+          } else {
+            setLearningMode(savedMode)
+          }
         }
 
         // Load deck from database, or create new one if missing/invalid
@@ -1655,7 +1761,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                 />
               </div>
               {showXpPopup && (
-                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 bg-card border border-border rounded-md shadow-lg text-xs text-foreground whitespace-nowrap z-50">
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-4 py-2 bg-card border border-border rounded-md shadow-lg text-sm text-foreground whitespace-nowrap z-50">
                   {xp.toLocaleString()} / {getXPNeeded(level).toLocaleString()} XP
                 </div>
               )}
@@ -1751,19 +1857,26 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     },
                     { mode: "practice" as LearningMode, title: "Practice", desc: "Get feedback", icon: Target },
                     { mode: "expert" as LearningMode, title: "Expert", desc: "No hints", icon: Trophy },
-                  ].map(({ mode, title, desc, icon: Icon }) => (
-                    <button
-                      key={mode}
-                      onClick={() => {
-                        setLearningMode(mode)
-                        setShowModeSelector(false)
-                      }}
-                      className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-xs sm:text-sm transition-all duration-200 ease-in-out ${
-                        learningMode === mode
-                          ? "bg-primary text-primary-foreground scale-[1.02]"
-                          : "bg-card border border-border hover:bg-muted hover:scale-[1.02]"
-                      }`}
-                    >
+                  ].map(({ mode, title, desc, icon: Icon }) => {
+                    const isDisabled = activeChallenge && mode !== "expert"
+                    return (
+                      <button
+                        key={mode}
+                        onClick={() => {
+                          if (!isDisabled) {
+                            setLearningMode(mode)
+                            setShowModeSelector(false)
+                          }
+                        }}
+                        disabled={isDisabled}
+                        className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-xs sm:text-sm transition-all duration-200 ease-in-out ${
+                          isDisabled
+                            ? "bg-muted/50 border border-border opacity-50 cursor-not-allowed"
+                            : learningMode === mode
+                              ? "bg-primary text-primary-foreground scale-[1.02]"
+                              : "bg-card border border-border hover:bg-muted hover:scale-[1.02]"
+                        }`}
+                      >
                       <div className="flex items-center gap-2 sm:gap-3">
                         <Icon className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
                         <div className="flex-1">
@@ -1772,8 +1885,26 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                         </div>
                       </div>
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
+
+                {activeChallenge && (
+                  <div className="mt-4 p-3 rounded-lg border border-primary/50 bg-primary/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-primary">Active Challenge</span>
+                      {challengeTimeRemaining !== null && (
+                        <span className="text-xs text-muted-foreground">
+                          {Math.floor(challengeTimeRemaining / 60)}:
+                          {(challengeTimeRemaining % 60).toString().padStart(2, "0")}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Playing against {activeChallenge.challengerId === userId ? activeChallenge.challengedName : activeChallenge.challengerName}. Expert mode only.
+                    </p>
+                  </div>
+                )}
 
                 <div className="mt-4 sm:mt-6 grid grid-cols-3 gap-2 sm:gap-3 w-full">
                   <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-2 sm:p-3 text-center">
@@ -1820,6 +1951,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     onClick={() => setShowLeaderboard(true)}
                     metric={leaderboardMetric}
                     scope={leaderboardScope}
+                    userId={userId}
                   />
                 </div>
               </div>

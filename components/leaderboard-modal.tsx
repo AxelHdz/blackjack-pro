@@ -7,8 +7,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { Copy, UserPlus, X, Check, XIcon, Trophy } from "lucide-react"
+import { Copy, UserPlus, X, Check, XIcon, Trophy, Swords } from "lucide-react"
 import { UsernameEditor } from "@/components/username-editor"
+import { ChallengeModal } from "@/components/challenge-modal"
 
 interface LeaderboardEntry {
   userId: string
@@ -47,6 +48,10 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
   const [copiedUserId, setCopiedUserId] = useState(false)
   const [userDisplayName, setUserDisplayName] = useState<string>("")
+  const [showChallengeModal, setShowChallengeModal] = useState(false)
+  const [challengedUserId, setChallengedUserId] = useState<string>("")
+  const [challengedUserName, setChallengedUserName] = useState<string>("")
+  const [userBalance, setUserBalance] = useState<number>(0)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -72,6 +77,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     void loadFriends()
     void loadFriendRequests()
     void loadUserProfile()
+    void loadUserBalance()
   }, [open])
 
   const loadLeaderboard = async (
@@ -137,6 +143,25 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     } catch (error) {
       console.error("[v0] Failed to load user profile:", error)
     }
+  }
+
+  const loadUserBalance = async () => {
+    try {
+      const response = await fetch("/api/me/profile")
+      const data = await response.json()
+      if (data.stats?.total_money !== undefined) {
+        setUserBalance(data.stats.total_money)
+      }
+    } catch (error) {
+      console.error("[v0] Failed to load user balance:", error)
+    }
+  }
+
+  const handleChallengeClick = (entry: LeaderboardEntry) => {
+    setChallengedUserId(entry.userId)
+    setChallengedUserName(entry.name)
+    setShowChallengeModal(true)
+    void loadUserBalance()
   }
 
   const handleRespondToRequest = async (requestId: string, action: "accept" | "reject") => {
@@ -452,6 +477,17 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
                           )}
                         </div>
                       </div>
+                      {entry.userId !== userId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          onClick={() => handleChallengeClick(entry)}
+                          aria-label={`Challenge ${entry.name}`}
+                        >
+                          <Swords className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   ))}
                   {loading && <div className="text-center py-2 text-xs text-muted-foreground">Loading more...</div>}
@@ -484,6 +520,18 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
           </div>
         )}
       </DialogContent>
+
+      <ChallengeModal
+        open={showChallengeModal}
+        onOpenChange={setShowChallengeModal}
+        challengedUserId={challengedUserId}
+        challengedUserName={challengedUserName}
+        userBalance={userBalance}
+        mode="create"
+        onChallengeCreated={() => {
+          void loadLeaderboard(true)
+        }}
+      />
     </Dialog>
   )
 }

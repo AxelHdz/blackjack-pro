@@ -24,7 +24,18 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 })
     }
 
-    return NextResponse.json({ profile })
+    // Also fetch game stats for balance
+    const { data: stats, error: statsError } = await supabase
+      .from("game_stats")
+      .select("total_money")
+      .eq("user_id", user.id)
+      .single()
+
+    if (statsError) {
+      console.error("[v0] Failed to fetch stats:", statsError)
+    }
+
+    return NextResponse.json({ profile, stats: stats ? { total_money: stats.total_money } : null })
   } catch (error) {
     console.error("[v0] Error in profile GET:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

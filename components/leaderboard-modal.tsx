@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Copy, UserPlus, X, Check, XIcon, Trophy, Swords } from "lucide-react"
 import { UsernameEditor } from "@/components/username-editor"
 import { ChallengeModal } from "@/components/challenge-modal"
+import { type Challenge } from "@/types/challenge"
 
 interface LeaderboardEntry {
   userId: string
@@ -53,6 +54,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [challengedUserName, setChallengedUserName] = useState<string>("")
   const [challengedUserBalance, setChallengedUserBalance] = useState<number>(0)
   const [userBalance, setUserBalance] = useState<number>(0)
+  const [blockingChallenge, setBlockingChallenge] = useState<Challenge | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -79,6 +81,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     void loadFriendRequests()
     void loadUserProfile()
     void loadUserBalance()
+    void loadBlockingChallenge()
   }, [open])
 
   const loadLeaderboard = async (
@@ -158,7 +161,30 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     }
   }
 
+  const loadBlockingChallenge = async () => {
+    try {
+      const response = await fetch("/api/challenges?status=pending,active")
+      const data = await response.json()
+      if (Array.isArray(data.challenges) && data.challenges.length > 0) {
+        setBlockingChallenge(data.challenges[0])
+      } else {
+        setBlockingChallenge(null)
+      }
+    } catch (error) {
+      console.error("[v0] Failed to load challenge state:", error)
+      setBlockingChallenge(null)
+    }
+  }
+
   const handleChallengeClick = (entry: LeaderboardEntry) => {
+    if (blockingChallenge) {
+      toast({
+        title: "Challenge unavailable",
+        description: "Finish or cancel your current challenge before starting a new one.",
+        variant: "destructive",
+      })
+      return
+    }
     setChallengedUserId(entry.userId)
     setChallengedUserName(entry.name)
     setChallengedUserBalance(entry.currentBalance)
@@ -353,6 +379,12 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
           </div>
         </DialogHeader>
 
+        {blockingChallenge && (
+          <div className="px-6 pt-2 text-xs text-amber-400">
+            Finish or cancel your current challenge before sending new requests.
+          </div>
+        )}
+
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           {showRequests && friendRequests.length > 0 ? (
             <div className="px-6 py-4">
@@ -483,9 +515,17 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-9 px-2 border border-white/20 rounded flex items-center gap-1.5"
+                          disabled={Boolean(blockingChallenge)}
+                          className={`h-9 px-2 border border-white/20 rounded flex items-center gap-1.5 ${
+                            blockingChallenge ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
                           onClick={() => handleChallengeClick(entry)}
                           aria-label={`Challenge ${entry.name}`}
+                          title={
+                            blockingChallenge
+                              ? "Finish or cancel your current challenge before challenging someone new."
+                              : undefined
+                          }
                         >
                           <span className="text-xs font-medium">Challenge</span>
                           <Swords className="h-6 w-6" />
@@ -527,6 +567,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       <ChallengeModal
         open={showChallengeModal}
         onOpenChange={setShowChallengeModal}
+        userId={userId}
         challengedUserId={challengedUserId}
         challengedUserName={challengedUserName}
         challengedUserBalance={challengedUserBalance}
@@ -534,6 +575,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
         mode="create"
         onChallengeCreated={() => {
           void loadLeaderboard(true)
+          void loadBlockingChallenge()
         }}
       />
     </Dialog>

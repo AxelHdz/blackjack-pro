@@ -1,24 +1,9 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Swords, Clock, DollarSign, X, CheckCircle } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-
-interface Challenge {
-  id: string
-  challengerId: string
-  challengerName: string
-  challengedId: string
-  challengedName: string
-  wagerAmount: number
-  durationMinutes: number
-  status: string
-  expiresAt?: string
-  startedAt?: string
-  winnerId?: string
-}
+import { type Challenge } from "@/types/challenge"
 
 interface ChallengeChipProps {
   challenge: Challenge | null
@@ -27,7 +12,6 @@ interface ChallengeChipProps {
 }
 
 export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps) {
-  const { toast } = useToast()
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
 
   useEffect(() => {
@@ -57,6 +41,10 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
   const isChallenged = challenge.challengedId === userId
   const isWinner = challenge.winnerId === userId
   const isCompleted = challenge.status === "completed"
+  const awaitingUserId = challenge.awaitingUserId
+  const playerCredits = isChallenger ? challenge.challengerCreditBalance ?? 0 : challenge.challengedCreditBalance ?? 0
+  const opponentCredits = isChallenger ? challenge.challengedCreditBalance ?? 0 : challenge.challengerCreditBalance ?? 0
+  const creditDiff = playerCredits - opponentCredits
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
@@ -73,17 +61,26 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
     }
 
     if (challenge.status === "pending") {
-      if (isChallenger) {
-        return "Challenge Pending"
+      if (awaitingUserId === userId) {
+        return isChallenger ? "Counter Offer Received" : "Challenge Received"
       }
-      return "Challenge Received"
+      return isChallenger ? "Pending Opponent" : "Challenge Sent"
     }
 
     if (challenge.status === "active") {
-      return "Challenge Active"
+      if (creditDiff > 0) return "You're Winning"
+      if (creditDiff < 0) return "You're Losing"
+      return "Challenge Tied"
     }
 
     return "Challenge"
+  }
+
+  const getOpponentName = () => {
+    if (challenge.status === "pending" && isChallenger) {
+      return challenge.challengedName
+    }
+    return null
   }
 
   const getIcon = () => {
@@ -114,13 +111,27 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
       <div className="flex items-center gap-2">
         {getIcon()}
         <span className="text-sm font-medium text-foreground">{getChallengeText()}</span>
-        {challenge.status === "active" && timeRemaining !== null && (
-          <Badge variant="secondary" className="text-xs">
-            {formatTime(timeRemaining)}
-          </Badge>
+        {challenge.status === "pending" && isChallenger && getOpponentName() && (
+          <span className="text-xs text-muted-foreground">· {getOpponentName()}</span>
+        )}
+        {challenge.status === "active" && (
+          <>
+            {timeRemaining !== null && (
+              <Badge variant="secondary" className="text-xs">
+                {formatTime(timeRemaining)}
+              </Badge>
+            )}
+            <span
+              className={`text-xs font-semibold ${
+                creditDiff === 0 ? "text-muted-foreground" : creditDiff > 0 ? "text-green-400" : "text-red-400"
+              }`}
+            >
+              {creditDiff === 0 ? "Even" : `${creditDiff > 0 ? "+" : "-"}${Math.abs(creditDiff).toLocaleString()}`}
+            </span>
+          </>
         )}
       </div>
-      {challenge.status === "pending" && !isChallenger && (
+      {challenge.status === "pending" && awaitingUserId === userId && (
         <Badge variant="destructive" className="text-xs">
           New
         </Badge>
@@ -128,4 +139,3 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
     </button>
   )
 }
-

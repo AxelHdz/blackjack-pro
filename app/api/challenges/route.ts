@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
+import { formatChallengeResponse, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
-// GET: Fetch user's challenges (pending/active)
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
 
@@ -43,7 +43,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch challenges" }, { status: 500 })
     }
 
-    // Fetch user profiles for challenger and challenged users
     const userIds = new Set<string>()
     challenges?.forEach((challenge) => {
       userIds.add(challenge.challenger_id)
@@ -61,39 +60,16 @@ export async function GET(request: NextRequest) {
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
-    const formattedChallenges = challenges?.map((challenge) => {
-      const challengerProfile = profilesMap.get(challenge.challenger_id)
-      const challengedProfile = profilesMap.get(challenge.challenged_id)
-      return {
-        id: challenge.id,
-        challengerId: challenge.challenger_id,
-        challengerName: challengerProfile?.display_name || `User ${challenge.challenger_id.slice(0, 8)}`,
-        challengedId: challenge.challenged_id,
-        challengedName: challengedProfile?.display_name || `User ${challenge.challenged_id.slice(0, 8)}`,
-        wagerAmount: challenge.wager_amount,
-        durationMinutes: challenge.duration_minutes,
-        status: challenge.status,
-        challengerBalanceStart: challenge.challenger_balance_start,
-        challengedBalanceStart: challenge.challenged_balance_start,
-        challengerBalanceEnd: challenge.challenger_balance_end,
-        challengedBalanceEnd: challenge.challenged_balance_end,
-        winnerId: challenge.winner_id,
-        startedAt: challenge.started_at,
-        expiresAt: challenge.expires_at,
-        completedAt: challenge.completed_at,
-        createdAt: challenge.created_at,
-        updatedAt: challenge.updated_at,
-      }
-    })
+    const formattedChallenges =
+      challenges?.map((challenge) => formatChallengeResponse(challenge as ChallengeRecord, profilesMap)) || []
 
-    return NextResponse.json({ challenges: formattedChallenges || [] })
+    return NextResponse.json({ challenges: formattedChallenges })
   } catch (err) {
     console.error("[v0] Challenges error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-// POST: Create new challenge
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
 
@@ -233,4 +209,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

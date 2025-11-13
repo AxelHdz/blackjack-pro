@@ -15,7 +15,20 @@ import {
   getCardValue,
   isSoftHand,
 } from "@/lib/card-utils"
-import { Lightbulb, X, GraduationCap, Target, Trophy, ChevronLeft, ChevronRight, LogOut, Home, HelpCircle } from "lucide-react"
+import {
+  Lightbulb,
+  X,
+  GraduationCap,
+  Target,
+  Trophy,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  Home,
+  HelpCircle,
+  Clock,
+  Swords,
+} from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { BuybackDrillModal } from "@/components/buyback-drill-modal"
@@ -26,6 +39,7 @@ import { LeaderboardModal } from "@/components/leaderboard-modal"
 import { useToast } from "@/hooks/use-toast"
 import { getXPNeeded, getCashBonusWithCap, getXPPerWin, getXPPerWinWithBet, LEVELING_CONFIG } from "@/lib/leveling-config"
 import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
+import { type Challenge } from "@/types/challenge"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -38,6 +52,10 @@ type ModeStats = {
 }
 
 type StatsView = "overall" | "perMode"
+
+const CHALLENGE_CREDIT_START = 500
+const CHALLENGE_XP_MULTIPLIER = 2
+const CHALLENGE_SYNC_DELAY = 1200
 
 interface BlackjackGameProps {
   userId: string
@@ -143,22 +161,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [leaderboardScope, setLeaderboardScope] = useState<"global" | "friends">("global")
 
   // Challenge state
-  const [activeChallenge, setActiveChallenge] = useState<{
-    id: string
-    challengerId: string
-    challengerName: string
-    challengedId: string
-    challengedName: string
-    wagerAmount: number
-    durationMinutes: number
-    expiresAt: string
-  } | null>(null)
+  const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null)
   const [challengeTimeRemaining, setChallengeTimeRemaining] = useState<number | null>(null)
+  const [pendingChallengeXp, setPendingChallengeXp] = useState(0)
+  const [lastSyncedChallengeCredit, setLastSyncedChallengeCredit] = useState<number | null>(null)
 
   // XP popup state
   const [showXpPopup, setShowXpPopup] = useState(false)
   const xpPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const xpProgressBarRef = useRef<HTMLDivElement>(null)
+  const challengeSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Helper to close popup and clear timeout
   const closeXpPopup = useCallback(() => {
@@ -172,10 +184,71 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // Minimum swipe distance (in px)
   const minSwipeDistance = 50
 
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
   useEffect(() => {
     loadUserStats()
     fetchActiveChallenge()
   }, [userId])
+
+  const applyChallengeContext = useCallback(
+    (challengeData: Challenge | null) => {
+      setActiveChallenge(challengeData)
+      if (challengeData) {
+        setPendingChallengeXp(0)
+        const playerCredit =
+          challengeData.challengerId === userId
+            ? challengeData.challengerCreditBalance
+            : challengeData.challengedCreditBalance
+        const resolvedCredit =
+          playerCredit !== null && playerCredit !== undefined ? playerCredit : CHALLENGE_CREDIT_START
+        setBalance(resolvedCredit)
+        setLastSyncedChallengeCredit(resolvedCredit)
+      } else {
+        setPendingChallengeXp(0)
+        setLastSyncedChallengeCredit(null)
+      }
+    },
+    [userId],
+  )
+
+  const syncChallengeProgress = useCallback(
+    async (creditBalance: number, xpToSync: number) => {
+      if (!activeChallenge) return
+      if (
+        xpToSync <= 0 &&
+        lastSyncedChallengeCredit !== null &&
+        lastSyncedChallengeCredit === creditBalance
+      ) {
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/challenges/${activeChallenge.id}/progress`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            creditBalance,
+            xpDelta: xpToSync > 0 ? xpToSync : undefined,
+          }),
+        })
+
+        if (response.ok) {
+          setLastSyncedChallengeCredit(creditBalance)
+          if (xpToSync > 0) {
+            setPendingChallengeXp((prev) => Math.max(prev - xpToSync, 0))
+          }
+        }
+      } catch (error) {
+        console.error("[v0] Failed to sync challenge progress:", error)
+      }
+    },
+    [activeChallenge, lastSyncedChallengeCredit],
+  )
 
   // Fetch active challenge
   const fetchActiveChallenge = async () => {
@@ -183,13 +256,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       const response = await fetch("/api/challenges/active")
       const data = await response.json()
       if (data.challenge && data.challenge.status === "active") {
-        setActiveChallenge(data.challenge)
-        // Force expert mode if challenge is active
-        if (learningMode !== "expert") {
-          setLearningMode("expert")
-        }
+        applyChallengeContext(data.challenge)
+        setLearningMode("expert")
       } else {
-        setActiveChallenge(null)
+        applyChallengeContext(null)
       }
     } catch (error) {
       console.error("[v0] Failed to fetch active challenge:", error)
@@ -205,40 +275,74 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       const now = new Date()
 
       if (now >= expiresAt) {
-        // Challenge expired, complete it
         try {
+          await syncChallengeProgress(balance ?? 0, pendingChallengeXp)
           const response = await fetch(`/api/challenges/${activeChallenge.id}/complete`, {
             method: "POST",
           })
           const data = await response.json()
 
           if (response.ok) {
+            const didWin = data.winnerId === userId
             toast({
-              title: data.isTie ? "Challenge Tied!" : data.winnerId === userId ? "Challenge Won!" : "Challenge Lost",
+              title: data.isTie ? "Challenge Tied!" : didWin ? "Challenge Won!" : "Challenge Lost",
               description: data.isTie
                 ? "The challenge ended in a tie. Wager refunded."
-                : data.winnerId === userId
+                : didWin
                   ? `You won $${activeChallenge.wagerAmount.toLocaleString()}!`
                   : `You lost $${activeChallenge.wagerAmount.toLocaleString()}.`,
             })
-            setActiveChallenge(null)
+
+            const xpResults = data.xpResults || {}
+            const playerResult =
+              activeChallenge.challengerId === userId ? xpResults.challenger : xpResults.challenged
+            if (playerResult?.xpApplied) {
+              toast({
+                title: "Challenge XP Applied",
+                description:
+                  playerResult.levelsGained > 0
+                    ? `You gained ${playerResult.xpApplied.toLocaleString()} XP and reached level ${playerResult.newLevel}!`
+                    : `You gained ${playerResult.xpApplied.toLocaleString()} XP from the challenge.`,
+              })
+            }
+
+            applyChallengeContext(null)
+            void loadUserStats()
             void fetchActiveChallenge()
           }
         } catch (error) {
           console.error("[v0] Failed to complete challenge:", error)
         }
       } else {
-        // Update time remaining
         const diff = expiresAt.getTime() - now.getTime()
         setChallengeTimeRemaining(Math.floor(diff / 1000))
       }
     }
 
     checkChallengeCompletion()
-    const interval = setInterval(checkChallengeCompletion, 30000) // Check every 30 seconds
+    const interval = setInterval(checkChallengeCompletion, 30000)
 
     return () => clearInterval(interval)
-  }, [activeChallenge, userId, toast])
+  }, [activeChallenge, userId, toast, balance, pendingChallengeXp, syncChallengeProgress, applyChallengeContext])
+
+  useEffect(() => {
+    if (!activeChallenge || balance === null) return
+
+    if (challengeSyncTimeoutRef.current) {
+      clearTimeout(challengeSyncTimeoutRef.current)
+    }
+
+    challengeSyncTimeoutRef.current = setTimeout(() => {
+      void syncChallengeProgress(balance, pendingChallengeXp)
+    }, CHALLENGE_SYNC_DELAY)
+
+    return () => {
+      if (challengeSyncTimeoutRef.current) {
+        clearTimeout(challengeSyncTimeoutRef.current)
+        challengeSyncTimeoutRef.current = null
+      }
+    }
+  }, [activeChallenge, balance, pendingChallengeXp, syncChallengeProgress])
 
   // Update challenge timer display
   useEffect(() => {
@@ -371,7 +475,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }
 
       if (data) {
-        setBalance(data.total_money ?? 500)
+        const baseBalance = data.total_money ?? 500
         setTotalWinnings(data.total_winnings ?? 0)
         setLevelWinnings(data.level_winnings ?? 0)
         const loadedLevel = data.level ?? 1
@@ -405,16 +509,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         // Load last play mode, defaulting to "guided" if not set or invalid
         // But check for active challenge first - if active, force expert mode
         const savedMode = data.last_play_mode
-        if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
-          // Check for active challenge after loading stats
-          const challengeResponse = await fetch("/api/challenges/active")
-          const challengeData = await challengeResponse.json()
-          if (challengeData.challenge && challengeData.challenge.status === "active") {
-            setLearningMode("expert")
-            setActiveChallenge(challengeData.challenge)
-          } else {
-            setLearningMode(savedMode)
-          }
+        let appliedChallengeState = false
+        const challengeResponse = await fetch("/api/challenges/active")
+        const challengeData = await challengeResponse.json()
+        if (challengeData.challenge && challengeData.challenge.status === "active") {
+          applyChallengeContext(challengeData.challenge)
+          setLearningMode("expert")
+          appliedChallengeState = true
+        } else if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
+          setLearningMode(savedMode)
+          applyChallengeContext(null)
+        }
+
+        if (!appliedChallengeState) {
+          setBalance(baseBalance)
         }
 
         // Load deck from database, or create new one if missing/invalid
@@ -505,7 +613,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   const saveUserStats = useCallback(async () => {
-    if (balance === null) return // Don't save if balance is not yet loaded
+    if (balance === null || activeChallenge) return // Skip while challenge credits are active
 
     try {
       const { error } = await supabase
@@ -551,6 +659,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       console.error("[v0] Error in saveUserStats:", err)
     }
   }, [
+    activeChallenge,
     balance,
     correctMoves,
     deck,
@@ -571,7 +680,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   ])
 
   useEffect(() => {
-    if (!statsLoaded || balance === null) return
+    if (!statsLoaded || balance === null || activeChallenge) return
 
     if (saveStatsTimeoutRef.current) {
       clearTimeout(saveStatsTimeoutRef.current)
@@ -589,6 +698,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }
     }
   }, [
+    activeChallenge,
     balance,
     correctMoves,
     deck,
@@ -1416,6 +1526,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   const addExperience = (amount: number) => {
+    if (activeChallenge) {
+      if (amount <= 0) return
+      const boosted = Math.max(1, Math.round(amount * CHALLENGE_XP_MULTIPLIER))
+      setPendingChallengeXp((prev) => prev + boosted)
+      return
+    }
+
     setXp((prevXp) => {
       let currentXp = prevXp + amount
       // Use ref to get current level (avoids stale closure issues)
@@ -1771,9 +1888,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
         {/* Center - Balance */}
         <div className="absolute left-1/2 -translate-x-1/2">
-          <div className="text-base sm:text-lg font-bold text-white transition-all duration-300">
-            ${balance !== null ? balance.toLocaleString() : "..."}
-          </div>
+          {activeChallenge ? (
+            <div className="flex items-center gap-2 text-base sm:text-lg font-bold text-yellow-400 transition-all duration-300 drop-shadow">
+              <Swords className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span>{balance !== null ? balance.toLocaleString() : "..."}</span>
+            </div>
+          ) : (
+            <div className="text-base sm:text-lg font-bold text-white transition-all duration-300">
+              ${balance !== null ? balance.toLocaleString() : "..."}
+            </div>
+          )}
         </div>
 
         {/* Right side - Logout icon when betting/selecting mode, Home icon during gameplay */}
@@ -1965,6 +2089,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             <span className="font-semibold text-foreground">
               ${isSplit ? (activeBet * 2).toLocaleString() : activeBet.toLocaleString()}
             </span>
+          </div>
+        )}
+
+        {activeChallenge && (gameState === "playing" || gameState === "dealer") && challengeTimeRemaining !== null && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/60 border border-border text-yellow-300 font-semibold text-sm sm:text-base">
+            <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
+            <span>{formatTimer(challengeTimeRemaining)}</span>
           </div>
         )}
 

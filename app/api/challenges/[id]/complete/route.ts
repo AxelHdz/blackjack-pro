@@ -1,5 +1,83 @@
 import { createClient } from "@/lib/supabase/server"
+import { getCashBonusWithCap, getXPNeeded, LEVELING_CONFIG } from "@/lib/leveling-config"
 import { type NextRequest, NextResponse } from "next/server"
+
+type XpRewardResult = {
+  xpApplied: number
+  levelsGained: number
+  cashBonus: number
+  newLevel: number
+}
+
+async function applyChallengeXpReward(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  xpGain: number,
+): Promise<XpRewardResult> {
+  if (!xpGain || xpGain <= 0) {
+    return { xpApplied: 0, levelsGained: 0, cashBonus: 0, newLevel: 0 }
+  }
+
+  const { data: stats, error } = await supabase
+    .from("game_stats")
+    .select("experience, level, total_money, level_winnings")
+    .eq("user_id", userId)
+    .single()
+
+  if (error || !stats) {
+    console.error("[v0] Failed to load stats for XP reward:", error)
+    return { xpApplied: 0, levelsGained: 0, cashBonus: 0, newLevel: 0 }
+  }
+
+  let experience = stats.experience ?? 0
+  let level = stats.level ?? 1
+  let totalMoney = stats.total_money ?? 0
+  let levelWinnings = stats.level_winnings ?? 0
+  let xpPool = Math.round(xpGain)
+  let levelsGained = 0
+  let cashBonus = 0
+
+  while (xpPool > 0) {
+    const xpNeeded = getXPNeeded(level)
+    if (xpPool < xpNeeded) {
+      experience += xpPool
+      xpPool = 0
+      break
+    }
+
+    xpPool -= xpNeeded
+    const completedLevel = level
+    level += 1
+    levelsGained += 1
+    const bonus = getCashBonusWithCap(completedLevel, LEVELING_CONFIG.cash_cap)
+    cashBonus += bonus
+    totalMoney += bonus
+    experience = 0
+    levelWinnings = 0
+  }
+
+  const updates = {
+    experience,
+    level,
+    total_money: totalMoney,
+    level_winnings: levelWinnings,
+    updated_at: new Date().toISOString(),
+  }
+
+  const { error: updateError } = await supabase.from("game_stats").update(updates).eq("user_id", userId)
+
+  if (updateError) {
+    console.error("[v0] Failed to apply XP reward:", updateError)
+    return { xpApplied: 0, levelsGained: 0, cashBonus: 0, newLevel: level }
+  }
+
+  return {
+    xpApplied: Math.round(xpGain),
+    levelsGained,
+    cashBonus,
+    newLevel: level,
+  }
+}
 
 // POST: Complete challenge (called when timer expires)
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -14,7 +92,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   try {
-    // Get current challenge
     const { data: challenge, error: fetchError } = await supabase
       .from("challenges")
       .select("*")
@@ -26,7 +103,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
 
-    // Verify user is part of this challenge
     const isChallenger = challenge.challenger_id === user.id
     const isChallenged = challenge.challenged_id === user.id
 
@@ -38,25 +114,32 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Challenge is not active" }, { status: 400 })
     }
 
-    // Check if challenge has expired
     if (challenge.expires_at) {
       const expiresAt = new Date(challenge.expires_at)
-      const now = new Date()
-      if (now < expiresAt) {
+      if (new Date() < expiresAt) {
         return NextResponse.json({ error: "Challenge has not expired yet" }, { status: 400 })
       }
     }
 
-    // Get current balances
+    const challengerCredits = challenge.challenger_credit_balance ?? 0
+    const challengedCredits = challenge.challenged_credit_balance ?? 0
+
+    let winnerId: string | null = null
+    if (challengerCredits > challengedCredits) {
+      winnerId = challenge.challenger_id
+    } else if (challengedCredits > challengerCredits) {
+      winnerId = challenge.challenged_id
+    }
+
     const { data: challengerStats, error: challengerStatsError } = await supabase
       .from("game_stats")
-      .select("total_money")
+      .select("total_money, experience, level, level_winnings")
       .eq("user_id", challenge.challenger_id)
       .single()
 
     const { data: challengedStats, error: challengedStatsError } = await supabase
       .from("game_stats")
-      .select("total_money")
+      .select("total_money, experience, level, level_winnings")
       .eq("user_id", challenge.challenged_id)
       .single()
 
@@ -65,73 +148,77 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Failed to fetch balances" }, { status: 500 })
     }
 
-    // Calculate balance changes
-    const challengerBalanceChange = challengerStats.total_money - (challenge.challenger_balance_start || 0)
-    const challengedBalanceChange = challengedStats.total_money - (challenge.challenged_balance_start || 0)
+    const wagerAmount = challenge.wager_amount
+    let challengerFinalBalance = challengerStats.total_money
+    let challengedFinalBalance = challengedStats.total_money
 
-    // Determine winner (player with higher balance change)
-    let winnerId: string | null = null
-    if (challengerBalanceChange > challengedBalanceChange) {
-      winnerId = challenge.challenger_id
-    } else if (challengedBalanceChange > challengerBalanceChange) {
-      winnerId = challenge.challenged_id
-    }
-    // If tie (equal balance changes), winnerId remains null
-
-    // Transfer wager to winner (or refund both if tie)
-    if (winnerId) {
-      const { data: winnerStats, error: winnerStatsError } = await supabase
-        .from("game_stats")
-        .select("total_money")
-        .eq("user_id", winnerId)
-        .single()
-
-      if (winnerStatsError || !winnerStats) {
-        console.error("[v0] Failed to fetch winner stats:", winnerStatsError)
-        return NextResponse.json({ error: "Failed to fetch winner balance" }, { status: 500 })
-      }
-
+    if (winnerId === challenge.challenger_id) {
       const { error: transferError } = await supabase
         .from("game_stats")
-        .update({ total_money: winnerStats.total_money + challenge.wager_amount })
-        .eq("user_id", winnerId)
+        .update({ total_money: challengerFinalBalance + wagerAmount * 2 })
+        .eq("user_id", challenge.challenger_id)
 
       if (transferError) {
-        console.error("[v0] Failed to transfer wager:", transferError)
-        return NextResponse.json({ error: "Failed to transfer wager" }, { status: 500 })
+        console.error("[v0] Failed to pay challenger winnings:", transferError)
+        return NextResponse.json({ error: "Failed to pay winnings" }, { status: 500 })
       }
+
+      challengerFinalBalance += wagerAmount * 2
+    } else if (winnerId === challenge.challenged_id) {
+      const { error: transferError } = await supabase
+        .from("game_stats")
+        .update({ total_money: challengedFinalBalance + wagerAmount * 2 })
+        .eq("user_id", challenge.challenged_id)
+
+      if (transferError) {
+        console.error("[v0] Failed to pay challenged winnings:", transferError)
+        return NextResponse.json({ error: "Failed to pay winnings" }, { status: 500 })
+      }
+
+      challengedFinalBalance += wagerAmount * 2
     } else {
-      // Tie - refund wager to challenger
-      const { data: challengerCurrentStats, error: challengerCurrentStatsError } = await supabase
+      const { error: challengerRefundError } = await supabase
         .from("game_stats")
-        .select("total_money")
-        .eq("user_id", challenge.challenger_id)
-        .single()
-
-      if (challengerCurrentStatsError || !challengerCurrentStats) {
-        console.error("[v0] Failed to fetch challenger stats for refund:", challengerCurrentStatsError)
-        return NextResponse.json({ error: "Failed to fetch challenger balance" }, { status: 500 })
-      }
-
-      const { error: refundError } = await supabase
-        .from("game_stats")
-        .update({ total_money: challengerCurrentStats.total_money + challenge.wager_amount })
+        .update({ total_money: challengerFinalBalance + wagerAmount })
         .eq("user_id", challenge.challenger_id)
 
-      if (refundError) {
-        console.error("[v0] Failed to refund wager:", refundError)
-        return NextResponse.json({ error: "Failed to refund wager" }, { status: 500 })
+      if (challengerRefundError) {
+        console.error("[v0] Failed to refund challenger:", challengerRefundError)
+        return NextResponse.json({ error: "Failed to refund challenger" }, { status: 500 })
       }
+
+      challengerFinalBalance += wagerAmount
+
+      const { error: challengedRefundError } = await supabase
+        .from("game_stats")
+        .update({ total_money: challengedFinalBalance + wagerAmount })
+        .eq("user_id", challenge.challenged_id)
+
+      if (challengedRefundError) {
+        console.error("[v0] Failed to refund challenged user:", challengedRefundError)
+        return NextResponse.json({ error: "Failed to refund challenged user" }, { status: 500 })
+      }
+
+      challengedFinalBalance += wagerAmount
     }
 
-    // Update challenge to completed
+    const challengerXpGain = challenge.challenger_credit_experience || 0
+    const challengedXpGain = challenge.challenged_credit_experience || 0
+
+    const [challengerXpResult, challengedXpResult] = await Promise.all([
+      applyChallengeXpReward(supabase, challenge.challenger_id, challengerXpGain),
+      applyChallengeXpReward(supabase, challenge.challenged_id, challengedXpGain),
+    ])
+
     const { data: updatedChallenge, error: updateError } = await supabase
       .from("challenges")
       .update({
         status: "completed",
-        challenger_balance_end: challengerStats.total_money,
-        challenged_balance_end: challengedStats.total_money,
+        challenger_balance_end: challengerFinalBalance,
+        challenged_balance_end: challengedFinalBalance,
         winner_id: winnerId,
+        challenger_credit_experience: 0,
+        challenged_credit_experience: 0,
         completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -144,7 +231,6 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Failed to complete challenge" }, { status: 500 })
     }
 
-    // Fetch user profiles for response
     const { data: profiles, error: profilesError } = await supabase
       .from("user_profiles")
       .select("id, display_name")
@@ -161,8 +247,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       challenge: updatedChallenge,
       winnerId,
       winnerName: winnerProfile?.display_name || null,
-      challengerBalanceChange,
-      challengedBalanceChange,
+      challengerCredits,
+      challengedCredits,
+      xpResults: {
+        challenger: challengerXpResult,
+        challenged: challengedXpResult,
+      },
       isTie: winnerId === null,
     })
   } catch (err) {
@@ -170,4 +260,3 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

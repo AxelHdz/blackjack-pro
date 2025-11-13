@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { formatChallengeResponse, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { NextResponse } from "next/server"
 
 // GET: Get user's active challenge
@@ -42,32 +43,9 @@ export async function GET() {
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
-    const challengerProfile = profilesMap.get(challenge.challenger_id)
-    const challengedProfile = profilesMap.get(challenge.challenged_id)
-
-    return NextResponse.json({
-      id: challenge.id,
-      challengerId: challenge.challenger_id,
-      challengerName: challengerProfile?.display_name || `User ${challenge.challenger_id.slice(0, 8)}`,
-      challengedId: challenge.challenged_id,
-      challengedName: challengedProfile?.display_name || `User ${challenge.challenged_id.slice(0, 8)}`,
-      wagerAmount: challenge.wager_amount,
-      durationMinutes: challenge.duration_minutes,
-      status: challenge.status,
-      challengerBalanceStart: challenge.challenger_balance_start,
-      challengedBalanceStart: challenge.challenged_balance_start,
-      challengerBalanceEnd: challenge.challenger_balance_end,
-      challengedBalanceEnd: challenge.challenged_balance_end,
-      winnerId: challenge.winner_id,
-      startedAt: challenge.started_at,
-      expiresAt: challenge.expires_at,
-      completedAt: challenge.completed_at,
-      createdAt: challenge.created_at,
-      updatedAt: challenge.updated_at,
-    })
+    return NextResponse.json(formatChallengeResponse(challenge as ChallengeRecord, profilesMap))
   } catch (err) {
     console.error("[v0] Active challenge error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

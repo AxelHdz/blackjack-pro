@@ -4,26 +4,13 @@ import { Trophy } from "lucide-react"
 import { useState, useEffect } from "react"
 import { ChallengeChip } from "@/components/challenge-chip"
 import { ChallengeModal } from "@/components/challenge-modal"
+import { type Challenge } from "@/types/challenge"
 
 interface LeaderboardChipProps {
   onClick: () => void
   metric: "balance" | "level"
   scope: "global" | "friends"
   userId: string
-}
-
-interface Challenge {
-  id: string
-  challengerId: string
-  challengerName: string
-  challengedId: string
-  challengedName: string
-  wagerAmount: number
-  durationMinutes: number
-  status: string
-  expiresAt?: string
-  startedAt?: string
-  winnerId?: string
 }
 
 export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardChipProps) {
@@ -55,17 +42,20 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
 
   const fetchChallenge = async () => {
     try {
-      const response = await fetch("/api/challenges?status=pending,active")
+      const response = await fetch("/api/challenges?status=pending,active,completed")
       const data = await response.json()
-      if (data.challenges && data.challenges.length > 0) {
-        // Get the first pending or active challenge
-        const activeChallenge = data.challenges.find(
-          (c: Challenge) => c.status === "pending" || c.status === "active" || c.status === "completed",
-        )
-        setChallenge(activeChallenge || null)
-      } else {
+      if (!data.challenges || data.challenges.length === 0) {
         setChallenge(null)
+        return
       }
+
+      const list: Challenge[] = data.challenges
+      const active = list.find((c) => c.status === "active")
+      const awaiting = list.find((c) => c.status === "pending" && c.awaitingUserId === userId)
+      const outgoing = list.find((c) => c.status === "pending" && c.challengerId === userId)
+      const completed = list.find((c) => c.status === "completed")
+
+      setChallenge(active || awaiting || outgoing || completed || null)
     } catch (error) {
       console.error("[v0] Failed to fetch challenge:", error)
       setChallenge(null)
@@ -119,10 +109,12 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
           open={showChallengeModal}
           onOpenChange={setShowChallengeModal}
           challenge={challenge}
+          userId={userId}
           userBalance={userBalance}
-          mode={challenge.status === "pending" && challenge.challengedId === userId ? "accept" : "create"}
           onChallengeUpdated={() => {
             void fetchChallenge()
+            void fetchUserBalance()
+            setShowChallengeModal(false)
           }}
         />
       )}

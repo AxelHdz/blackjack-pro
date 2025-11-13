@@ -2,8 +2,16 @@ import { createClient } from "@/lib/supabase/server"
 import { formatChallengeResponse, deriveAwaitingUserId, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+const fetchChallengeById = (supabase: any, id: string) => {
+  const query = supabase.from("challenges").select("*").eq("id", id)
+  return query.maybeSingle()
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> | { id: string } }) {
   const supabase = await createClient()
+  
+  const resolvedParams = await Promise.resolve(params)
+  const challengeId = resolvedParams.id
 
   const {
     data: { user },
@@ -14,12 +22,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 
   try {
-    const { data: challenge, error } = await supabase
-      .from("challenges")
-      .select("*")
-      .eq("id", params.id)
-      .or(`challenger_id.eq.${user.id},challenged_id.eq.${user.id}`)
-      .single()
+    const { data: challenge, error } = await fetchChallengeById(supabase, challengeId)
 
     if (error || !challenge) {
       console.error("[v0] Challenge fetch error:", error)
@@ -45,8 +48,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> | { id: string } }) {
   const supabase = await createClient()
+  
+  const resolvedParams = await Promise.resolve(params)
+  const challengeId = resolvedParams.id
 
   const {
     data: { user },
@@ -60,12 +66,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const body = await request.json()
     const { action, wagerAmount, durationMinutes } = body
 
-    // Get current challenge
-    const { data: challenge, error: fetchError } = await supabase
-      .from("challenges")
-      .select("*")
-      .eq("id", params.id)
-      .single()
+    const { data: challenge, error: fetchError } = await fetchChallengeById(supabase, challengeId)
 
     if (fetchError || !challenge) {
       console.error("[v0] Challenge fetch error:", fetchError)
@@ -142,7 +143,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           expires_at: expiresAt.toISOString(),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", params.id)
+        .eq("id", challengeId)
         .select()
         .single()
 
@@ -229,7 +230,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           status: "pending", // Reset to pending for challenger to accept
           updated_at: new Date().toISOString(),
         })
-        .eq("id", params.id)
+        .eq("id", challengeId)
         .select()
         .single()
 
@@ -254,29 +255,76 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> | { id: string } }) {
   const supabase = await createClient()
+  
+  const resolvedParams = await Promise.resolve(params)
+  const challengeId = resolvedParams.id
 
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser()
+  
+  console.log("[v0] DELETE - Auth check:", {
+    hasUser: !!user,
+    userId: user?.id,
+    authError: authError?.message,
+    challengeId,
+  })
+  
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    // Get current challenge
-    const { data: challenge, error: fetchError } = await supabase
-      .from("challenges")
-      .select("*")
-      .eq("id", params.id)
-      .single()
+    console.log("[v0] DELETE challenge - params.id:", challengeId, "user.id:", user.id)
+    
+    const { data: sessionCheck } = await supabase.auth.getSession()
+    console.log("[v0] Session check:", {
+      hasSession: !!sessionCheck?.session,
+      sessionUserId: sessionCheck?.session?.user?.id,
+    })
+    
+    const result = await fetchChallengeById(supabase, challengeId)
+    const { data: challenge, error: fetchError } = result
+    
+    console.log("[v0] Fetch result:", {
+      hasData: !!challenge,
+      hasError: !!fetchError,
+      error: fetchError,
+      challengeId: challenge?.id,
+    })
 
-    if (fetchError || !challenge) {
-      console.error("[v0] Challenge fetch error:", fetchError)
+    if (fetchError) {
+      console.error("[v0] Challenge fetch error:", {
+        error: fetchError,
+        challengeId: challengeId,
+        userId: user.id,
+        errorCode: fetchError?.code,
+        errorMessage: fetchError?.message,
+        errorDetails: fetchError?.details,
+        errorHint: fetchError?.hint,
+      })
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
+    
+    if (!challenge) {
+      console.error("[v0] Challenge not found (likely RLS blocked):", {
+        challengeId: challengeId,
+        userId: user.id,
+      })
+      
+      return NextResponse.json({ error: "Challenge not found or access denied" }, { status: 404 })
+    }
+    
+    console.log("[v0] Challenge found:", {
+      id: challenge.id,
+      challenger_id: challenge.challenger_id,
+      challenged_id: challenge.challenged_id,
+      status: challenge.status,
+      userIsChallenger: challenge.challenger_id === user.id,
+    })
 
     // Only challenger can cancel, and only if pending
     if (challenge.challenger_id !== user.id) {
@@ -310,7 +358,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // Delete challenge
-    const { error: deleteError } = await supabase.from("challenges").delete().eq("id", params.id)
+    const { error: deleteError } = await supabase.from("challenges").delete().eq("id", challengeId)
 
     if (deleteError) {
       console.error("[v0] Failed to delete challenge:", deleteError)

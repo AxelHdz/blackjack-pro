@@ -206,7 +206,14 @@ export function ChallengeModal({
   }
 
   const handleAcceptChallenge = async () => {
-    if (!challenge) return
+    if (!challenge?.id) {
+      toast({
+        title: "Error",
+        description: "Challenge details unavailable. Please reopen the modal.",
+        variant: "destructive",
+      })
+      return
+    }
 
     setLoading(true)
     try {
@@ -241,7 +248,14 @@ export function ChallengeModal({
   }
 
   const handleCounterOffer = async () => {
-    if (!challenge) return
+    if (!challenge?.id) {
+      toast({
+        title: "Error",
+        description: "Challenge details unavailable. Please reopen the modal.",
+        variant: "destructive",
+      })
+      return
+    }
 
     const wager = Number.parseInt(wagerAmount)
     if (!wager || wager <= 0) {
@@ -282,7 +296,14 @@ export function ChallengeModal({
   }
 
   const handleCancelChallenge = async () => {
-    if (!challenge) return
+    if (!challenge?.id) {
+      toast({
+        title: "Error",
+        description: "Challenge details unavailable. Please reopen the modal.",
+        variant: "destructive",
+      })
+      return
+    }
 
     setLoading(true)
     try {

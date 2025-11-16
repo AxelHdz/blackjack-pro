@@ -1,11 +1,11 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Card background -->
-  <rect x="20" y="30" width="140" height="120" rx="12" fill="#1a1a1a" stroke="#ffffff" stroke-width="3"/>
-  <!-- Spade suit symbol -->
-  <path d="M90 50C87 47 82 48 82 52C82 56 87 58 90 62C93 58 98 56 98 52C98 48 93 47 90 50Z" fill="#ffffff"/>
-  <path d="M90 62L82 78H98L90 62Z" fill="#ffffff"/>
-  <path d="M90 78L82 98H98L90 78Z" fill="#ffffff"/>
-  <!-- BJ text -->
-  <text x="90" y="130" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#ffffff" text-anchor="middle" letter-spacing="2">BJ</text>
+  <!-- Black circle background -->
+  <circle cx="90" cy="90" r="90" fill="#000000"/>
+  <!-- Two overlapped card outlines -->
+  <g>
+    <!-- First card (back) -->
+    <rect x="40" y="25" width="80" height="108" rx="11" fill="none" stroke="#ffffff" stroke-width="8" stroke-opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Second card (front, slightly offset) -->
+    <rect x="60" y="45" width="80" height="108" rx="11" fill="none" stroke="#ffffff" stroke-width="8" stroke-opacity="0.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>
-

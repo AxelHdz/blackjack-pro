@@ -137,6 +137,11 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Dark background to prevent white browser chrome from showing */
+    background-color: #000000;
+    background: #000000;
+  }
   body {
     /* Apple-style subtle gradient background */
     @apply bg-background text-foreground;
@@ -260,4 +265,30 @@
 
 .ease-out {
   animation-timing-function: ease-out;
+}
+
+.loading-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  animation: loadingShimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes loadingShimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(40%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }

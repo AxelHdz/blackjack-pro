@@ -468,6 +468,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }, [activeChallenge, balance, pendingChallengeXp, syncChallengeProgress])
 
+  // Ensure challenge credits persist immediately after each round result
+  useEffect(() => {
+    if (!activeChallenge || !roundResult || typeof roundResult.newBalance !== "number") return
+    void syncChallengeProgress(roundResult.newBalance, pendingChallengeXp)
+  }, [activeChallenge, roundResult, pendingChallengeXp, syncChallengeProgress])
+
   // Update challenge timer display
   useEffect(() => {
     if (!activeChallenge || !activeChallenge.expiresAt) {
@@ -737,15 +743,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   const saveUserStats = useCallback(async () => {
-    if (balance === null || activeChallenge) return // Skip while challenge credits are active
+    if (balance === null) return // Require a loaded balance; allow saving during challenges for stats-only updates
 
     try {
+      const moneyFields = activeChallenge
+        ? {}
+        : {
+            total_money: Math.floor(balance),
+            total_winnings: Math.floor(totalWinnings),
+            level_winnings: Math.floor(levelWinnings),
+          }
+
       const { error } = await supabase
         .from("game_stats")
         .update({
-          total_money: Math.floor(balance),
-          total_winnings: Math.floor(totalWinnings),
-          level_winnings: Math.floor(levelWinnings),
           level: Math.floor(level),
           experience: Math.floor(xp),
           hands_played: Math.floor(handsPlayed),
@@ -773,6 +784,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           last_play_mode: learningMode,
           deck: deck, // Save deck state to database
           updated_at: new Date().toISOString(),
+          ...moneyFields,
         })
         .eq("user_id", userId)
 
@@ -804,7 +816,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   ])
 
   useEffect(() => {
-    if (!statsLoaded || balance === null || activeChallenge) return
+    if (!statsLoaded || balance === null) return
 
     if (saveStatsTimeoutRef.current) {
       clearTimeout(saveStatsTimeoutRef.current)

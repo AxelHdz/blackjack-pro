@@ -97,6 +97,15 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
       // If time expired, clear timer (challenge should be completed)
       if (totalSeconds === 0) {
         setTimeRemaining(null)
+        // Attempt completion so the UI advances to results even if the main game isn't open
+        void (async () => {
+          try {
+            await fetch(`/api/challenges/${currentChallenge.id}/complete`, { method: "POST" })
+            await fetchActiveChallenge()
+          } catch (err) {
+            console.error("[v0] Failed to auto-complete challenge from chip:", err)
+          }
+        })()
         return
       }
 

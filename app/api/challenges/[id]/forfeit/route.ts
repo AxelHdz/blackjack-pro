@@ -4,8 +4,14 @@ import { type ChallengeRecord } from "@/lib/challenge-helpers"
 import { NextResponse, type NextRequest } from "next/server"
 
 // POST: Forfeit an active challenge (loser triggers this)
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { id: string } } | { params: Promise<{ id: string }> },
+) {
   const supabase = await createClient()
+
+  const resolvedParams = await Promise.resolve(params as any)
+  const challengeId = resolvedParams.id
 
   const {
     data: { user },
@@ -19,11 +25,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data: challenge, error: fetchError } = await supabase
       .from("challenges")
       .select("*")
-      .eq("id", params.id)
-      .single()
+      .eq("id", challengeId)
+      .or(`challenger_id.eq.${user.id},challenged_id.eq.${user.id}`)
+      .maybeSingle()
 
     if (fetchError || !challenge) {
-      console.error("[v0] Challenge fetch error (forfeit):", fetchError)
+      console.error("[v0] Challenge fetch error (forfeit):", fetchError, { challengeId, userId: user.id })
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
 

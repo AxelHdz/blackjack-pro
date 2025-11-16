@@ -37,6 +37,7 @@ import { FeedbackModal } from "@/components/feedback-modal"
 import { settle } from "@/lib/settlement" // Import the settlement helper
 import { LeaderboardChip } from "@/components/leaderboard-chip"
 import { LeaderboardModal } from "@/components/leaderboard-modal"
+import { ChallengeModal } from "@/components/challenge-modal"
 import { useToast } from "@/hooks/use-toast"
 import { getXPNeeded, getCashBonusWithCap, getXPPerWin, getXPPerWinWithBet, LEVELING_CONFIG } from "@/lib/leveling-config"
 import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
@@ -120,7 +121,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   })
   const [statsView, setStatsView] = useState<StatsView>("overall")
 
-  const [showRoundSummary, setShowRoundSummary] = useState(false)
   const [roundResult, setRoundResult] = useState<{
     message: string
     winAmount: number
@@ -128,8 +128,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   } | null>(null)
 
   const [showModeSelector, setShowModeSelector] = useState(false)
-
-  const [roundsSinceReview, setRoundsSinceReview] = useState(0)
 
   const [showLevelUp, setShowLevelUp] = useState(false)
   const [levelUpData, setLevelUpData] = useState<{
@@ -166,6 +164,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [challengeTimeRemaining, setChallengeTimeRemaining] = useState<number | null>(null)
   const [pendingChallengeXp, setPendingChallengeXp] = useState(0)
   const [lastSyncedChallengeCredit, setLastSyncedChallengeCredit] = useState<number | null>(null)
+  const [completedChallengeResult, setCompletedChallengeResult] = useState<Challenge | null>(null)
+  const [showChallengeResultModal, setShowChallengeResultModal] = useState(false)
+  const [requireChallengeDismissal, setRequireChallengeDismissal] = useState(false)
 
   // XP popup state
   const [showXpPopup, setShowXpPopup] = useState(false)
@@ -209,6 +210,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           playerCredit !== null && playerCredit !== undefined ? playerCredit : CHALLENGE_CREDIT_START
         setBalance(resolvedCredit)
         setLastSyncedChallengeCredit(resolvedCredit)
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("challenge:progress", { detail: challengeData }))
+        }
       } else {
         setPendingChallengeXp(0)
         setLastSyncedChallengeCredit(null)
@@ -216,6 +220,40 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     },
     [userId],
   )
+
+  const updateActiveChallengeState = useCallback(
+    (challengeData: Challenge) => {
+      setActiveChallenge(challengeData)
+      const playerCredit =
+        challengeData.challengerId === userId
+          ? challengeData.challengerCreditBalance
+          : challengeData.challengedCreditBalance
+
+      if (typeof playerCredit === "number") {
+        setBalance(playerCredit)
+        setLastSyncedChallengeCredit(playerCredit)
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("challenge:progress", { detail: challengeData }))
+      }
+    },
+    [userId],
+  )
+
+  const handleChallengeResultsOpenChange = (open: boolean) => {
+    if (!open && requireChallengeDismissal) return
+    setShowChallengeResultModal(open)
+  }
+
+  const handleChallengeResultsEnded = () => {
+    setRequireChallengeDismissal(false)
+    setShowChallengeResultModal(false)
+    setCompletedChallengeResult(null)
+    applyChallengeContext(null)
+    void loadUserStats()
+    void fetchActiveChallenge()
+  }
 
   const syncChallengeProgress = useCallback(
     async (creditBalance: number, xpToSync: number) => {
@@ -238,8 +276,15 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           }),
         })
 
+        const result = await response.json().catch(() => null)
+
         if (response.ok) {
-          setLastSyncedChallengeCredit(creditBalance)
+          const serverChallenge = (result?.challenge as Challenge) || null
+          if (serverChallenge) {
+            updateActiveChallengeState(serverChallenge)
+          } else {
+            setLastSyncedChallengeCredit(creditBalance)
+          }
           if (xpToSync > 0) {
             setPendingChallengeXp((prev) => Math.max(prev - xpToSync, 0))
           }
@@ -248,7 +293,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         console.error("[v0] Failed to sync challenge progress:", error)
       }
     },
-    [activeChallenge, lastSyncedChallengeCredit],
+    [activeChallenge, lastSyncedChallengeCredit, updateActiveChallengeState],
   )
 
   // Fetch active challenge
@@ -266,6 +311,48 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       console.error("[v0] Failed to fetch active challenge:", error)
     }
   }
+
+  // Keep challenge state fresh and auto-enter Expert mode when an active challenge begins
+  useEffect(() => {
+    let cancelled = false
+
+    const pollActiveChallenge = async () => {
+      try {
+        const response = await fetch("/api/challenges/active")
+        if (!response.ok) return
+        const data = await response.json()
+        const serverActive: Challenge | null =
+          data.challenge && data.challenge.status === "active" ? data.challenge : null
+
+        if (!serverActive || cancelled) return
+        if (!activeChallenge) {
+          applyChallengeContext(serverActive)
+          setLearningMode("expert")
+          setShowModeSelector(false)
+          return
+        }
+
+        if (activeChallenge && serverActive.id === activeChallenge.id) {
+          updateActiveChallengeState(serverActive)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("[v0] Failed to poll active challenge:", error)
+        }
+      }
+    }
+
+    // Quick initial check so newly-started challenges are applied immediately
+    void pollActiveChallenge()
+    const interval = setInterval(() => {
+      void pollActiveChallenge()
+    }, activeChallenge ? 6000 : 2500)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [activeChallenge, applyChallengeContext, updateActiveChallengeState])
 
   // Poll challenge completion
   useEffect(() => {
@@ -302,12 +389,48 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                 title: "Challenge XP Applied",
                 description:
                   playerResult.levelsGained > 0
-                    ? `You gained ${playerResult.xpApplied.toLocaleString()} XP and reached level ${playerResult.newLevel}!`
-                    : `You gained ${playerResult.xpApplied.toLocaleString()} XP from the challenge.`,
+                  ? `You gained ${playerResult.xpApplied.toLocaleString()} XP and reached level ${playerResult.newLevel}!`
+                  : `You gained ${playerResult.xpApplied.toLocaleString()} XP from the challenge.`,
               })
             }
 
+            let completedChallenge: Challenge | null = null
+            try {
+              const challengeResponse = await fetch(`/api/challenges/${activeChallenge.id}`)
+              const challengeData = await challengeResponse.json()
+              if (challengeResponse.ok && challengeData?.id) {
+                completedChallenge = challengeData as Challenge
+              }
+            } catch (fetchErr) {
+              console.error("[v0] Failed to fetch completed challenge details:", fetchErr)
+            }
+
+            if (!completedChallenge) {
+              completedChallenge = {
+                ...activeChallenge,
+                status: "completed",
+                challengerCreditBalance: data.challengerCredits ?? activeChallenge.challengerCreditBalance,
+                challengedCreditBalance: data.challengedCredits ?? activeChallenge.challengedCreditBalance,
+                challengerBalanceEnd: data.updatedChallenge?.challenger_balance_end ?? activeChallenge.challengerBalanceEnd,
+                challengedBalanceEnd:
+                  data.updatedChallenge?.challenged_balance_end ?? activeChallenge.challengedBalanceEnd,
+                winnerId: data.winnerId ?? activeChallenge.winnerId ?? null,
+                completedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }
+            }
+
+            if (completedChallenge) {
+              setCompletedChallengeResult(completedChallenge)
+              setRequireChallengeDismissal(true)
+              setShowChallengeResultModal(true)
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("challenge:progress", { detail: completedChallenge }))
+              }
+            }
+
             applyChallengeContext(null)
+            setChallengeTimeRemaining(null)
             void loadUserStats()
             void fetchActiveChallenge()
           }
@@ -868,12 +991,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             },
           }))
           // No XP awarded for dealer blackjack (push or loss)
-          const newRoundCount = roundsSinceReview + 1
-          setRoundsSinceReview(newRoundCount)
-          if (newRoundCount >= 30) {
-            setShowRoundSummary(true)
-            setRoundsSinceReview(0)
-          }
           return
         }
       }
@@ -907,12 +1024,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       setGameState("finished")
       // Award XP for blackjack win (scaled by level and bet amount)
       addExperience(getXPPerWinWithBet(level, betAmount))
-      const newRoundCount = roundsSinceReview + 1
-      setRoundsSinceReview(newRoundCount)
-      if (newRoundCount >= 30) {
-        setShowRoundSummary(true)
-        setRoundsSinceReview(0)
-      }
 
       setWins((prev) => prev + 1)
       setModeStats((prev) => ({
@@ -1034,12 +1145,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         setTotalMoves((prev) => prev + 1)
 
         // No XP awarded for bust (loss)
-        const newRoundCount = roundsSinceReview + 1
-        setRoundsSinceReview(newRoundCount)
-        if (newRoundCount >= 30) {
-          setShowRoundSummary(true)
-          setRoundsSinceReview(0)
-        }
       }
     } else if (value === 21) {
       stand(newHand, true)
@@ -1237,13 +1342,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       addExperience(xpPerWin) // One win = one hand won
     }
     // No XP for 0 wins
-
-    const newRoundCount = roundsSinceReview + 1
-    setRoundsSinceReview(newRoundCount)
-    if (newRoundCount >= 30) {
-      setShowRoundSummary(true)
-      setRoundsSinceReview(0)
-    }
   }
 
   const finishHand = (finalPlayerHand: CardType[], finalDealerHand: CardType[]) => {
@@ -1336,13 +1434,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     if (result !== "push") {
       setTotalMoves((prev) => prev + 1)
     }
-
-    const newRoundCount = roundsSinceReview + 1
-    setRoundsSinceReview(newRoundCount)
-    if (newRoundCount >= 30) {
-      setShowRoundSummary(true)
-      setRoundsSinceReview(0)
-    }
   }
 
   const doubleDown = () => {
@@ -1394,12 +1485,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }))
 
       // No XP awarded for bust (loss)
-      const newRoundCount = roundsSinceReview + 1
-      setRoundsSinceReview(newRoundCount)
-      if (newRoundCount >= 30) {
-        setShowRoundSummary(true)
-        setRoundsSinceReview(0)
-      }
     } else {
       // After doubling, automatically stand but don't call checkPlayerAction again
       // The feedback was already set when double was called
@@ -1486,7 +1571,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const setMaxBet = () => setCurrentBet(Math.min(balance !== null ? balance : 0, 25000))
 
   const continueToNextHand = () => {
-    setShowRoundSummary(false)
     setRoundResult(null)
     setGameState("betting")
     setPlayerHand([])
@@ -1805,6 +1889,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       )}
 
       <LeaderboardModal open={showLeaderboard} onOpenChange={setShowLeaderboard} userId={userId} />
+      {completedChallengeResult && (
+        <ChallengeModal
+          open={showChallengeResultModal}
+          onOpenChange={handleChallengeResultsOpenChange}
+          userId={userId}
+          challenge={completedChallengeResult}
+          userBalance={balance ?? 0}
+          onChallengeEnded={handleChallengeResultsEnded}
+        />
+      )}
 
       {showFeedbackModal && feedbackData && feedbackData.originalPlayerHand.length > 0 && dealerHand.length > 0 && (
         <FeedbackModal
@@ -2009,6 +2103,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     { mode: "expert" as LearningMode, title: "Expert", desc: "No hints", icon: Trophy },
                   ].map(({ mode, title, desc, icon: Icon }) => {
                     const isDisabled = !!(activeChallenge && mode !== "expert")
+                    const isExpert = mode === "expert"
+                    const isSelected = learningMode === mode
+                    const expertSelectedClass = activeChallenge
+                      ? "bg-amber-400 text-black scale-[1.02] border border-amber-300 shadow-[0_4px_24px_rgba(251,191,36,0.35)]"
+                      : "bg-primary text-primary-foreground scale-[1.02]"
+                    const expertIdleClass = activeChallenge
+                      ? "bg-card border border-amber-300/60 text-amber-100 hover:bg-amber-500/10 hover:border-amber-300 hover:text-amber-50"
+                      : "bg-card border border-border hover:bg-muted hover:scale-[1.02]"
+                    const selectedClass = isExpert ? expertSelectedClass : "bg-primary text-primary-foreground scale-[1.02]"
+                    const idleClass = isExpert ? expertIdleClass : "bg-card border border-border hover:bg-muted hover:scale-[1.02]"
                     return (
                       <button
                         key={mode}
@@ -2022,13 +2126,17 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                         className={`w-full text-left px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg text-xs sm:text-sm transition-all duration-200 ease-in-out ${
                           isDisabled
                             ? "bg-muted/50 border border-border opacity-50 cursor-not-allowed"
-                            : learningMode === mode
-                              ? "bg-primary text-primary-foreground scale-[1.02]"
-                              : "bg-card border border-border hover:bg-muted hover:scale-[1.02]"
+                            : isSelected
+                              ? selectedClass
+                              : idleClass
                         }`}
                       >
                       <div className="flex items-center gap-2 sm:gap-3">
-                        <Icon className="h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0" />
+                        <Icon
+                          className={`h-4 w-4 sm:h-5 sm:w-5 flex-shrink-0 ${
+                            isExpert && activeChallenge ? "text-black" : ""
+                          }`}
+                        />
                         <div className="flex-1">
                           <div className="font-semibold">{title}</div>
                           <div className="text-xs opacity-80">{desc}</div>
@@ -2498,7 +2606,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         </div>
       )}
 
-      {gameState === "finished" && !showRoundSummary && (
+      {gameState === "finished" && (
         <div className="px-2 sm:px-3 py-2 sm:py-3 flex-shrink-0 border-t border-border animate-in slide-in-from-bottom-4 fade-in duration-400 ease-out">
           {balance !== null && balance > 0 ? (
             <div className="flex gap-1.5 sm:gap-2">

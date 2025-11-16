@@ -52,6 +52,18 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
     setCurrentChallenge(challenge)
   }, [challenge])
 
+  useEffect(() => {
+    const handleChallengeProgress = (event: Event) => {
+      const detail = (event as CustomEvent<Challenge | null>).detail
+      if (!detail) return
+      if (challenge && detail.id !== challenge.id) return
+      setCurrentChallenge(detail)
+    }
+
+    window.addEventListener("challenge:progress", handleChallengeProgress as EventListener)
+    return () => window.removeEventListener("challenge:progress", handleChallengeProgress as EventListener)
+  }, [challenge])
+
   // Poll for updates when challenge is active (not completed)
   useEffect(() => {
     if (!challenge || challenge.status !== "active") return

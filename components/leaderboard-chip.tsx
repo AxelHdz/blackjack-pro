@@ -85,6 +85,19 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
   }, [fetchRank, fetchChallenge, fetchUserBalance])
 
   useEffect(() => {
+    const handleChallengeProgress = (event: Event) => {
+      const detail = (event as CustomEvent<Challenge | null>).detail
+      if (!detail) return
+      if (!challenge || detail.id === challenge.id) {
+        setChallenge(detail)
+      }
+    }
+
+    window.addEventListener("challenge:progress", handleChallengeProgress as EventListener)
+    return () => window.removeEventListener("challenge:progress", handleChallengeProgress as EventListener)
+  }, [challenge])
+
+  useEffect(() => {
     const getPollInterval = () => {
       if (!challenge) return 3000
       if (challenge.status === "active") return 2000

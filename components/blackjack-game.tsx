@@ -31,6 +31,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 import { BuybackDrillModal } from "@/components/buyback-drill-modal"
 import { FeedbackModal } from "@/components/feedback-modal"
 import { settle } from "@/lib/settlement" // Import the settlement helper
@@ -268,10 +269,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   // Poll challenge completion
   useEffect(() => {
-    if (!activeChallenge) return
+    if (!activeChallenge || !activeChallenge.expiresAt) return
 
     const checkChallengeCompletion = async () => {
-      const expiresAt = new Date(activeChallenge.expiresAt)
+      const expiresAt = new Date(activeChallenge.expiresAt!)
       const now = new Date()
 
       if (now >= expiresAt) {
@@ -352,7 +353,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
 
     const updateTimer = () => {
-      const expiresAt = new Date(activeChallenge.expiresAt)
+      const expiresAt = new Date(activeChallenge.expiresAt!)
       const now = new Date()
       const diff = Math.max(0, expiresAt.getTime() - now.getTime())
       setChallengeTimeRemaining(Math.floor(diff / 1000))
@@ -771,6 +772,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     setGameState("playing")
     setIsDealing(true)
+    setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
     const betAmount = currentBet
     const newBalance = balance - currentBet
     setBalance(newBalance)
@@ -1518,6 +1520,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setViewHandIndex(0)
     setIsDoubled(false) // Reset doubled flag
     isDoubledRef.current = false // Reset ref
+    setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
 
     if (initialBet > 0 && balance !== null && balance >= initialBet) {
       // Check if balance is loaded
@@ -1759,9 +1762,32 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   if (!statsLoaded || balance === null) {
     return (
-      <div className="h-dvh overflow-hidden flex items-center justify-center bg-black">
-        <div className="text-center">
-          <div className="text-xl font-semibold text-white">Loading...</div>
+      <div className="relative h-dvh overflow-hidden bg-black text-white">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.12),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(255,255,255,0.08),transparent_30%),radial-gradient(circle_at_50%_80%,rgba(255,255,255,0.06),transparent_35%)] opacity-70" />
+        <div className="relative flex h-full items-center justify-center px-6">
+          <div className="flex flex-col items-center gap-6 text-center">
+            <div className="relative flex items-center justify-center">
+              <div className="absolute -inset-6 rounded-full bg-white/5 blur-2xl animate-pulse" />
+              <div className="relative flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.45)]">
+                <Image
+                  src="/apple-icon.svg"
+                  alt="Blackjack Mastery"
+                  width={64}
+                  height={64}
+                  className="h-9 w-9 sm:h-10 sm:w-10"
+                  priority
+                />
+                <div className="absolute inset-0 rounded-2xl border border-white/10 opacity-50" />
+              </div>
+              <div className="absolute -inset-3 rounded-full border border-white/10 opacity-70 animate-[spin_7s_linear_infinite]" />
+            </div>
+
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-sm sm:text-base font-semibold text-white/90 tracking-tight">Setting the table</p>
+              <p className="text-xs text-white/60">Loading your bankroll & drills</p>
+              <div className="relative mt-1 h-1 w-32 sm:w-40 overflow-hidden rounded-full bg-white/10 loading-shimmer" />
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -1889,9 +1915,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         {/* Center - Balance */}
         <div className="absolute left-1/2 -translate-x-1/2">
           {activeChallenge ? (
-            <div className="flex items-center gap-2 text-base sm:text-lg font-bold text-yellow-400 transition-all duration-300 drop-shadow">
+            <div className="flex items-center gap-2 text-base sm:text-lg font-bold text-yellow-500 transition-all duration-300 drop-shadow">
               <Swords className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span>{balance !== null ? balance.toLocaleString() : "..."}</span>
+              <span>${balance !== null ? balance.toLocaleString() : "..."}</span>
             </div>
           ) : (
             <div className="text-base sm:text-lg font-bold text-white transition-all duration-300">
@@ -1982,7 +2008,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     { mode: "practice" as LearningMode, title: "Practice", desc: "Get feedback", icon: Target },
                     { mode: "expert" as LearningMode, title: "Expert", desc: "No hints", icon: Trophy },
                   ].map(({ mode, title, desc, icon: Icon }) => {
-                    const isDisabled = activeChallenge && mode !== "expert"
+                    const isDisabled = !!(activeChallenge && mode !== "expert")
                     return (
                       <button
                         key={mode}
@@ -2012,23 +2038,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     )
                   })}
                 </div>
-
-                {activeChallenge && (
-                  <div className="mt-4 p-3 rounded-lg border border-primary/50 bg-primary/10">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-primary">Active Challenge</span>
-                      {challengeTimeRemaining !== null && (
-                        <span className="text-xs text-muted-foreground">
-                          {Math.floor(challengeTimeRemaining / 60)}:
-                          {(challengeTimeRemaining % 60).toString().padStart(2, "0")}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Playing against {activeChallenge.challengerId === userId ? activeChallenge.challengedName : activeChallenge.challengerName}. Expert mode only.
-                    </p>
-                  </div>
-                )}
 
                 <div className="mt-4 sm:mt-6 grid grid-cols-3 gap-2 sm:gap-3 w-full">
                   <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-2 sm:p-3 text-center">

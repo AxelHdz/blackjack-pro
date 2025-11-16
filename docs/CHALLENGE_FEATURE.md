@@ -22,6 +22,7 @@ The Challenge feature allows users to compete against each other in timed blackj
 ### Receiving a Challenge
 
 1. Challenged user sees a "Challenge Received" chip below the leaderboard chip with a "New" badge
+   - The leaderboard/challenge chip polls `/api/challenges` every 10 seconds so this badge appears even if the player opens the game after the request was sent
 2. User clicks the challenge chip to open the challenge modal
 3. Modal displays:
    - Challenge details (wager, duration) in read-only format
@@ -106,6 +107,11 @@ The Challenge feature allows users to compete against each other in timed blackj
 - Challenge timer has expired and winner determined
 - Display: Money icon (win), X icon (loss), or Check icon (tie)
 - Modal shows both final credit balances, XP earned (2x boost), and the usual wager outcome
+
+### Cancelled
+- Challenger withdrew the request before it was accepted
+- Display: Challenge chip shows "Challenge Cancelled" plus a refunded badge so the challenger knows their wager returned
+- Modal highlights that the wager has already been refunded and keeps the challenge available for review/history
 
 ## Database Schema
 
@@ -271,12 +277,16 @@ Updates a challenge (accept or counter-offer).
 
 ### DELETE `/api/challenges/[id]`
 
-Cancels a pending challenge and refunds the wager to the challenger.
+Cancels a pending challenge, refunds the wager to the challenger, and persists the row with `status: "cancelled"` so the UI can continue to show the outcome.
 
 **Response:**
 ```json
 {
-  "message": "Challenge cancelled"
+  "challenge": {
+    "id": "uuid",
+    "status": "cancelled",
+    ...
+  }
 }
 ```
 
@@ -324,6 +334,8 @@ Displays challenge status below the leaderboard chip.
 
 **Features:**
 - Shows different states: pending (incoming/outgoing), active, completed
+- Displays "Challenge Cancelled" with a refunded badge when the challenger backs out so players understand their credits were restored
+- Refreshed via a 10-second poll so the chip appears/updates even if the user was away when the challenge state changed
 - Displays countdown timer for active challenges plus a live credit delta that highlights whether the user is winning or losing
 - Shows opponent name for outgoing pending challenges
 - Displays win/loss icons for completed challenges and opens the modal with final credit balances and XP info
@@ -349,6 +361,7 @@ Modal for creating, accepting, and counter-offering challenges.
 - **Accept**: Shows read-only challenge details, a callout that highlights the 500 gold credits + 2x XP boost, "Accept Challenge" button, and "Request Changes" button
 - **Counter**: Shows editable wager and duration fields, "Request Update" button
 - **View (Active)**: Displays both players' challenge credits, a live countdown badge, and the current credit delta
+- **Status Banners**: Every non-create view renders a contextual banner (pending, active, completed, cancelled) so the user instantly knows whether they must take action or are simply reviewing history
 
 ### LeaderboardChip
 
@@ -356,6 +369,7 @@ Modified to display ChallengeChip below the leaderboard button.
 
 **Features:**
 - Fetches and prioritizes challenges (active > incoming pending > outgoing pending)
+- Polls challenge data every 10 seconds so players are notified when a pending challenge flips states or a new one arrives
 - Opens ChallengeModal when challenge chip is clicked
 - Passes appropriate mode based on challenge status and user role
 

@@ -347,9 +347,11 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: "Failed to fetch balance" }, { status: 500 })
     }
 
+    const refundedBalance = challengerStats.total_money + challenge.wager_amount
+
     const { error: refundError } = await supabase
       .from("game_stats")
-      .update({ total_money: challengerStats.total_money + challenge.wager_amount })
+      .update({ total_money: refundedBalance })
       .eq("user_id", user.id)
 
     if (refundError) {
@@ -357,12 +359,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: "Failed to refund wager" }, { status: 500 })
     }
 
-    // Delete challenge
-    const { error: deleteError } = await supabase.from("challenges").delete().eq("id", challengeId)
+    const nowIso = new Date().toISOString()
 
-    if (deleteError) {
-      console.error("[v0] Failed to delete challenge:", deleteError)
-      // Rollback refund
+    const { data: cancelledChallenge, error: cancelError } = await supabase
+      .from("challenges")
+      .update({
+        status: "cancelled",
+        challenger_balance_end: refundedBalance,
+        updated_at: nowIso,
+      })
+      .eq("id", challengeId)
+      .select("*")
+      .single()
+
+    if (cancelError || !cancelledChallenge) {
+      console.error("[v0] Failed to cancel challenge:", cancelError)
       await supabase
         .from("game_stats")
         .update({ total_money: challengerStats.total_money })
@@ -370,7 +381,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: "Failed to cancel challenge" }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    const { data: profiles } = await supabase
+      .from("user_profiles")
+      .select("id, display_name")
+      .in("id", [challenge.challenger_id, challenge.challenged_id])
+
+    const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
+
+    return NextResponse.json({
+      challenge: formatChallengeResponse(cancelledChallenge as ChallengeRecord, profilesMap),
+    })
   } catch (err) {
     console.error("[v0] Challenge cancellation error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

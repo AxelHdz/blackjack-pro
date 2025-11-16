@@ -1,7 +1,7 @@
 "use client"
 
 import { Trophy } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { ChallengeChip } from "@/components/challenge-chip"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
@@ -19,14 +19,13 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [showChallengeModal, setShowChallengeModal] = useState(false)
   const [userBalance, setUserBalance] = useState<number>(0)
+  const dismissedChallengeIdRef = useRef<string | null>(null)
 
-  useEffect(() => {
-    fetchRank()
-    fetchChallenge()
-    fetchUserBalance()
-  }, [metric, scope, userId])
+  const dismissChallenge = (id: string | null) => {
+    dismissedChallengeIdRef.current = id
+  }
 
-  const fetchRank = async () => {
+  const fetchRank = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch(`/api/me/rank?scope=${scope}&metric=${metric}`)
@@ -38,11 +37,13 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     } finally {
       setLoading(false)
     }
-  }
+  }, [metric, scope])
 
-  const fetchChallenge = async () => {
+  const fetchChallenge = useCallback(async () => {
     try {
-      const response = await fetch("/api/challenges?status=pending,active,completed")
+      const response = await fetch(
+        `/api/challenges?status=${encodeURIComponent("pending,active,completed,cancelled")}`,
+      )
       const data = await response.json()
       if (!data.challenges || data.challenges.length === 0) {
         setChallenge(null)
@@ -50,19 +51,22 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
       }
 
       const list: Challenge[] = data.challenges
+      const dismissedId = dismissedChallengeIdRef.current
+      // Prioritize: active > completed (not dismissed) > pending (awaiting) > pending (outgoing) > cancelled
       const active = list.find((c) => c.status === "active")
+      const completed = list.find((c) => c.status === "completed" && c.id !== dismissedId)
       const awaiting = list.find((c) => c.status === "pending" && c.awaitingUserId === userId)
       const outgoing = list.find((c) => c.status === "pending" && c.challengerId === userId)
-      const completed = list.find((c) => c.status === "completed")
+      const cancelled = list.find((c) => c.status === "cancelled" && c.id !== dismissedId)
 
-      setChallenge(active || awaiting || outgoing || completed || null)
+      setChallenge(active || completed || awaiting || outgoing || cancelled || null)
     } catch (error) {
       console.error("[v0] Failed to fetch challenge:", error)
       setChallenge(null)
     }
-  }
+  }, [userId])
 
-  const fetchUserBalance = async () => {
+  const fetchUserBalance = useCallback(async () => {
     try {
       const response = await fetch("/api/me/profile")
       const data = await response.json()
@@ -72,7 +76,29 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     } catch (error) {
       console.error("[v0] Failed to fetch user balance:", error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    void fetchRank()
+    void fetchChallenge()
+    void fetchUserBalance()
+  }, [fetchRank, fetchChallenge, fetchUserBalance])
+
+  useEffect(() => {
+    const getPollInterval = () => {
+      if (!challenge) return 3000
+      if (challenge.status === "active") return 2000
+      if (challenge.status === "pending") return 2000
+      if (challenge.status === "completed") return 10000
+      return 3000
+    }
+
+    const interval = setInterval(() => {
+      void fetchChallenge()
+    }, getPollInterval())
+
+    return () => clearInterval(interval)
+  }, [challenge?.status, challenge?.id, fetchChallenge])
 
   const handleChallengeChipClick = () => {
     if (challenge) {
@@ -112,6 +138,20 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
           userId={userId}
           userBalance={userBalance}
           onChallengeUpdated={() => {
+            void fetchChallenge()
+            void fetchUserBalance()
+            setShowChallengeModal(false)
+          }}
+          onChallengeCreated={() => {
+            void fetchChallenge()
+            void fetchUserBalance()
+          }}
+          onChallengeEnded={() => {
+            // Hide completed challenge after user ends it
+            if (challenge?.status === "completed" && challenge?.id) {
+              dismissChallenge(challenge.id)
+              setChallenge(null)
+            }
             void fetchChallenge()
             void fetchUserBalance()
             setShowChallengeModal(false)

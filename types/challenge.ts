@@ -6,7 +6,7 @@ export type Challenge = {
   challengedName: string
   wagerAmount: number
   durationMinutes: number
-  status: string
+  status: "pending" | "active" | "completed" | "cancelled"
   challengerBalanceStart: number | null
   challengedBalanceStart: number | null
   challengerBalanceEnd: number | null

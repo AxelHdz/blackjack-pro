@@ -13,25 +13,16 @@ export const metadata: Metadata = {
   title: "Blackjack Mastery",
   description: "Master optimal blackjack strategy through interactive gameplay",
   icons: {
-    icon: [
-      {
-        url: "/icon-light.svg",
-        media: "(prefers-color-scheme: light)",
-        type: "image/svg+xml",
-      },
-      {
-        url: "/icon-dark.svg",
-        media: "(prefers-color-scheme: dark)",
-        type: "image/svg+xml",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
-    ],
+    icon: "/apple-icon.svg",
     apple: "/apple-icon.svg",
   },
-    generator: 'v0.app'
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
+    "theme-color": "#000000",
+    "msapplication-TileColor": "#000000",
+  },
+  generator: 'v0.app'
 }
 
 export const viewport: Viewport = {
@@ -39,7 +30,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#18181b",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#000000" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 }
 
 export default function RootLayout({

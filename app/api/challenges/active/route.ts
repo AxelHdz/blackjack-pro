@@ -43,7 +43,8 @@ export async function GET() {
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
-    return NextResponse.json(formatChallengeResponse(challenge as ChallengeRecord, profilesMap))
+    const formatted = formatChallengeResponse(challenge as ChallengeRecord, profilesMap)
+    return NextResponse.json({ challenge: formatted })
   } catch (err) {
     console.error("[v0] Active challenge error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

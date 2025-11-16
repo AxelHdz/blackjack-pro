@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { Swords, Clock, DollarSign, Trophy } from "lucide-react"
+import { Swords, Clock, DollarSign, Trophy, Flag } from "lucide-react"
 import { type Challenge } from "@/types/challenge"
 
 type ChallengeModalMode = "create" | "accept" | "counter" | "view" | "results"
@@ -80,29 +80,35 @@ export function ChallengeModal({
   const [wagerAmount, setWagerAmount] = useState<string>("")
   const [durationMinutes, setDurationMinutes] = useState<number>(15)
   const [loading, setLoading] = useState(false)
+  const [liveChallenge, setLiveChallenge] = useState<Challenge | null>(challenge ?? null)
 
   const derivedMode: ChallengeModalMode = useMemo(() => {
-    if (!challenge) {
+    const currentChallenge = liveChallenge ?? challenge
+    if (!currentChallenge) {
       return initialMode || "create"
     }
 
-    if (challenge.status === "completed") {
+    if (currentChallenge.status === "completed") {
       return "results"
     }
 
-    if (challenge.status === "active") {
+    if (currentChallenge.status === "active") {
       return "view"
     }
 
-    if (challenge.status === "pending") {
-      return challenge.awaitingUserId === userId ? "accept" : "view"
+    if (currentChallenge.status === "pending") {
+      return currentChallenge.awaitingUserId === userId ? "accept" : "view"
     }
 
     return "view"
-  }, [challenge, initialMode, userId])
+  }, [challenge, initialMode, liveChallenge, userId])
 
   const [mode, setMode] = useState<ChallengeModalMode>(derivedMode)
   const [modalCountdown, setModalCountdown] = useState<number | null>(null)
+
+  useEffect(() => {
+    setLiveChallenge(challenge ?? null)
+  }, [challenge])
 
   useEffect(() => {
     if (!open) {
@@ -111,30 +117,33 @@ export function ChallengeModal({
 
     setMode(derivedMode)
 
-    if (challenge) {
-      setWagerAmount(challenge.wagerAmount.toString())
-      setDurationMinutes(challenge.durationMinutes)
+    if (liveChallenge ?? challenge) {
+      const c = (liveChallenge ?? challenge)!
+      setWagerAmount(c.wagerAmount.toString())
+      setDurationMinutes(c.durationMinutes)
     } else {
       setWagerAmount("")
       setDurationMinutes(15)
     }
-  }, [open, challenge, derivedMode])
+  }, [open, challenge, liveChallenge, derivedMode])
 
   useEffect(() => {
-    if (mode === "counter" && challenge) {
-      setWagerAmount(challenge.wagerAmount.toString())
-      setDurationMinutes(challenge.durationMinutes)
+    const currentChallenge = liveChallenge ?? challenge
+    if (mode === "counter" && currentChallenge) {
+      setWagerAmount(currentChallenge.wagerAmount.toString())
+      setDurationMinutes(currentChallenge.durationMinutes)
     }
-  }, [mode, challenge])
+  }, [mode, challenge, liveChallenge])
 
   useEffect(() => {
-    if (!challenge || challenge.status !== "active" || !challenge.expiresAt) {
+    const currentChallenge = liveChallenge ?? challenge
+    if (!currentChallenge || currentChallenge.status !== "active" || !currentChallenge.expiresAt) {
       setModalCountdown(null)
       return
     }
 
     const updateTimer = () => {
-      const expiresAt = new Date(challenge.expiresAt!)
+      const expiresAt = new Date(currentChallenge.expiresAt!)
       const diff = Math.max(0, expiresAt.getTime() - Date.now())
       setModalCountdown(Math.floor(diff / 1000))
     }
@@ -142,29 +151,63 @@ export function ChallengeModal({
     updateTimer()
     const interval = setInterval(updateTimer, 1000)
     return () => clearInterval(interval)
-  }, [challenge])
+  }, [challenge, liveChallenge])
 
-  const isPendingResponse = Boolean(challenge && challenge.status === "pending" && challenge.awaitingUserId === userId)
-  const isChallenger = challenge?.challengerId === userId
-  const isChallenged = challenge?.challengedId === userId
+  // Poll challenge while active to auto-refresh into results
+  useEffect(() => {
+    const currentChallenge = liveChallenge ?? challenge
+    if (!open || !currentChallenge || currentChallenge.status !== "active") return
+
+    let cancelled = false
+
+    const pollChallenge = async () => {
+      try {
+        const response = await fetch(`/api/challenges/${currentChallenge.id}`)
+        if (!response.ok) return
+        const latest = await response.json()
+        if (cancelled || !latest) return
+        if (latest.status && (latest.status === "completed" || latest.status === "cancelled")) {
+          setLiveChallenge(latest as Challenge)
+          setMode("results")
+          onChallengeUpdated?.()
+        }
+      } catch (err) {
+        console.error("[ChallengeModal] Failed to poll challenge:", err)
+      }
+    }
+
+    pollChallenge()
+    const interval = setInterval(pollChallenge, 2000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [open, challenge, liveChallenge, onChallengeUpdated])
+
+  const currentChallenge = liveChallenge ?? challenge
+  const isPendingResponse = Boolean(
+    currentChallenge && currentChallenge.status === "pending" && currentChallenge.awaitingUserId === userId,
+  )
+  const isChallenger = currentChallenge?.challengerId === userId
+  const isChallenged = currentChallenge?.challengedId === userId
   const canCounter = Boolean(isPendingResponse && isChallenged)
   const canCancel = Boolean(challenge && challenge.status === "pending" && isChallenger)
   const awaitingOpponentName = challenge && (isChallenger ? challenge.challengedName : challenge.challengerName)
   const opponentName = awaitingOpponentName
-  const isActiveChallenge = challenge?.status === "active"
-  const isCompletedView = challenge?.status === "completed" || derivedMode === "results"
-  const playerCredits = challenge
+  const isActiveChallenge = currentChallenge?.status === "active"
+  const isCompletedView = currentChallenge?.status === "completed" || derivedMode === "results"
+  const playerCredits = currentChallenge
     ? isChallenger
-      ? challenge.challengerCreditBalance
-      : challenge.challengedCreditBalance
+      ? currentChallenge.challengerCreditBalance
+      : currentChallenge.challengedCreditBalance
     : null
-  const opponentCredits = challenge
+  const opponentCredits = currentChallenge
     ? isChallenger
-      ? challenge.challengedCreditBalance
-      : challenge.challengerCreditBalance
+      ? currentChallenge.challengedCreditBalance
+      : currentChallenge.challengerCreditBalance
     : null
   const shouldShowSnapshot = Boolean(
-    challenge && (mode === "accept" || mode === "view") && challenge.status !== "active",
+    currentChallenge && (mode === "accept" || mode === "view") && currentChallenge.status !== "active",
   )
 
   const handleCreateChallenge = async () => {
@@ -345,6 +388,36 @@ export function ChallengeModal({
     onOpenChange(false)
   }
 
+  const handleForfeit = async () => {
+    if (!challenge?.id) return
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/challenges/${challenge.id}/forfeit`, { method: "POST" })
+      const data = await response.json()
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to forfeit challenge",
+          variant: "destructive",
+        })
+        return
+      }
+
+      toast({
+        title: "Challenge forfeited",
+        description: "You have conceded this challenge. Wager paid to your opponent.",
+      })
+
+      onChallengeUpdated?.()
+      onOpenChange(false)
+    } catch (error) {
+      console.error("[v0] Failed to forfeit challenge:", error)
+      toast({ title: "Error", description: "Failed to forfeit challenge", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const getCloseButtonText = () => {
     // Check both derivedMode and challenge status to ensure we catch completed challenges
     const isCompleted = challenge?.status === "completed" || derivedMode === "results"
@@ -363,20 +436,22 @@ export function ChallengeModal({
     return "Close"
   }
 
+  const displayChallenge = currentChallenge ?? challenge
+
   const statusInfo = useMemo<StatusInfo | null>(() => {
-    if (!challenge) {
+    if (!displayChallenge) {
       return null
     }
 
-    if (challenge.status === "pending") {
+    if (displayChallenge.status === "pending") {
       if (isPendingResponse) {
         return {
           badge: "Action needed",
           badgeVariant: "destructive" as const,
           title: isChallenger ? "Review counter offer" : "Respond to challenge",
           message: isChallenger
-            ? `${challenge.challengedName} updated the wager. Accept or send new terms to continue.`
-            : `${challenge.challengerName} is waiting for your decision. Accept or request changes to begin.`,
+            ? `${displayChallenge.challengedName} updated the wager. Accept or send new terms to continue.`
+            : `${displayChallenge.challengerName} is waiting for your decision. Accept or request changes to begin.`,
           intent: "warning" as const,
         }
       }
@@ -390,7 +465,7 @@ export function ChallengeModal({
       }
     }
 
-    if (challenge.status === "active") {
+    if (displayChallenge.status === "active") {
       return {
         badge: "Live",
         badgeVariant: "default" as const,
@@ -400,43 +475,47 @@ export function ChallengeModal({
       }
     }
 
-    if (challenge.status === "completed") {
-      const didWin = challenge.winnerId === userId
+    if (displayChallenge.status === "completed") {
+      const didWin = displayChallenge.winnerId === userId
       return {
-        badge: didWin ? "Victory" : challenge.winnerId ? "Defeat" : "Tie",
-        badgeVariant: didWin ? "default" : challenge.winnerId ? "destructive" : "secondary",
-        title: didWin ? "You won the challenge" : challenge.winnerId ? "You lost this challenge" : "Challenge tied",
+        badge: didWin ? "Victory" : displayChallenge.winnerId ? "Defeat" : "Tie",
+        badgeVariant: didWin ? "default" : displayChallenge.winnerId ? "destructive" : "secondary",
+        title: didWin
+          ? "You won the challenge"
+          : displayChallenge.winnerId
+            ? "You lost this challenge"
+            : "Challenge tied",
         message: "Final credit deltas and XP rewards are summarized below.",
-        intent: didWin ? "success" : challenge.winnerId ? "danger" : "neutral",
+        intent: didWin ? "success" : displayChallenge.winnerId ? "danger" : "neutral",
       }
     }
 
-    if (challenge.status === "cancelled") {
+    if (displayChallenge.status === "cancelled") {
       return {
         badge: "Cancelled",
         badgeVariant: "outline" as const,
         title: "Challenge cancelled",
         message: isChallenger
           ? "You cancelled this request. Your wager has been fully refunded."
-          : `${challenge.challengerName} cancelled before play began. Your balance was unaffected.`,
+          : `${displayChallenge.challengerName} cancelled before play began. Your balance was unaffected.`,
         intent: "neutral" as const,
       }
     }
 
     return null
-  }, [challenge, isPendingResponse, isChallenger, userId, awaitingOpponentName])
+  }, [displayChallenge, isPendingResponse, isChallenger, userId, awaitingOpponentName])
 
   const title = (() => {
     if (mode === "create") return "Challenge Player"
     if (mode === "counter") return "Counter-Offer"
-    if (!challenge) return "Challenge Details"
-    if (challenge.status === "completed") return "Challenge Results"
-    if (challenge.status === "cancelled") return "Challenge Cancelled"
-    if (challenge.status === "active") return "Active Challenge"
-    if (challenge.status === "pending" && isPendingResponse) {
+    if (!displayChallenge) return "Challenge Details"
+    if (displayChallenge.status === "completed") return "Challenge Results"
+    if (displayChallenge.status === "cancelled") return "Challenge Cancelled"
+    if (displayChallenge.status === "active") return "Active Challenge"
+    if (displayChallenge.status === "pending" && isPendingResponse) {
       return isChallenger ? "Review Counter Offer" : "Challenge Received"
     }
-    if (challenge.status === "pending") {
+    if (displayChallenge.status === "pending") {
       return "Challenge Pending"
     }
     return "Challenge Details"
@@ -447,15 +526,15 @@ export function ChallengeModal({
       return `Challenge ${challengedUserName} to a blackjack competition`
     }
 
-    if (!challenge) {
+    if (!displayChallenge) {
       return "Update or review the challenge."
     }
 
-    if (challenge.status === "pending") {
+    if (displayChallenge.status === "pending") {
       if (isPendingResponse) {
         return isChallenger
-          ? `${challenge.challengedName} sent new terms. Accept or request different stakes.`
-          : `${challenge.challengerName} is waiting for you to accept or counter.`
+          ? `${displayChallenge.challengedName} sent new terms. Accept or request different stakes.`
+          : `${displayChallenge.challengerName} is waiting for you to accept or counter.`
       }
       if (awaitingOpponentName) {
         return `Waiting on ${awaitingOpponentName} to respond.`
@@ -463,20 +542,20 @@ export function ChallengeModal({
       return "Waiting for opponent response."
     }
 
-    if (challenge.status === "active") {
+    if (displayChallenge.status === "active") {
       return opponentName
         ? `Playing against ${opponentName}. Both players must stay in Expert mode until the timer ends.`
         : "Challenge in progress. Expert mode only."
     }
 
-    if (challenge.status === "completed") {
+    if (displayChallenge.status === "completed") {
       return "Challenge completed. Review the outcome below."
     }
 
-    if (challenge.status === "cancelled") {
+    if (displayChallenge.status === "cancelled") {
       return isChallenger
         ? "This challenge was cancelled. Your wager is back in your balance."
-        : `${challenge.challengerName} cancelled the challenge before it started.`
+        : `${displayChallenge.challengerName} cancelled the challenge before it started.`
     }
 
     return "Update or review the challenge."
@@ -496,7 +575,8 @@ export function ChallengeModal({
   }
 
   const renderActiveDetails = () => {
-    if (!challenge || challenge.status !== "active") return null
+    const c = currentChallenge ?? challenge
+    if (!c || c.status !== "active") return null
 
     const challengerHighlight = isChallenger ? "text-yellow-500" : "text-muted-foreground"
     const challengedHighlight = isChallenged ? "text-yellow-500" : "text-muted-foreground"
@@ -509,15 +589,15 @@ export function ChallengeModal({
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="text-muted-foreground">{challenge.challengerName}</p>
+            <p className="text-muted-foreground">{c.challengerName}</p>
             <p className={`font-semibold ${challengerHighlight}`}>
-              {formatCredits(challenge.challengerCreditBalance)} credits
+              {formatCredits(c.challengerCreditBalance)} credits
             </p>
           </div>
           <div className="text-right">
-            <p className="text-muted-foreground">{challenge.challengedName}</p>
+            <p className="text-muted-foreground">{c.challengedName}</p>
             <p className={`font-semibold ${challengedHighlight}`}>
-              {formatCredits(challenge.challengedCreditBalance)} credits
+              {formatCredits(c.challengedCreditBalance)} credits
             </p>
           </div>
         </div>
@@ -528,8 +608,8 @@ export function ChallengeModal({
   const renderCompletionOutcome = () => {
     if (!challenge || challenge.status !== "completed") return null
 
-    const isWinner = challenge.winnerId === userId
-    const isTie = !challenge.winnerId
+    const isWinner = (currentChallenge ?? challenge)?.winnerId === userId
+    const isTie = !(currentChallenge ?? challenge)?.winnerId
 
     const containerClass = isTie
       ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
@@ -553,39 +633,41 @@ export function ChallengeModal({
   }
 
   const renderChallengeSnapshot = () => {
-    if (!challenge) return null
+    const c = currentChallenge ?? challenge
+    if (!c) return null
 
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Wager:</span>
-          <span className="text-sm font-semibold">{formatCurrency(challenge.wagerAmount)}</span>
+          <span className="text-sm font-semibold">{formatCurrency(c.wagerAmount)}</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-sm text-muted-foreground">Duration:</span>
-          <span className="text-sm font-semibold">{challenge.durationMinutes} minutes</span>
+          <span className="text-sm font-semibold">{c.durationMinutes} minutes</span>
         </div>
       </div>
     )
   }
 
   const renderResults = () => {
-    if (mode !== "results" || !challenge) return null
+    const c = currentChallenge ?? challenge
+    if (mode !== "results" || !c) return null
 
     const challengerChange =
-      challenge.challengerBalanceEnd !== null && challenge.challengerBalanceStart !== null
-        ? challenge.challengerBalanceEnd - challenge.challengerBalanceStart
+      c.challengerBalanceEnd !== null && c.challengerBalanceStart !== null
+        ? c.challengerBalanceEnd - c.challengerBalanceStart
         : null
     const challengedChange =
-      challenge.challengedBalanceEnd !== null && challenge.challengedBalanceStart !== null
-        ? challenge.challengedBalanceEnd - challenge.challengedBalanceStart
+      c.challengedBalanceEnd !== null && c.challengedBalanceStart !== null
+        ? c.challengedBalanceEnd - c.challengedBalanceStart
         : null
-    const winnerLabel = challenge.winnerId
-      ? challenge.winnerId === userId
+    const winnerLabel = c.winnerId
+      ? c.winnerId === userId
         ? "You"
-        : challenge.winnerId === challenge.challengerId
-          ? challenge.challengerName
-          : challenge.challengedName
+        : c.winnerId === c.challengerId
+          ? c.challengerName
+          : c.challengedName
       : "Tie"
 
     return (
@@ -596,11 +678,11 @@ export function ChallengeModal({
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
-            <p className="text-muted-foreground">{challenge.challengerName}</p>
+            <p className="text-muted-foreground">{c.challengerName}</p>
             <p className="font-medium">Change: {challengerChange !== null ? formatCurrency(challengerChange) : "—"}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">{challenge.challengedName}</p>
+            <p className="text-muted-foreground">{c.challengedName}</p>
             <p className="font-medium">Change: {challengedChange !== null ? formatCurrency(challengedChange) : "—"}</p>
           </div>
         </div>
@@ -609,7 +691,8 @@ export function ChallengeModal({
   }
 
   const renderCancelledNotice = () => {
-    if (!challenge || challenge.status !== "cancelled") return null
+    const c = currentChallenge ?? challenge
+    if (!c || c.status !== "cancelled") return null
 
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -617,7 +700,7 @@ export function ChallengeModal({
         <p className="mt-1">
           {isChallenger
             ? "You cancelled this request before it started. Your wager was fully refunded."
-            : `${challenge.challengerName} cancelled before the countdown began. Enjoy your regular balance until a new challenge arrives.`}
+            : `${c.challengerName} cancelled before the countdown began. Enjoy your regular balance until a new challenge arrives.`}
         </p>
       </div>
     )
@@ -772,6 +855,19 @@ export function ChallengeModal({
           {mode === "view" && canCancel && (
             <Button variant="destructive" onClick={handleCancelChallenge} className="flex-1" disabled={loading}>
               Cancel Challenge
+            </Button>
+          )}
+
+          {isActiveChallenge && (
+            <Button
+              type="button"
+              variant="destructive"
+              className="flex-1"
+              onClick={handleForfeit}
+              disabled={loading}
+            >
+              <Flag className="mr-2 h-4 w-4" />
+              Forfeit (Concede)
             </Button>
           )}
 

@@ -1,9 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import { finalizeChallenge } from "@/lib/challenge-finalize"
 import { type ChallengeRecord } from "@/lib/challenge-helpers"
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 
-// POST: Complete challenge (called when timer expires)
+// POST: Forfeit an active challenge (loser triggers this)
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
 
@@ -23,47 +23,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .single()
 
     if (fetchError || !challenge) {
-      console.error("[v0] Challenge fetch error:", fetchError)
+      console.error("[v0] Challenge fetch error (forfeit):", fetchError)
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
-    }
-
-    const isChallenger = challenge.challenger_id === user.id
-    const isChallenged = challenge.challenged_id === user.id
-
-    if (!isChallenger && !isChallenged) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
     if (challenge.status !== "active") {
       return NextResponse.json({ error: "Challenge is not active" }, { status: 400 })
     }
 
-    if (challenge.expires_at) {
-      const expiresAt = new Date(challenge.expires_at)
-      if (new Date() < expiresAt) {
-        return NextResponse.json({ error: "Challenge has not expired yet" }, { status: 400 })
-      }
-    } else {
-      return NextResponse.json({ error: "Challenge expiration missing" }, { status: 400 })
+    const isChallenger = challenge.challenger_id === user.id
+    const isChallenged = challenge.challenged_id === user.id
+    if (!isChallenger && !isChallenged) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const challengerCredits = challenge.challenger_credit_balance ?? 0
-    const challengedCredits = challenge.challenged_credit_balance ?? 0
-
-    let winnerId: string | null = null
-    if (challengerCredits > challengedCredits) {
-      winnerId = challenge.challenger_id
-    } else if (challengedCredits > challengerCredits) {
-      winnerId = challenge.challenged_id
-    }
+    const winnerId = isChallenger ? challenge.challenged_id : challenge.challenger_id
 
     const result = await finalizeChallenge({
       supabase,
       challenge: challenge as ChallengeRecord,
       winnerId,
-      challengerCredits,
-      challengedCredits,
-      allowTie: true,
+      challengerCredits: challenge.challenger_credit_balance ?? 0,
+      challengedCredits: challenge.challenged_credit_balance ?? 0,
+      allowTie: false,
     })
 
     if ("error" in result) {
@@ -80,7 +62,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       isTie: result.isTie,
     })
   } catch (err) {
-    console.error("[v0] Challenge completion error:", err)
+    console.error("[v0] Challenge forfeit error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

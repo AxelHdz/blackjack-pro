@@ -152,6 +152,7 @@ export function ChallengeModal({
   const awaitingOpponentName = challenge && (isChallenger ? challenge.challengedName : challenge.challengerName)
   const opponentName = awaitingOpponentName
   const isActiveChallenge = challenge?.status === "active"
+  const isCompletedView = challenge?.status === "completed" || derivedMode === "results"
   const playerCredits = challenge
     ? isChallenger
       ? challenge.challengerCreditBalance
@@ -524,6 +525,33 @@ export function ChallengeModal({
     )
   }
 
+  const renderCompletionOutcome = () => {
+    if (!challenge || challenge.status !== "completed") return null
+
+    const isWinner = challenge.winnerId === userId
+    const isTie = !challenge.winnerId
+
+    const containerClass = isTie
+      ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
+      : isWinner
+        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-50"
+        : "border-destructive/50 bg-destructive/10 text-destructive-foreground"
+
+    const headline = isTie ? "Challenge Tied" : isWinner ? "You Won!" : "Challenge Lost"
+    const body = isTie
+      ? "Wagers were refunded. Credits are frozen and XP was applied."
+      : isWinner
+        ? "Payout has been added to your balance. Nice work!"
+        : "No payout this time, but your stats have been updated."
+
+    return (
+      <div className={`rounded-lg border p-4 space-y-1 ${containerClass}`}>
+        <div className="text-sm font-semibold">{headline}</div>
+        <p className="text-xs opacity-80">{body}</p>
+      </div>
+    )
+  }
+
   const renderChallengeSnapshot = () => {
     if (!challenge) return null
 
@@ -616,6 +644,7 @@ export function ChallengeModal({
               {statusInfo.message && <p className="text-xs text-muted-foreground">{statusInfo.message}</p>}
             </div>
           )}
+          {renderCompletionOutcome()}
           {isActiveChallenge && renderActiveDetails()}
           {shouldShowSnapshot && renderChallengeSnapshot()}
           {mode === "accept" && (
@@ -704,9 +733,9 @@ export function ChallengeModal({
 
         <div className="flex flex-wrap gap-2">
           <Button
-            variant="outline"
+            variant={isCompletedView ? "default" : "outline"}
             onClick={
-              challenge?.status === "completed" || derivedMode === "results"
+              isCompletedView
                 ? handleEndChallenge
                 : () => onOpenChange(false)
             }

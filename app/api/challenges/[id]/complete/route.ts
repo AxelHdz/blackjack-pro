@@ -9,6 +9,33 @@ type XpRewardResult = {
   newLevel: number
 }
 
+type ChallengeOutcome = "win" | "loss" | "tie"
+
+const buildChallengeOutcomeUpdates = (
+  stats:
+    | {
+        completed_challenges?: number | null
+        won_challenges?: number | null
+        lost_challenges?: number | null
+        tied_challenges?: number | null
+      }
+    | null,
+  outcome: ChallengeOutcome,
+) => {
+  const completed = stats?.completed_challenges ?? 0
+  const won = stats?.won_challenges ?? 0
+  const lost = stats?.lost_challenges ?? 0
+  const tied = stats?.tied_challenges ?? 0
+
+  return {
+    completed_challenges: completed + 1,
+    won_challenges: won + (outcome === "win" ? 1 : 0),
+    lost_challenges: lost + (outcome === "loss" ? 1 : 0),
+    tied_challenges: tied + (outcome === "tie" ? 1 : 0),
+    updated_at: new Date().toISOString(),
+  }
+}
+
 async function applyChallengeXpReward(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -133,13 +160,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const { data: challengerStats, error: challengerStatsError } = await supabase
       .from("game_stats")
-      .select("total_money, experience, level, level_winnings")
+      .select(
+        "total_money, experience, level, level_winnings, completed_challenges, won_challenges, lost_challenges, tied_challenges",
+      )
       .eq("user_id", challenge.challenger_id)
       .single()
 
     const { data: challengedStats, error: challengedStatsError } = await supabase
       .from("game_stats")
-      .select("total_money, experience, level, level_winnings")
+      .select(
+        "total_money, experience, level, level_winnings, completed_challenges, won_challenges, lost_challenges, tied_challenges",
+      )
       .eq("user_id", challenge.challenged_id)
       .single()
 
@@ -209,6 +240,26 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       applyChallengeXpReward(supabase, challenge.challenger_id, challengerXpGain),
       applyChallengeXpReward(supabase, challenge.challenged_id, challengedXpGain),
     ])
+
+    const challengerOutcome: ChallengeOutcome =
+      winnerId === challenge.challenger_id ? "win" : winnerId === challenge.challenged_id ? "loss" : "tie"
+    const challengedOutcome: ChallengeOutcome =
+      winnerId === challenge.challenged_id ? "win" : winnerId === challenge.challenger_id ? "loss" : "tie"
+
+    const challengerOutcomeUpdates = buildChallengeOutcomeUpdates(challengerStats, challengerOutcome)
+    const challengedOutcomeUpdates = buildChallengeOutcomeUpdates(challengedStats, challengedOutcome)
+
+    const [{ error: challengerOutcomeError }, { error: challengedOutcomeError }] = await Promise.all([
+      supabase.from("game_stats").update(challengerOutcomeUpdates).eq("user_id", challenge.challenger_id),
+      supabase.from("game_stats").update(challengedOutcomeUpdates).eq("user_id", challenge.challenged_id),
+    ])
+
+    if (challengerOutcomeError) {
+      console.error("[v0] Failed to record challenger challenge outcome:", challengerOutcomeError)
+    }
+    if (challengedOutcomeError) {
+      console.error("[v0] Failed to record challenged challenge outcome:", challengedOutcomeError)
+    }
 
     const { data: updatedChallenge, error: updateError } = await supabase
       .from("challenges")

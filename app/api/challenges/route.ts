@@ -25,13 +25,16 @@ export async function GET(request: NextRequest) {
     if (statusFilter) {
       if (statusFilter.includes(",")) {
         // Multiple statuses
-        const statuses = statusFilter.split(",")
-        query = query.in("status", statuses)
+        const statuses = statusFilter
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+        if (statuses.length > 0) {
+          query = query.in("status", statuses)
+        }
       } else {
         query = query.eq("status", statusFilter)
       }
-    } else {
-      query = query.in("status", ["pending", "active"])
     }
 
     query = query.order("created_at", { ascending: false })
@@ -203,7 +206,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create challenge" }, { status: 500 })
     }
 
-    return NextResponse.json({ challenge })
+    // Fetch user profiles for formatted response
+    const { data: profiles, error: profilesError } = await supabase
+      .from("user_profiles")
+      .select("id, display_name")
+      .in("id", [challenge.challenger_id, challenge.challenged_id])
+
+    if (profilesError) {
+      console.error("[v0] User profiles fetch error (non-blocking):", profilesError)
+    }
+
+    const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
+
+    const formattedChallenge = formatChallengeResponse(challenge as ChallengeRecord, profilesMap)
+    
+    console.log("[v0] Challenge created successfully:", {
+      challengeId: formattedChallenge.id,
+      challengerId: formattedChallenge.challengerId,
+      challengedId: formattedChallenge.challengedId,
+    })
+
+    return NextResponse.json({
+      challenge: formattedChallenge,
+    })
   } catch (err) {
     console.error("[v0] Challenge creation error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

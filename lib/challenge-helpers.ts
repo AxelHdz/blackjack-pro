@@ -4,7 +4,7 @@ export type ChallengeRecord = {
   challenged_id: string
   wager_amount: number
   duration_minutes: number
-  status: string
+  status: "pending" | "active" | "completed" | "cancelled"
   challenger_balance_start: number | null
   challenged_balance_start: number | null
   challenger_balance_end: number | null

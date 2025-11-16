@@ -12,6 +12,16 @@ import { type Challenge } from "@/types/challenge"
 
 type ChallengeModalMode = "create" | "accept" | "counter" | "view" | "results"
 
+type StatusIntent = "warning" | "danger" | "success" | "neutral"
+
+type StatusInfo = {
+  badge: string
+  badgeVariant: "default" | "secondary" | "destructive" | "outline"
+  title: string
+  message?: string
+  intent: StatusIntent
+}
+
 interface ChallengeModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -24,6 +34,7 @@ interface ChallengeModalProps {
   userBalance?: number
   onChallengeCreated?: () => void
   onChallengeUpdated?: () => void
+  onChallengeEnded?: () => void
 }
 
 const formatCurrency = (value?: number | null) => {
@@ -63,6 +74,7 @@ export function ChallengeModal({
   userBalance = 0,
   onChallengeCreated,
   onChallengeUpdated,
+  onChallengeEnded,
 }: ChallengeModalProps) {
   const { toast } = useToast()
   const [wagerAmount, setWagerAmount] = useState<string>("")
@@ -138,6 +150,7 @@ export function ChallengeModal({
   const canCounter = Boolean(isPendingResponse && isChallenged)
   const canCancel = Boolean(challenge && challenge.status === "pending" && isChallenger)
   const awaitingOpponentName = challenge && (isChallenger ? challenge.challengedName : challenge.challengerName)
+  const opponentName = awaitingOpponentName
   const isActiveChallenge = challenge?.status === "active"
   const playerCredits = challenge
     ? isChallenger
@@ -326,11 +339,105 @@ export function ChallengeModal({
     }
   }
 
+  const handleEndChallenge = () => {
+    onChallengeEnded?.()
+    onOpenChange(false)
+  }
+
+  const getCloseButtonText = () => {
+    // Check both derivedMode and challenge status to ensure we catch completed challenges
+    const isCompleted = challenge?.status === "completed" || derivedMode === "results"
+    if (isCompleted && challenge) {
+      const isWinner = challenge.winnerId === userId
+      const isTie = !challenge.winnerId
+      if (isTie) {
+        return "End Challenge"
+      }
+      return isWinner ? "Collect Winnings" : "End Challenge"
+    }
+    // Debug: log challenge status if it exists but isn't completed
+    if (challenge && challenge.status !== "completed") {
+      console.log("[ChallengeModal] Challenge status:", challenge.status, "derivedMode:", derivedMode)
+    }
+    return "Close"
+  }
+
+  const statusInfo = useMemo<StatusInfo | null>(() => {
+    if (!challenge) {
+      return null
+    }
+
+    if (challenge.status === "pending") {
+      if (isPendingResponse) {
+        return {
+          badge: "Action needed",
+          badgeVariant: "destructive" as const,
+          title: isChallenger ? "Review counter offer" : "Respond to challenge",
+          message: isChallenger
+            ? `${challenge.challengedName} updated the wager. Accept or send new terms to continue.`
+            : `${challenge.challengerName} is waiting for your decision. Accept or request changes to begin.`,
+          intent: "warning" as const,
+        }
+      }
+
+      return {
+        badge: "Waiting",
+        badgeVariant: "secondary" as const,
+        title: awaitingOpponentName ? `Waiting on ${awaitingOpponentName}` : "Waiting on opponent",
+        message: "We'll keep both players notified through the challenge chip as soon as it's their turn.",
+        intent: "neutral" as const,
+      }
+    }
+
+    if (challenge.status === "active") {
+      return {
+        badge: "Live",
+        badgeVariant: "default" as const,
+        title: "Challenge in progress",
+        message: "Expert mode only. Keep playing until the countdown reaches zero to lock in the results.",
+        intent: "warning" as const,
+      }
+    }
+
+    if (challenge.status === "completed") {
+      const didWin = challenge.winnerId === userId
+      return {
+        badge: didWin ? "Victory" : challenge.winnerId ? "Defeat" : "Tie",
+        badgeVariant: didWin ? "default" : challenge.winnerId ? "destructive" : "secondary",
+        title: didWin ? "You won the challenge" : challenge.winnerId ? "You lost this challenge" : "Challenge tied",
+        message: "Final credit deltas and XP rewards are summarized below.",
+        intent: didWin ? "success" : challenge.winnerId ? "danger" : "neutral",
+      }
+    }
+
+    if (challenge.status === "cancelled") {
+      return {
+        badge: "Cancelled",
+        badgeVariant: "outline" as const,
+        title: "Challenge cancelled",
+        message: isChallenger
+          ? "You cancelled this request. Your wager has been fully refunded."
+          : `${challenge.challengerName} cancelled before play began. Your balance was unaffected.`,
+        intent: "neutral" as const,
+      }
+    }
+
+    return null
+  }, [challenge, isPendingResponse, isChallenger, userId, awaitingOpponentName])
+
   const title = (() => {
     if (mode === "create") return "Challenge Player"
-    if (mode === "results") return "Challenge Results"
     if (mode === "counter") return "Counter-Offer"
-    if (mode === "accept") return isChallenger ? "Counter Offer" : "Challenge Received"
+    if (!challenge) return "Challenge Details"
+    if (challenge.status === "completed") return "Challenge Results"
+    if (challenge.status === "cancelled") return "Challenge Cancelled"
+    if (challenge.status === "active") return "Active Challenge"
+    if (challenge.status === "pending" && isPendingResponse) {
+      return isChallenger ? "Review Counter Offer" : "Challenge Received"
+    }
+    if (challenge.status === "pending") {
+      return "Challenge Pending"
+    }
     return "Challenge Details"
   })()
 
@@ -339,22 +446,53 @@ export function ChallengeModal({
       return `Challenge ${challengedUserName} to a blackjack competition`
     }
 
-    if (mode === "accept" && challenge) {
-      return isChallenger
-        ? `${challenge.challengedName} sent a counter-offer.`
-        : `${challenge.challengerName} has challenged you!`
+    if (!challenge) {
+      return "Update or review the challenge."
     }
 
-    if (mode === "results") {
+    if (challenge.status === "pending") {
+      if (isPendingResponse) {
+        return isChallenger
+          ? `${challenge.challengedName} sent new terms. Accept or request different stakes.`
+          : `${challenge.challengerName} is waiting for you to accept or counter.`
+      }
+      if (awaitingOpponentName) {
+        return `Waiting on ${awaitingOpponentName} to respond.`
+      }
+      return "Waiting for opponent response."
+    }
+
+    if (challenge.status === "active") {
+      return opponentName
+        ? `Playing against ${opponentName}. Both players must stay in Expert mode until the timer ends.`
+        : "Challenge in progress. Expert mode only."
+    }
+
+    if (challenge.status === "completed") {
       return "Challenge completed. Review the outcome below."
     }
 
-    if (challenge && awaitingOpponentName) {
-      return `Versus ${awaitingOpponentName}`
+    if (challenge.status === "cancelled") {
+      return isChallenger
+        ? "This challenge was cancelled. Your wager is back in your balance."
+        : `${challenge.challengerName} cancelled the challenge before it started.`
     }
 
     return "Update or review the challenge."
   })()
+
+  const getStatusContainerClass = (intent: StatusIntent) => {
+    switch (intent) {
+      case "warning":
+        return "border-amber-500/40 bg-amber-500/10"
+      case "danger":
+        return "border-destructive/40 bg-destructive/10"
+      case "success":
+        return "border-emerald-500/30 bg-emerald-500/10"
+      default:
+        return "border-border bg-muted/30"
+    }
+  }
 
   const renderActiveDetails = () => {
     if (!challenge || challenge.status !== "active") return null
@@ -442,6 +580,21 @@ export function ChallengeModal({
     )
   }
 
+  const renderCancelledNotice = () => {
+    if (!challenge || challenge.status !== "cancelled") return null
+
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+        <p className="font-semibold text-foreground">Challenge cancelled</p>
+        <p className="mt-1">
+          {isChallenger
+            ? "You cancelled this request before it started. Your wager was fully refunded."
+            : `${challenge.challengerName} cancelled before the countdown began. Enjoy your regular balance until a new challenge arrives.`}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -454,6 +607,15 @@ export function ChallengeModal({
         </DialogHeader>
 
         <div className="space-y-4">
+          {statusInfo && (
+            <div className={`rounded-lg border p-4 space-y-1 ${getStatusContainerClass(statusInfo.intent)}`}>
+              <div className="flex items-center justify-between text-sm font-semibold">
+                <span>{statusInfo.title}</span>
+                <Badge variant={statusInfo.badgeVariant}>{statusInfo.badge}</Badge>
+              </div>
+              {statusInfo.message && <p className="text-xs text-muted-foreground">{statusInfo.message}</p>}
+            </div>
+          )}
           {isActiveChallenge && renderActiveDetails()}
           {shouldShowSnapshot && renderChallengeSnapshot()}
           {mode === "accept" && (
@@ -464,6 +626,7 @@ export function ChallengeModal({
             </div>
           )}
           {renderResults()}
+          {renderCancelledNotice()}
 
           {(mode === "create" || mode === "counter") && (
             <>
@@ -540,8 +703,17 @@ export function ChallengeModal({
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1" disabled={loading}>
-            Close
+          <Button
+            variant="outline"
+            onClick={
+              challenge?.status === "completed" || derivedMode === "results"
+                ? handleEndChallenge
+                : () => onOpenChange(false)
+            }
+            className="flex-1"
+            disabled={loading}
+          >
+            {getCloseButtonText()}
           </Button>
 
           {mode === "create" && (

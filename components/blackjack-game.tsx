@@ -268,10 +268,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   // Poll challenge completion
   useEffect(() => {
-    if (!activeChallenge) return
+    if (!activeChallenge || !activeChallenge.expiresAt) return
 
     const checkChallengeCompletion = async () => {
-      const expiresAt = new Date(activeChallenge.expiresAt)
+      const expiresAt = new Date(activeChallenge.expiresAt!)
       const now = new Date()
 
       if (now >= expiresAt) {
@@ -352,7 +352,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
 
     const updateTimer = () => {
-      const expiresAt = new Date(activeChallenge.expiresAt)
+      const expiresAt = new Date(activeChallenge.expiresAt!)
       const now = new Date()
       const diff = Math.max(0, expiresAt.getTime() - now.getTime())
       setChallengeTimeRemaining(Math.floor(diff / 1000))
@@ -1889,9 +1889,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         {/* Center - Balance */}
         <div className="absolute left-1/2 -translate-x-1/2">
           {activeChallenge ? (
-            <div className="flex items-center gap-2 text-base sm:text-lg font-bold text-yellow-400 transition-all duration-300 drop-shadow">
+            <div className="flex items-center gap-2 text-base sm:text-lg font-bold text-yellow-500 transition-all duration-300 drop-shadow">
               <Swords className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span>{balance !== null ? balance.toLocaleString() : "..."}</span>
+              <span>${balance !== null ? balance.toLocaleString() : "..."}</span>
             </div>
           ) : (
             <div className="text-base sm:text-lg font-bold text-white transition-all duration-300">
@@ -1982,7 +1982,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     { mode: "practice" as LearningMode, title: "Practice", desc: "Get feedback", icon: Target },
                     { mode: "expert" as LearningMode, title: "Expert", desc: "No hints", icon: Trophy },
                   ].map(({ mode, title, desc, icon: Icon }) => {
-                    const isDisabled = activeChallenge && mode !== "expert"
+                    const isDisabled = !!(activeChallenge && mode !== "expert")
                     return (
                       <button
                         key={mode}
@@ -2012,23 +2012,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                     )
                   })}
                 </div>
-
-                {activeChallenge && (
-                  <div className="mt-4 p-3 rounded-lg border border-primary/50 bg-primary/10">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-semibold text-primary">Active Challenge</span>
-                      {challengeTimeRemaining !== null && (
-                        <span className="text-xs text-muted-foreground">
-                          {Math.floor(challengeTimeRemaining / 60)}:
-                          {(challengeTimeRemaining % 60).toString().padStart(2, "0")}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Playing against {activeChallenge.challengerId === userId ? activeChallenge.challengedName : activeChallenge.challengerName}. Expert mode only.
-                    </p>
-                  </div>
-                )}
 
                 <div className="mt-4 sm:mt-6 grid grid-cols-3 gap-2 sm:gap-3 w-full">
                   <div className="bg-card/50 backdrop-blur border border-border rounded-lg p-2 sm:p-3 text-center">

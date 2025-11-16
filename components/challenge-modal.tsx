@@ -389,10 +389,10 @@ export function ChallengeModal({
   }
 
   const handleForfeit = async () => {
-    if (!challenge?.id) return
+    if (!currentChallenge?.id) return
     setLoading(true)
     try {
-      const response = await fetch(`/api/challenges/${challenge.id}/forfeit`, { method: "POST" })
+      const response = await fetch(`/api/challenges/${currentChallenge.id}/forfeit`, { method: "POST" })
       const data = await response.json()
       if (!response.ok) {
         toast({

@@ -207,7 +207,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             ? challengeData.challengerCreditBalance
             : challengeData.challengedCreditBalance
         const resolvedCredit =
-          playerCredit !== null && playerCredit !== undefined ? playerCredit : CHALLENGE_CREDIT_START
+          playerCredit !== null && playerCredit !== undefined
+            ? playerCredit
+            : balance !== null
+              ? balance
+              : CHALLENGE_CREDIT_START
         setBalance(resolvedCredit)
         setLastSyncedChallengeCredit(resolvedCredit)
         if (typeof window !== "undefined") {
@@ -232,13 +236,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       if (typeof playerCredit === "number") {
         setBalance(playerCredit)
         setLastSyncedChallengeCredit(playerCredit)
+      } else if (balance !== null) {
+        // Keep existing local balance instead of resetting to 500 on null payloads
+        setLastSyncedChallengeCredit(balance)
       }
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("challenge:progress", { detail: challengeData }))
       }
     },
-    [userId],
+    [balance, userId],
   )
 
   const handleChallengeResultsOpenChange = (open: boolean) => {

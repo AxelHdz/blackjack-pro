@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS challenges (
   challenger_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   challenged_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   wager_amount INTEGER NOT NULL,
-  duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (15, 30)),
+  duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (5, 10)),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled')),
   challenger_balance_start INTEGER,
   challenged_balance_start INTEGER,
@@ -55,4 +55,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_challenges_one_active_challenger
 CREATE UNIQUE INDEX IF NOT EXISTS idx_challenges_one_active_challenged
   ON challenges(challenged_id)
   WHERE status IN ('pending', 'active');
-

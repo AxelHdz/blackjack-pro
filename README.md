@@ -218,7 +218,7 @@ Doubled bets are properly handled with 2x wager calculations.
 The escalating mastery drill (`components/buyback-drill-modal.tsx`) challenges players to:
 - Make consecutive correct moves (5, 6, 7+ based on tier)
 - Complete within 60 seconds
-- Avoid fast taps (<800ms) that don't count
+- Avoid fast taps (<900ms) that don't count
 - Learn from mistakes with detailed feedback
 
 Rewards scale by tier:

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
 import { getOptimalMove, type GameAction } from "@/lib/blackjack-strategy"
-import { calculateHandValue, createDeck, type Card } from "@/lib/card-utils"
+import { calculateHandValue, createDeck, getHandValueInfo, type Card } from "@/lib/card-utils"
 import { X, Check, AlertCircle, Clock } from "lucide-react"
 import { DRILL_CONFIG, getReward, getStreakRequired } from "@/lib/drill-config"
 import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
@@ -249,8 +249,8 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
                 <h3 className="text-lg font-semibold text-foreground">Why these moves weren't optimal</h3>
                 <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                   {mistakesLog.slice(-5).map((mistake, index) => {
-                    const playerValue = calculateHandValue(mistake.playerHand)
-                    const dealerValue = calculateHandValue([mistake.dealerUpcard])
+                    const playerHandInfo = getHandValueInfo(mistake.playerHand)
+                    const dealerHandInfo = getHandValueInfo([mistake.dealerUpcard])
                     return (
                       <div key={index} className="space-y-3">
                         {/* Dealer and Player Cards - Side by Side */}
@@ -258,9 +258,20 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
                           {/* Dealer Hand */}
                           <div className="text-center flex-1 flex flex-col items-center">
                             <div className="text-xs text-muted-foreground mb-1">Dealer Shows</div>
-                            <Badge variant="secondary" className="mb-2 text-base font-bold px-3 py-1">
-                              {dealerValue}
-                            </Badge>
+                            {dealerHandInfo.isSoft ? (
+                              <div className="flex gap-1.5 sm:gap-2 justify-center mb-2">
+                                <Badge variant="secondary" className="text-base font-bold px-3 py-1">
+                                  {dealerHandInfo.hardValue}
+                                </Badge>
+                                <Badge variant="secondary" className="text-base font-bold px-3 py-1">
+                                  {dealerHandInfo.value}
+                                </Badge>
+                              </div>
+                            ) : (
+                              <Badge variant="secondary" className="mb-2 text-base font-bold px-3 py-1">
+                                {dealerHandInfo.value}
+                              </Badge>
+                            )}
                             <div className="flex justify-center scale-75">
                               <PlayingCard card={mistake.dealerUpcard} delay={0} owner="dealer" />
                             </div>
@@ -269,9 +280,20 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
                           {/* Player Hand */}
                           <div className="text-center flex-1 flex flex-col items-center">
                             <div className="text-xs text-muted-foreground mb-1">Your Hand</div>
-                            <Badge variant="default" className="mb-2 text-base font-bold px-3 py-1 bg-primary">
-                              {playerValue}
-                            </Badge>
+                            {playerHandInfo.isSoft ? (
+                              <div className="flex gap-1.5 sm:gap-2 justify-center mb-2">
+                                <Badge variant="outline" className="text-base font-bold px-3 py-1">
+                                  {playerHandInfo.hardValue}
+                                </Badge>
+                                <Badge variant="default" className="text-base font-bold px-3 py-1 bg-primary">
+                                  {playerHandInfo.value}
+                                </Badge>
+                              </div>
+                            ) : (
+                              <Badge variant="default" className="mb-2 text-base font-bold px-3 py-1 bg-primary">
+                                {playerHandInfo.value}
+                              </Badge>
+                            )}
                             <div className={`flex justify-center scale-75 ${mistake.playerHand.length >= 2 ? "" : "gap-1"}`}>
                               {mistake.playerHand.map((card, cardIndex) => (
                                 <div key={cardIndex} className={mistake.playerHand.length >= 2 && cardIndex > 0 ? (mistake.playerHand.length >= 4 ? "-ml-20" : "-ml-[42px] md:-ml-[45px]") : ""}>
@@ -287,7 +309,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <div className="flex gap-2 items-center">
                               <span className="text-xs font-mono bg-background px-2 py-1 rounded">
-                                P: {playerValue} vs D: {mistake.dealerUpcard.rank}
+                                P: {playerHandInfo.isSoft ? `${playerHandInfo.hardValue}/${playerHandInfo.value}` : playerHandInfo.value} vs D: {mistake.dealerUpcard.rank}
                               </span>
                             </div>
                             <div className="text-sm text-error font-semibold">
@@ -364,9 +386,23 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
           {/* Dealer Hand */}
           <div className="text-center -mb-2">
             <div className="text-xs text-muted-foreground mb-1">Dealer Shows</div>
-            <Badge variant="secondary" className="mb-0 text-base font-bold px-3 py-1">
-              {calculateHandValue([dealerHand[0]])}
-            </Badge>
+            {(() => {
+              const handInfo = getHandValueInfo([dealerHand[0]])
+              return handInfo.isSoft ? (
+                <div className="flex gap-1.5 sm:gap-2 justify-center mb-0">
+                  <Badge variant="secondary" className="text-base font-bold px-3 py-1">
+                    {handInfo.hardValue}
+                  </Badge>
+                  <Badge variant="secondary" className="text-base font-bold px-3 py-1">
+                    {handInfo.value}
+                  </Badge>
+                </div>
+              ) : (
+                <Badge variant="secondary" className="mb-0 text-base font-bold px-3 py-1">
+                  {handInfo.value}
+                </Badge>
+              )
+            })()}
             <div className="flex justify-center scale-75">
               <PlayingCard card={dealerHand[0]} delay={0} owner="dealer" />
             </div>
@@ -411,9 +447,23 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
           {/* Player Hand */}
           <div className="text-center">
             <div className="text-xs text-muted-foreground mb-1">Your Hand</div>
-            <Badge variant="default" className="mb-0 text-base font-bold px-3 py-1 bg-primary">
-              {calculateHandValue(playerHand)}
-            </Badge>
+            {(() => {
+              const handInfo = getHandValueInfo(playerHand)
+              return handInfo.isSoft ? (
+                <div className="flex gap-1.5 sm:gap-2 justify-center mb-0">
+                  <Badge variant="outline" className="text-base font-bold px-3 py-1">
+                    {handInfo.hardValue}
+                  </Badge>
+                  <Badge variant="default" className="text-base font-bold px-3 py-1 bg-primary">
+                    {handInfo.value}
+                  </Badge>
+                </div>
+              ) : (
+                <Badge variant="default" className="mb-0 text-base font-bold px-3 py-1 bg-primary">
+                  {handInfo.value}
+                </Badge>
+              )
+            })()}
             <div className={`flex justify-center scale-75 ${playerHand.length >= 2 ? "" : "gap-1"}`}>
               {playerHand.map((card, index) => (
                 <div key={index} className={playerHand.length >= 2 && index > 0 ? (playerHand.length >= 4 ? "-ml-20" : "-ml-[42px] md:-ml-[45px]") : ""}>

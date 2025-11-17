@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { finalizeChallenge } from "@/lib/challenge-finalize"
 import { type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
@@ -6,6 +7,7 @@ import { type NextRequest, NextResponse } from "next/server"
 // POST: Complete challenge (called when timer expires)
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
+  const admin = createServiceClient()
 
   const {
     data: { user },
@@ -16,7 +18,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   try {
-    const { data: challenge, error: fetchError } = await supabase
+    const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
       .eq("id", params.id)
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const result = await finalizeChallenge({
-      supabase,
+      supabase: admin,
       challenge: challenge as ChallengeRecord,
       winnerId,
       challengerCredits,

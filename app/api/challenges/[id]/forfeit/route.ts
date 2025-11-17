@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { finalizeChallenge } from "@/lib/challenge-finalize"
 import { type ChallengeRecord } from "@/lib/challenge-helpers"
 import { NextResponse, type NextRequest } from "next/server"
@@ -9,6 +10,7 @@ export async function POST(
   { params }: { params: { id: string } } | { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient()
+  const admin = createServiceClient()
 
   const resolvedParams = await Promise.resolve(params as any)
   const challengeId = resolvedParams.id
@@ -22,11 +24,10 @@ export async function POST(
   }
 
   try {
-    const { data: challenge, error: fetchError } = await supabase
+    const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
       .eq("id", challengeId)
-      .or(`challenger_id.eq.${user.id},challenged_id.eq.${user.id}`)
       .maybeSingle()
 
     if (fetchError || !challenge) {
@@ -47,7 +48,7 @@ export async function POST(
     const winnerId = isChallenger ? challenge.challenged_id : challenge.challenger_id
 
     const result = await finalizeChallenge({
-      supabase,
+      supabase: admin,
       challenge: challenge as ChallengeRecord,
       winnerId,
       challengerCredits: challenge.challenger_credit_balance ?? 0,

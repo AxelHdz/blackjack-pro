@@ -1,0 +1,12 @@
+# Challenge credit balance investigation
+
+## Summary of the symptom
+While an active challenge is running, players expect the "gold credit" balance that replaces their normal bankroll to behave like a normal chip count. In practice, the balance shown in the Blackjack header and inside the ChallengeChip keeps snapping back to 500 credits mid-hand, and the opponent who is watching through the challenge chip also sees a constant 500-credit total.
+
+## Findings
+- The Blackjack game polls `/api/challenges/active` every 2.5–6 seconds even while a hand is being played. Each server response immediately overwrites the in-memory `balance` with the value returned by the API through `applyChallengeContext`/`updateActiveChallengeState`. Because those helpers always write `challengeData.challengerCreditBalance` (or the challenged equivalent) into React state, whatever number is stored in the database wins over the local deduction that happened when the bet was placed. 【F:components/blackjack-game.tsx†L224-L285】【F:components/blackjack-game.tsx†L348-L399】
+- The challenge chip subscribes to the same `/api/challenges/active` data stream (it also polls every 2 seconds) and renders the `challengerCreditBalance`/`challengedCreditBalance` it receives. That means both players’ chips will mirror the last value stored in the database, regardless of the local client-side balance. 【F:components/challenge-chip.tsx†L14-L132】
+- Server-side persistence of the gold credits only happens inside `syncChallengeProgress`, and that function is invoked by a `useEffect` that fires **after** `roundResult` is set. In other words, credits are only pushed to `/api/challenges/[id]/progress` once a hand finishes (or on specific side paths like buyback drills), never when the bet is deducted at the beginning of the hand. Until the hand resolves, the row in `challenges` keeps the previous value (500 right after activation), so every poll restores 500 to the UI. 【F:components/blackjack-game.tsx†L500-L504】
+
+## Conclusion
+Because we never persist the in-hand chip count, every background poll re-applies the stale server value (500 immediately after the challenge starts). The Blackjack header updates its `balance` from the polled payload, and the ChallengeChip renders that same payload, so both players continuously see 500 gold credits until the hand completes and `syncChallengeProgress` finally sends the new balance. Preventing the snap would require persisting the deduction at deal time or suppressing the poll while a hand is in progress, but no code currently does that.

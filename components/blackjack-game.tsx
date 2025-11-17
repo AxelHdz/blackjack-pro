@@ -940,6 +940,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const betAmount = currentBet
     const newBalance = balance - currentBet
     setBalance(newBalance)
+    if (activeChallenge) {
+      // Persist challenge credits immediately so polling UIs don't reset to the old value mid-hand
+      void syncChallengeProgress(newBalance, pendingChallengeXp)
+    }
     setActiveBet(betAmount)
     setInitialBet(betAmount)
     setShowFeedback(false)

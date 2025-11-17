@@ -170,8 +170,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         return NextResponse.json({ error: "Missing wager amount or duration" }, { status: 400 })
       }
 
-      if (![15, 30].includes(durationMinutes)) {
-        return NextResponse.json({ error: "Duration must be 15 or 30 minutes" }, { status: 400 })
+      if (![5, 10].includes(durationMinutes)) {
+        return NextResponse.json({ error: "Duration must be 5 or 10 minutes" }, { status: 400 })
       }
 
       if (wagerAmount <= 0) {

@@ -2361,9 +2361,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                                       : "text-foreground"
                                 }`}
                               >
-                                {roundResult.message}{" "}
+                                {roundResult.message}
                                 {roundResult.winAmount !== 0 && (
                                   <>
+                                    {" "}
                                     {roundResult.winAmount > 0 ? "+" : "-"}$
                                     {Math.abs(roundResult.winAmount).toLocaleString()}
                                   </>

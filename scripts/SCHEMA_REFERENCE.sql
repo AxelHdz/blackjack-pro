@@ -222,7 +222,7 @@ CREATE TABLE IF NOT EXISTS challenges (
   challenger_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   challenged_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   wager_amount INTEGER NOT NULL,
-  duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (15, 30)),
+  duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (5, 10)),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled')),
   challenger_balance_start INTEGER,
   challenged_balance_start INTEGER,
@@ -402,4 +402,3 @@ GRANT ALL ON public.user_profiles TO authenticated;
 --   - Friend-based privacy controls
 --
 -- ============================================================================
-

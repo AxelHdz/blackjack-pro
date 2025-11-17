@@ -78,7 +78,7 @@ export function ChallengeModal({
 }: ChallengeModalProps) {
   const { toast } = useToast()
   const [wagerAmount, setWagerAmount] = useState<string>("")
-  const [durationMinutes, setDurationMinutes] = useState<number>(15)
+  const [durationMinutes, setDurationMinutes] = useState<number>(5)
   const [loading, setLoading] = useState(false)
   const [liveChallenge, setLiveChallenge] = useState<Challenge | null>(challenge ?? null)
 
@@ -123,7 +123,7 @@ export function ChallengeModal({
       setDurationMinutes(c.durationMinutes)
     } else {
       setWagerAmount("")
-      setDurationMinutes(15)
+      setDurationMinutes(5)
     }
   }, [open, challenge, liveChallenge, derivedMode])
 
@@ -786,21 +786,21 @@ export function ChallengeModal({
                 <div className="flex gap-2">
                   <Button
                     type="button"
-                    variant={durationMinutes === 15 ? "default" : "outline"}
+                    variant={durationMinutes === 5 ? "default" : "outline"}
                     className="flex-1"
-                    onClick={() => setDurationMinutes(15)}
+                    onClick={() => setDurationMinutes(5)}
                   >
                     <Clock className="h-4 w-4 mr-2" />
-                    15 min
+                    5 min
                   </Button>
                   <Button
                     type="button"
-                    variant={durationMinutes === 30 ? "default" : "outline"}
+                    variant={durationMinutes === 10 ? "default" : "outline"}
                     className="flex-1"
-                    onClick={() => setDurationMinutes(30)}
+                    onClick={() => setDurationMinutes(10)}
                   >
                     <Clock className="h-4 w-4 mr-2" />
-                    30 min
+                    10 min
                   </Button>
                 </div>
               </div>

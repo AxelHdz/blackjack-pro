@@ -13,7 +13,7 @@ The Challenge feature allows users to compete against each other in timed blackj
 2. User clicks the "Challenge" button (swords icon) next to another player's name
 3. Challenge modal opens with:
    - Wager amount input (must not exceed either player's balance)
-   - Duration selection (15 or 30 minutes)
+   - Duration selection (5 or 10 minutes)
    - "Max Wager" button to set wager to the maximum allowed
 4. User clicks "Request Challenge"
 5. Wager is deducted from challenger's balance
@@ -39,7 +39,7 @@ The Challenge feature allows users to compete against each other in timed blackj
 1. Challenged user clicks "Request Changes" button
 2. Modal switches to counter-offer mode with editable fields:
    - Wager amount (pre-filled with current challenge values)
-   - Duration (15 or 30 minutes, pre-filled)
+   - Duration (5 or 10 minutes, pre-filled)
 3. User modifies terms and clicks "Request Update"
 4. Challenge status remains "pending" but terms are updated
 5. Original challenger now sees the updated challenge and can accept or decline
@@ -49,7 +49,7 @@ The Challenge feature allows users to compete against each other in timed blackj
 1. When a challenge is accepted:
    - Challenge status changes to "active"
    - Each player is granted **500 gold challenge credits** and their normal balance is paused (wagers remain escrowed)
-   - Timer starts (15 or 30 minutes based on challenge settings)
+   - Timer starts (5 or 10 minutes based on challenge settings)
    - Both players are restricted to Expert mode only
    - XP earned during the challenge is **doubled**, but the boost is applied only when the challenge ends
 2. During the challenge:
@@ -123,7 +123,7 @@ CREATE TABLE challenges (
   challenger_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   challenged_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   wager_amount INTEGER NOT NULL,
-  duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (15, 30)),
+  duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (5, 10)),
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled')),
   challenger_balance_start INTEGER,
   challenged_balance_start INTEGER,
@@ -152,7 +152,7 @@ CREATE TABLE challenges (
 ### Constraints
 
 - Only one active or pending challenge per user (enforced by unique partial indexes)
-- Duration must be 15 or 30 minutes
+- Duration must be 5 or 10 minutes
 - Status must be one of: pending, active, completed, cancelled
 
 ### Row Level Security (RLS) Policies
@@ -182,7 +182,7 @@ Fetches challenges for the current user.
       "challengedId": "uuid",
       "challengedName": "string",
       "wagerAmount": 1000,
-      "durationMinutes": 15,
+      "durationMinutes": 5,
       "status": "pending",
       "expiresAt": "timestamp",
       "startedAt": "timestamp",
@@ -206,7 +206,7 @@ Creates a new challenge.
 {
   "challengedId": "uuid",
   "wagerAmount": 1000,
-  "durationMinutes": 15
+  "durationMinutes": 5
 }
 ```
 
@@ -261,7 +261,7 @@ Updates a challenge (accept or counter-offer).
 {
   "action": "counter-offer",
   "wagerAmount": 1500,
-  "durationMinutes": 30
+  "durationMinutes": 10
 }
 ```
 

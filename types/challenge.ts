@@ -17,6 +17,8 @@ export type Challenge = {
   challengedCreditBalance: number | null
   challengerCreditExperience: number | null
   challengedCreditExperience: number | null
+  challengerArchived: boolean | null
+  challengedArchived: boolean | null
   winnerId: string | null
   startedAt: string | null
   expiresAt: string | null

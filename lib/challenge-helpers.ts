@@ -15,6 +15,8 @@ export type ChallengeRecord = {
   challenged_credit_balance: number | null
   challenger_credit_experience: number | null
   challenged_credit_experience: number | null
+  challenger_archive_status: boolean | null
+  challenged_archive_status: boolean | null
   winner_id: string | null
   started_at: string | null
   expires_at: string | null
@@ -68,6 +70,8 @@ export const formatChallengeResponse = (
     challengedCreditBalance: challenge.challenged_credit_balance,
     challengerCreditExperience: challenge.challenger_credit_experience,
     challengedCreditExperience: challenge.challenged_credit_experience,
+    challengerArchived: challenge.challenger_archive_status,
+    challengedArchived: challenge.challenged_archive_status,
     winnerId: challenge.winner_id,
     startedAt: challenge.started_at,
     expiresAt: challenge.expires_at,

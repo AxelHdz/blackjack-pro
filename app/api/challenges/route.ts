@@ -17,10 +17,14 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const statusFilter = searchParams.get("status") // 'pending' | 'active' | 'pending,active' | null (all)
 
+    // Only return challenges the user participates in AND has not archived
     let query = supabase
       .from("challenges")
       .select("*")
-      .or(`challenger_id.eq.${user.id},challenged_id.eq.${user.id}`)
+      .or(
+        `and(challenger_id.eq.${user.id},challenger_archive_status.is.false),` +
+          `and(challenged_id.eq.${user.id},challenged_archive_status.is.false)`,
+      )
 
     if (statusFilter) {
       if (statusFilter.includes(",")) {

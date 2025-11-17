@@ -113,6 +113,10 @@ The Challenge feature allows users to compete against each other in timed blackj
 - Display: Challenge chip shows "Challenge Cancelled" plus a refunded badge so the challenger knows their wager returned
 - Modal highlights that the wager has already been refunded and keeps the challenge available for review/history
 
+### Archived
+- User dismissed a challenge from their own view (per-user archive)
+- Display: Hidden from the archiving user's lists; remains visible to the opponent until they archive it too
+
 ## Database Schema
 
 ### Challenges Table
@@ -124,7 +128,7 @@ CREATE TABLE challenges (
   challenged_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   wager_amount INTEGER NOT NULL,
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (5, 10)),
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled', 'archived')),
   challenger_balance_start INTEGER,
   challenged_balance_start INTEGER,
   challenger_balance_end INTEGER,
@@ -135,6 +139,8 @@ CREATE TABLE challenges (
   challenged_credit_balance INTEGER,
   challenger_credit_experience INTEGER DEFAULT 0,
   challenged_credit_experience INTEGER DEFAULT 0,
+  challenger_archive_status BOOLEAN DEFAULT FALSE,
+  challenged_archive_status BOOLEAN DEFAULT FALSE,
   winner_id UUID REFERENCES auth.users(id),
   started_at TIMESTAMP WITH TIME ZONE,
   expires_at TIMESTAMP WITH TIME ZONE,
@@ -148,18 +154,19 @@ CREATE TABLE challenges (
 - `challenger_balance_paused` / `challenged_balance_paused`: snapshots of each user's real balance while challenge credits are active
 - `challenger_credit_balance` / `challenged_credit_balance`: current gold challenge credits (start at 500 for both players)
 - `challenger_credit_experience` / `challenged_credit_experience`: accumulated double XP awaiting payout when the challenge completes
+- `challenger_archive_status` / `challenged_archive_status`: whether each participant has archived (hidden) the challenge in their own view
 
 ### Constraints
 
 - Only one active or pending challenge per user (enforced by unique partial indexes)
 - Duration must be 5 or 10 minutes
-- Status must be one of: pending, active, completed, cancelled
+- Status must be one of: pending, active, completed, cancelled, archived
 
 ### Row Level Security (RLS) Policies
 
 - Users can view challenges where they are challenger or challenged
 - Users can create challenges where they are the challenger
-- Users can update challenges where they are challenger (pending only) or challenged (accept/counter-offer)
+- Users can update challenges where they are a participant (includes archiving and progression updates across all statuses)
 - Users can delete challenges where they are challenger and status is pending
 
 ## API Endpoints

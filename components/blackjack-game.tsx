@@ -57,7 +57,6 @@ type StatsView = "overall" | "perMode"
 
 const CHALLENGE_CREDIT_START = 500
 const CHALLENGE_XP_MULTIPLIER = 2
-const CHALLENGE_SYNC_DELAY = 1200
 
 interface BlackjackGameProps {
   userId: string
@@ -172,7 +171,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [showXpPopup, setShowXpPopup] = useState(false)
   const xpPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const xpProgressBarRef = useRef<HTMLDivElement>(null)
-  const challengeSyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Helper to close popup and clear timeout
   const closeXpPopup = useCallback(() => {
@@ -455,25 +453,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     return () => clearInterval(interval)
   }, [activeChallenge, userId, toast, balance, pendingChallengeXp, syncChallengeProgress, applyChallengeContext])
-
-  useEffect(() => {
-    if (!activeChallenge || balance === null) return
-
-    if (challengeSyncTimeoutRef.current) {
-      clearTimeout(challengeSyncTimeoutRef.current)
-    }
-
-    challengeSyncTimeoutRef.current = setTimeout(() => {
-      void syncChallengeProgress(balance, pendingChallengeXp)
-    }, CHALLENGE_SYNC_DELAY)
-
-    return () => {
-      if (challengeSyncTimeoutRef.current) {
-        clearTimeout(challengeSyncTimeoutRef.current)
-        challengeSyncTimeoutRef.current = null
-      }
-    }
-  }, [activeChallenge, balance, pendingChallengeXp, syncChallengeProgress])
 
   // Ensure challenge credits persist immediately after each round result
   useEffect(() => {
@@ -1463,7 +1442,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setIsDoubled(true)
     isDoubledRef.current = true // Update ref synchronously
     const additionalBet = activeBet
-    setBalance((prev) => (prev !== null ? prev - additionalBet : -additionalBet))
+    setBalance((prev) => {
+      const newBalance = (prev !== null ? prev - additionalBet : -additionalBet)
+      // Sync challenge progress after double down if there's an active challenge
+      if (activeChallenge) {
+        void syncChallengeProgress(newBalance, pendingChallengeXp)
+      }
+      return newBalance
+    })
     const newActiveBet = activeBet * 2
     setActiveBet(newActiveBet)
 
@@ -1540,7 +1526,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const originalHand = [...playerHand]
 
     // Deduct the additional bet for the second hand
-    setBalance((prev) => (prev !== null ? prev - activeBet : -activeBet))
+    setBalance((prev) => {
+      const newBalance = (prev !== null ? prev - activeBet : -activeBet)
+      // Sync challenge progress after split if there's an active challenge
+      if (activeChallenge) {
+        void syncChallengeProgress(newBalance, pendingChallengeXp)
+      }
+      return newBalance
+    })
     setIsSplit(true)
 
     // Split the cards
@@ -1783,7 +1776,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   const handleDrillSuccess = (amount: number) => {
-    setBalance((prev) => (prev !== null ? prev + amount : amount))
+    setBalance((prev) => {
+      const newBalance = (prev !== null ? prev + amount : amount)
+      // Sync challenge progress after drill success if there's an active challenge
+      if (activeChallenge) {
+        void syncChallengeProgress(newBalance, pendingChallengeXp)
+      }
+      return newBalance
+    })
     setDrillTier((prev) => Math.min(prev + 1, 2)) // Advance tier, max at tier 3 (index 2)
     setLastDrillCompletedAt(new Date()) // Track successful drill completion timestamp
     setShowBuybackDrill(false)

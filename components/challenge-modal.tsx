@@ -82,6 +82,11 @@ export function ChallengeModal({
   const [loading, setLoading] = useState(false)
   const [liveChallenge, setLiveChallenge] = useState<Challenge | null>(challenge ?? null)
 
+  // Update live challenge when prop changes
+  useEffect(() => {
+    setLiveChallenge(challenge ?? null)
+  }, [challenge])
+
   const derivedMode: ChallengeModalMode = useMemo(() => {
     const currentChallenge = liveChallenge ?? challenge
     if (!currentChallenge) {
@@ -196,6 +201,7 @@ export function ChallengeModal({
   const opponentName = awaitingOpponentName
   const isActiveChallenge = currentChallenge?.status === "active"
   const isCompletedView = currentChallenge?.status === "completed" || derivedMode === "results"
+  const isCancelledView = currentChallenge?.status === "cancelled"
   const playerCredits = currentChallenge
     ? isChallenger
       ? currentChallenge.challengerCreditBalance
@@ -383,9 +389,53 @@ export function ChallengeModal({
     }
   }
 
-  const handleEndChallenge = () => {
-    onChallengeEnded?.()
-    onOpenChange(false)
+  const handleEndChallenge = async () => {
+    if (!currentChallenge?.id) return
+
+    console.log("[v0] Archiving challenge with ID:", currentChallenge.id, "status:", currentChallenge.status)
+
+    // Check if user has already archived this challenge
+    const isChallenger = currentChallenge.challengerId === userId
+    const userAlreadyArchived = isChallenger ? currentChallenge.challengerArchived : currentChallenge.challengedArchived
+
+    if (userAlreadyArchived) {
+      console.log("[v0] Challenge already archived by user, just closing modal")
+      onChallengeEnded?.()
+      onOpenChange(false)
+      return
+    }
+
+    setLoading(true)
+    try {
+      console.log("[v0] Making fetch request to:", `/api/challenges/${currentChallenge.id}/archive`)
+
+      const response = await fetch(`/api/challenges/${currentChallenge.id}/archive`, {
+        method: "POST",
+      })
+
+      console.log("[v0] Archive response status:", response.status, "ok:", response.ok)
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error("[v0] Archive response error data:", errorData)
+        throw new Error(errorData.error || "Failed to archive challenge")
+      }
+
+      const responseData = await response.json().catch(() => ({}))
+      console.log("[v0] Archive response success data:", responseData)
+
+      onChallengeEnded?.()
+      onOpenChange(false)
+    } catch (error) {
+      console.error("[v0] Failed to archive challenge:", error)
+      toast({
+        title: "Error",
+        description: "Failed to archive challenge. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleForfeit = async () => {
@@ -421,6 +471,8 @@ export function ChallengeModal({
   const getCloseButtonText = () => {
     // Check both derivedMode and challenge status to ensure we catch completed challenges
     const isCompleted = challenge?.status === "completed" || derivedMode === "results"
+    const isCancelled = challenge?.status === "cancelled"
+
     if (isCompleted && challenge) {
       const isWinner = challenge.winnerId === userId
       const isTie = !challenge.winnerId
@@ -429,6 +481,11 @@ export function ChallengeModal({
       }
       return isWinner ? "Collect Winnings" : "End Challenge"
     }
+
+    if (isCancelled) {
+      return "Archive"
+    }
+
     // Debug: log challenge status if it exists but isn't completed
     if (challenge && challenge.status !== "completed") {
       console.log("[ChallengeModal] Challenge status:", challenge.status, "derivedMode:", derivedMode)
@@ -816,9 +873,9 @@ export function ChallengeModal({
 
         <div className="flex flex-wrap gap-2">
           <Button
-            variant={isCompletedView ? "default" : "outline"}
+            variant={(isCompletedView || isCancelledView) ? "default" : "outline"}
             onClick={
-              isCompletedView
+              (isCompletedView || isCancelledView)
                 ? handleEndChallenge
                 : () => onOpenChange(false)
             }

@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { formatChallengeResponse, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient()
+  const admin = createServiceClient()
 
   const {
     data: { user },
@@ -21,7 +23,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 })
     }
 
-    const { data: challenge, error: fetchError } = await supabase
+    // Fetch challenge with service client to avoid RLS issues while still checking membership below.
+    const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
       .eq("id", params.id)
@@ -73,7 +76,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "No valid progress values supplied" }, { status: 400 })
     }
 
-    const { data: updatedChallenge, error: updateError } = await supabase
+    const { data: updatedChallenge, error: updateError } = await admin
       .from("challenges")
       .update(updates)
       .eq("id", params.id)
@@ -85,7 +88,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Failed to update challenge progress" }, { status: 500 })
     }
 
-    const { data: profiles } = await supabase
+    const { data: profiles } = await admin
       .from("user_profiles")
       .select("id, display_name")
       .in("id", [updatedChallenge.challenger_id, updatedChallenge.challenged_id])

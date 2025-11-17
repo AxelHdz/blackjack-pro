@@ -457,6 +457,8 @@ export function ChallengeModal({
         title: "Challenge forfeited",
         description: "You have conceded this challenge. Wager paid to your opponent.",
       })
+      onChallengeEnded?.()
+      onOpenChange(false)
 
       onChallengeUpdated?.()
       onOpenChange(false)
@@ -812,6 +814,8 @@ export function ChallengeModal({
                     className="pl-9"
                     min="1"
                     max={challengedUserBalance > 0 ? Math.min(userBalance, challengedUserBalance) : userBalance}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                   />
                 </div>
                 <div className="flex items-center justify-between">

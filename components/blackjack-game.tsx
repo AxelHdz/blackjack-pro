@@ -195,6 +195,32 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     fetchActiveChallenge()
   }, [userId])
 
+  const learningModeRef = useRef<LearningMode>("guided")
+  const previousLearningModeRef = useRef<LearningMode | null>(null)
+  useEffect(() => {
+    learningModeRef.current = learningMode
+  }, [learningMode])
+
+  const enterChallengeExpertMode = useCallback(() => {
+    if (previousLearningModeRef.current === null) {
+      previousLearningModeRef.current = learningModeRef.current ?? "guided"
+    }
+    setLearningMode("expert")
+    setShowModeSelector(false)
+  }, [setLearningMode, setShowModeSelector])
+
+  const restoreLearningMode = useCallback(() => {
+    if (previousLearningModeRef.current === null) return
+    setLearningMode(previousLearningModeRef.current)
+    previousLearningModeRef.current = null
+  }, [setLearningMode])
+
+  useEffect(() => {
+    if (!activeChallenge && previousLearningModeRef.current !== null) {
+      restoreLearningMode()
+    }
+  }, [activeChallenge, restoreLearningMode])
+
   const applyChallengeContext = useCallback(
     (challengeData: Challenge | null) => {
       setActiveChallenge(challengeData)
@@ -218,13 +244,31 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       } else {
         setPendingChallengeXp(0)
         setLastSyncedChallengeCredit(null)
+        restoreLearningMode()
       }
     },
-    [userId],
+    [userId, balance, restoreLearningMode],
   )
 
   const updateActiveChallengeState = useCallback(
     (challengeData: Challenge) => {
+      // If the incoming payload is no longer active, clear challenge context and restore modes
+      if (challengeData.status !== "active") {
+        setActiveChallenge(null)
+        setPendingChallengeXp(0)
+        setLastSyncedChallengeCredit(null)
+        restoreLearningMode()
+        return
+      }
+
+      const incomingUpdatedAt = challengeData.updatedAt ? new Date(challengeData.updatedAt).getTime() : 0
+      const currentUpdatedAt = activeChallenge?.updatedAt ? new Date(activeChallenge.updatedAt).getTime() : 0
+
+      // Ignore stale payloads that are older than what we already have (prevents snapping back to 500)
+      if (currentUpdatedAt && incomingUpdatedAt && incomingUpdatedAt < currentUpdatedAt) {
+        return
+      }
+
       setActiveChallenge(challengeData)
       const playerCredit =
         challengeData.challengerId === userId
@@ -243,7 +287,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         window.dispatchEvent(new CustomEvent("challenge:progress", { detail: challengeData }))
       }
     },
-    [balance, userId],
+    [activeChallenge?.updatedAt, balance, userId],
   )
 
   const handleChallengeResultsOpenChange = (open: boolean) => {
@@ -308,7 +352,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       const data = await response.json()
       if (data.challenge && data.challenge.status === "active") {
         applyChallengeContext(data.challenge)
-        setLearningMode("expert")
+        enterChallengeExpertMode()
       } else {
         applyChallengeContext(null)
       }
@@ -332,8 +376,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         if (!serverActive || cancelled) return
         if (!activeChallenge) {
           applyChallengeContext(serverActive)
-          setLearningMode("expert")
-          setShowModeSelector(false)
+          enterChallengeExpertMode()
           return
         }
 
@@ -630,7 +673,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         const challengeData = await challengeResponse.json()
         if (challengeData.challenge && challengeData.challenge.status === "active") {
           applyChallengeContext(challengeData.challenge)
-          setLearningMode("expert")
+          enterChallengeExpertMode()
           appliedChallengeState = true
         } else if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
           setLearningMode(savedMode)

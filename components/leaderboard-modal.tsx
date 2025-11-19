@@ -11,6 +11,7 @@ import { Copy, UserPlus, X, Check, XIcon, Trophy, Swords } from "lucide-react"
 import { UsernameEditor } from "@/components/username-editor"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
+import { cn } from "@/lib/utils"
 
 interface LeaderboardEntry {
   userId: string
@@ -36,7 +37,10 @@ interface LeaderboardModalProps {
   userId: string
 }
 
+const SHOW_CHALLENGE_BUTTONS = false
+
 export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModalProps) {
+  const SHOW_CHALLENGE_BUTTONS = false
   const { toast } = useToast()
   const [metric, setMetric] = useState<"balance" | "level">("balance")
   const [scope, setScope] = useState<"global" | "friends">("global")
@@ -516,9 +520,11 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
                           size="sm"
                           variant="ghost"
                           disabled={Boolean(blockingChallenge)}
-                          className={`h-9 px-2 border border-white/20 rounded flex items-center gap-1.5 ${
-                            blockingChallenge ? "opacity-50 cursor-not-allowed" : ""
-                          }`}
+                          className={cn(
+                            "h-9 px-2 border border-white/20 rounded flex items-center gap-1.5",
+                            blockingChallenge && "opacity-50 cursor-not-allowed",
+                            !SHOW_CHALLENGE_BUTTONS && "hidden",
+                          )}
                           onClick={() => handleChallengeClick(entry)}
                           aria-label={`Challenge ${entry.name}`}
                           title={

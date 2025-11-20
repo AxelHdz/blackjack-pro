@@ -1,5 +1,5 @@
-import { type Card, type GameAction, getCardValue, calculateHandValue, isSoftHand } from "./card-utils"
-import { getTipMessage, getFeedbackMessage } from "./blackjack-strategy"
+import { type Card, getCardValue, calculateHandValue, isSoftHand } from "./card-utils"
+import { getTipMessage, getFeedbackMessage, type GameAction } from "./blackjack-strategy"
 
 export type NormalizedUpcard = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | "A"
 
@@ -41,7 +41,7 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
   const strategyFeedback = getFeedbackMessage(ctx.playerHand, ctx.dealerUpcard)
 
   // Check if the strategy messages match the optimal move
-  const moveKeywords = {
+  const moveKeywords: Record<GameAction, string[]> = {
     hit: ["hit", "take a card", "draw", "improve"],
     stand: ["stand", "don't hit", "hold"],
     double: ["double", "doubling"],
@@ -50,11 +50,11 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
 
   const tipLower = strategyTip.toLowerCase()
   const feedbackLower = strategyFeedback.toLowerCase()
-  const optimalLower = ctx.optimalMove.toLowerCase()
+  const optimalMove = ctx.optimalMove
 
   // Check if the tip or feedback contains keywords for the optimal move
-  const tipMatchesOptimal = moveKeywords[optimalLower].some((keyword) => tipLower.includes(keyword))
-  const feedbackMatchesOptimal = moveKeywords[optimalLower].some((keyword) => feedbackLower.includes(keyword))
+  const tipMatchesOptimal = moveKeywords[optimalMove].some((keyword) => tipLower.includes(keyword))
+  const feedbackMatchesOptimal = moveKeywords[optimalMove].some((keyword) => feedbackLower.includes(keyword))
 
   // Generate message key for telemetry
   let messageKey = "unknown"
@@ -89,7 +89,7 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
   let finalWhy = strategyFeedback
 
   // Check if feedback mentions the player's actual move incorrectly
-  const playerMoveLower = ctx.playerMove.toLowerCase()
+  const playerMoveLower = ctx.playerMove
   const feedbackMentionsPlayerMove = moveKeywords[playerMoveLower].some((keyword) => feedbackLower.includes(keyword))
   
   // If the player's move doesn't match optimal AND the feedback mentions the player's move (wrong context),
@@ -121,7 +121,7 @@ function generatePlayerMoveFeedback(
   // If the optimal feedback already explains why the player's move is wrong, use it
   // Otherwise, generate a specific explanation
   
-  const moveExplanations: Record<GameAction, Record<GameAction, string>> = {
+  const moveExplanations: Record<GameAction, Partial<Record<GameAction, string>>> = {
     hit: {
       stand: playerValue >= 17 && playerValue <= 20
         ? `Hitting on ${playerValue}${isSoft ? " (soft)" : ""} is too risky. ${playerValue} is already a strong hand that beats most dealer outcomes. Taking another card significantly increases your bust risk (you can only improve to 21, but risk busting on any card 2 or higher) without enough benefit.`

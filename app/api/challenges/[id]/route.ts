@@ -7,11 +7,9 @@ const fetchChallengeById = (supabase: any, id: string) => {
   return query.maybeSingle()
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
-  
-  const resolvedParams = await Promise.resolve(params)
-  const challengeId = resolvedParams.id
+  const challengeId = (await params).id
 
   const {
     data: { user },
@@ -48,11 +46,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
-  
-  const resolvedParams = await Promise.resolve(params)
-  const challengeId = resolvedParams.id
+  const challengeId = (await params).id
 
   const {
     data: { user },
@@ -255,11 +251,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> | { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
-  
-  const resolvedParams = await Promise.resolve(params)
-  const challengeId = resolvedParams.id
+  const challengeId = (await params).id
 
   const {
     data: { user },

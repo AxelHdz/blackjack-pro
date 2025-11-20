@@ -12,6 +12,7 @@ import { UsernameEditor } from "@/components/username-editor"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
 import { cn } from "@/lib/utils"
+import { fetchCached } from "@/lib/fetch-cache"
 
 interface LeaderboardEntry {
   userId: string
@@ -59,7 +60,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const [challengedUserBalance, setChallengedUserBalance] = useState<number>(0)
   const [userBalance, setUserBalance] = useState<number>(0)
   const [blockingChallenge, setBlockingChallenge] = useState<Challenge | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -97,10 +98,10 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       const scopeToUse = scopeOverride ?? scope
       const metricToUse = metricOverride ?? metric
       const cursor = reset ? null : nextCursor
-      const response = await fetch(
-        `/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`,
-      )
-      const data = await response.json()
+      const data = await fetchCached<{
+        entries: LeaderboardEntry[]
+        nextCursor: string | null
+      }>(`/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`)
 
       if (reset) {
         setEntries(data.entries)
@@ -122,8 +123,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   const loadFriends = async () => {
     try {
-      const response = await fetch("/api/me/friends")
-      const data = await response.json()
+      const data = await fetchCached<{ friends?: string[] }>("/api/me/friends")
       setFriends(data.friends || [])
     } catch (error) {
       console.error("[v0] Failed to load friends:", error)
@@ -132,8 +132,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   const loadFriendRequests = async () => {
     try {
-      const response = await fetch("/api/me/friend-requests")
-      const data = await response.json()
+      const data = await fetchCached<{ requests?: FriendRequest[] }>("/api/me/friend-requests")
       setFriendRequests(data.requests || [])
     } catch (error) {
       console.error("[v0] Failed to load friend requests:", error)
@@ -143,8 +142,9 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   // Combined function to fetch user profile data once instead of twice
   const loadUserProfile = async () => {
     try {
-      const response = await fetch("/api/me/profile")
-      const data = await response.json()
+      const data = await fetchCached<{ profile?: { display_name?: string }; stats?: { total_money?: number } }>(
+        "/api/me/profile",
+      )
       if (data.profile?.display_name) {
         setUserDisplayName(data.profile.display_name)
       }
@@ -158,8 +158,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   const loadBlockingChallenge = async () => {
     try {
-      const response = await fetch("/api/challenges?status=pending,active")
-      const data = await response.json()
+      const data = await fetchCached<{ challenges?: Challenge[] }>("/api/challenges?status=pending,active")
       if (Array.isArray(data.challenges) && data.challenges.length > 0) {
         setBlockingChallenge(data.challenges[0])
       } else {
@@ -184,7 +183,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     setChallengedUserName(entry.name)
     setChallengedUserBalance(entry.currentBalance)
     setShowChallengeModal(true)
-    void loadUserBalance()
+    void loadUserProfile()
   }
 
   const handleRespondToRequest = async (requestId: string, action: "accept" | "reject") => {

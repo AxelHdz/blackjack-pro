@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service"
 import { formatChallengeResponse, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const admin = createServiceClient()
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
-      .eq("id", params.id)
+      .eq("id", (await params).id)
       .single()
 
     if (fetchError || !challenge) {
@@ -46,16 +46,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
+    const now = Date.now()
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
 
     if (typeof creditBalance === "number" && Number.isFinite(creditBalance)) {
       const sanitized = Math.max(0, Math.round(creditBalance))
-      if (isChallenger) {
-        updates.challenger_credit_balance = sanitized
-      } else {
-        updates.challenged_credit_balance = sanitized
+      // Guard against regressions unless updated_at moves forward
+      const existing = isChallenger ? challenge.challenger_credit_balance : challenge.challenged_credit_balance
+      if (existing === null || sanitized >= existing) {
+        if (isChallenger) {
+          updates.challenger_credit_balance = sanitized
+        } else {
+          updates.challenged_credit_balance = sanitized
+        }
       }
     }
 
@@ -63,7 +68,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const currentXp = isChallenger
         ? challenge.challenger_credit_experience || 0
         : challenge.challenged_credit_experience || 0
-      const incremented = currentXp + Math.round(xpDelta)
+      const incremented = Math.max(0, currentXp + Math.round(xpDelta))
       if (isChallenger) {
         updates.challenger_credit_experience = incremented
       } else {
@@ -79,7 +84,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data: updatedChallenge, error: updateError } = await admin
       .from("challenges")
       .update(updates)
-      .eq("id", params.id)
+      .eq("id", (await params).id)
       .select("*")
       .single()
 

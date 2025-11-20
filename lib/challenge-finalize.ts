@@ -252,7 +252,9 @@ export const finalizeChallenge = async ({
     .select("id, display_name")
     .in("id", [challenge.challenger_id, challenge.challenged_id])
 
-  const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
+  const profilesMap = new Map<string, { display_name?: string | null }>(
+    (profiles ?? []).map((profile: { id: string; display_name?: string | null }) => [profile.id, profile]),
+  )
   const formattedChallenge = formatChallengeResponse(updatedChallenge as ChallengeRecord, profilesMap)
   const winnerProfile = formattedChallenge.winnerId ? profilesMap.get(formattedChallenge.winnerId) : null
 

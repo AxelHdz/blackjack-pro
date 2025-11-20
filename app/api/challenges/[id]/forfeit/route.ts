@@ -7,13 +7,12 @@ import { NextResponse, type NextRequest } from "next/server"
 // POST: Forfeit an active challenge (loser triggers this)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } } | { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const supabase = await createClient()
   const admin = createServiceClient()
 
-  const resolvedParams = await Promise.resolve(params as any)
-  const challengeId = resolvedParams.id
+  const challengeId = (await params).id
 
   const {
     data: { user },

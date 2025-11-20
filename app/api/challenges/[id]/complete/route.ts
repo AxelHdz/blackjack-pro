@@ -5,7 +5,7 @@ import { type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // POST: Complete challenge (called when timer expires)
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const admin = createServiceClient()
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
-      .eq("id", params.id)
+      .eq("id", (await params).id)
       .single()
 
     if (fetchError || !challenge) {
@@ -49,8 +49,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Challenge expiration missing" }, { status: 400 })
     }
 
-    const challengerCredits = challenge.challenger_credit_balance ?? 0
-    const challengedCredits = challenge.challenged_credit_balance ?? 0
+    const challengerCredits = Math.max(0, challenge.challenger_credit_balance ?? 0)
+    const challengedCredits = Math.max(0, challenge.challenged_credit_balance ?? 0)
 
     let winnerId: string | null = null
     if (challengerCredits > challengedCredits) {

@@ -15,8 +15,8 @@ export default async function Home({
     error,
   } = await supabase.auth.getUser()
 
-  const params = await searchParams
-  const friendId = params.friend
+  const friendParams = await searchParams
+  const friendId = friendParams?.friend
 
   if (error || !user) {
     const redirectUrl = friendId ? `/auth/login?friend=${friendId}` : "/auth/login"

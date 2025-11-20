@@ -42,6 +42,8 @@ import { useToast } from "@/hooks/use-toast"
 import { getXPNeeded, getCashBonusWithCap, getXPPerWin, getXPPerWinWithBet, LEVELING_CONFIG } from "@/lib/leveling-config"
 import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
 import { type Challenge } from "@/types/challenge"
+import { fetchCached } from "@/lib/fetch-cache"
+import { useStatsPersistence } from "@/hooks/use-stats-persistence"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -151,8 +153,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const [isDoubled, setIsDoubled] = useState(false) // Reset doubled flag
   const isDoubledRef = useRef(false) // Ref to track doubled status synchronously
-  const saveStatsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   // Leaderboard state
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
@@ -170,7 +170,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // XP popup state
   const [showXpPopup, setShowXpPopup] = useState(false)
   const xpPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const xpProgressBarRef = useRef<HTMLDivElement>(null)
+  const xpProgressBarRef = useRef<HTMLDivElement | null>(null)
 
   // Helper to close popup and clear timeout
   const closeXpPopup = useCallback(() => {
@@ -346,8 +346,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // Fetch active challenge
   const fetchActiveChallenge = async () => {
     try {
-      const response = await fetch("/api/challenges/active")
-      const data = await response.json()
+      const data = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
       if (data.challenge && data.challenge.status === "active") {
         applyChallengeContext(data.challenge)
         enterChallengeExpertMode()
@@ -401,8 +400,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       if (document.visibilityState === "visible" && !activeChallengeRef.current) {
         // Only poll if we don't have an active challenge (to detect new ones)
-        void fetch("/api/challenges/active")
-          .then((res) => res.json())
+        void fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
           .then((data) => {
             if (data.challenge?.status === "active") {
               applyChallengeContextRef.current(data.challenge)
@@ -683,8 +681,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         // But check for active challenge first - if active, force expert mode
         const savedMode = data.last_play_mode
         let appliedChallengeState = false
-        const challengeResponse = await fetch("/api/challenges/active")
-        const challengeData = await challengeResponse.json()
+        const challengeData = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
         if (challengeData.challenge && challengeData.challenge.status === "active") {
           applyChallengeContext(challengeData.challenge)
           enterChallengeExpertMode()
@@ -698,33 +695,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           setBalance(baseBalance)
         }
 
-        // Load deck from database, or create new one if missing/invalid
+        // Load deck from database, or create new one if missing/invalid (without writing during read)
         if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
-          // Validate deck structure (check if it has valid card objects)
-          const isValidDeck = data.deck.every(
-            (card: any) => card && typeof card === "object" && card.suit && card.rank
-          )
-          if (isValidDeck) {
-            setDeck(data.deck as CardType[])
-          } else {
-            // Invalid deck structure, create new one and save it
-            const newDeck = createDeck()
-            setDeck(newDeck)
-            // Save the new deck immediately
-            await supabase
-              .from("game_stats")
-              .update({ deck: newDeck })
-              .eq("user_id", userId)
-          }
+          const isValidDeck = data.deck.every((card: any) => card && typeof card === "object" && card.suit && card.rank)
+          setDeck(isValidDeck ? (data.deck as CardType[]) : createDeck())
         } else {
-          // No deck in database, create new one and save it
-          const newDeck = createDeck()
-          setDeck(newDeck)
-          // Save the new deck immediately
-          await supabase
-            .from("game_stats")
-            .update({ deck: newDeck })
-            .eq("user_id", userId)
+          setDeck(createDeck())
         }
 
         setModeStats({
@@ -785,115 +761,32 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }
 
-  const saveUserStats = useCallback(async () => {
-    if (balance === null) return // Require a loaded balance; allow saving during challenges for stats-only updates
-
-    try {
-      const moneyFields = activeChallenge
-        ? {}
-        : {
-            total_money: Math.floor(balance),
-            total_winnings: Math.floor(totalWinnings),
-            level_winnings: Math.floor(levelWinnings),
-          }
-
-      const { error } = await supabase
-        .from("game_stats")
-        .update({
-          level: Math.floor(level),
-          experience: Math.floor(xp),
-          hands_played: Math.floor(handsPlayed),
-          correct_moves: Math.floor(correctMoves),
-          total_moves: Math.floor(totalMoves),
-          wins: Math.floor(wins),
-          losses: Math.floor(losses),
-          drill_tier: Math.floor(drillTier),
-          last_drill_completed_at: lastDrillCompletedAt?.toISOString() || null,
-          learning_hands_played: Math.floor(modeStats.guided.handsPlayed),
-          learning_correct_moves: Math.floor(modeStats.guided.correctMoves),
-          learning_total_moves: Math.floor(modeStats.guided.totalMoves),
-          learning_wins: Math.floor(modeStats.guided.wins),
-          learning_losses: Math.floor(modeStats.guided.losses),
-          practice_hands_played: Math.floor(modeStats.practice.handsPlayed),
-          practice_correct_moves: Math.floor(modeStats.practice.correctMoves),
-          practice_total_moves: Math.floor(modeStats.practice.totalMoves),
-          practice_wins: Math.floor(modeStats.practice.wins),
-          practice_losses: Math.floor(modeStats.practice.losses),
-          expert_hands_played: Math.floor(modeStats.expert.handsPlayed),
-          expert_correct_moves: Math.floor(modeStats.expert.correctMoves),
-          expert_total_moves: Math.floor(modeStats.expert.totalMoves),
-          expert_wins: Math.floor(modeStats.expert.wins),
-          expert_losses: Math.floor(modeStats.expert.losses),
-          last_play_mode: learningMode,
-          deck: deck, // Save deck state to database
-          updated_at: new Date().toISOString(),
-          ...moneyFields,
-        })
-        .eq("user_id", userId)
-
-      if (error) {
-        console.error("[v0] Error saving stats:", error)
-      }
-    } catch (err) {
-      console.error("[v0] Error in saveUserStats:", err)
-    }
-  }, [
-    activeChallenge,
-    balance,
-    correctMoves,
-    deck,
-    drillTier,
-    lastDrillCompletedAt,
-    handsPlayed,
-    learningMode,
-    level,
-    levelWinnings,
-    losses,
-    modeStats,
+  const { saveUserStats } = useStatsPersistence({
     supabase,
-    totalMoves,
-    totalWinnings,
     userId,
-    wins,
-    xp,
-  ])
-
-  useEffect(() => {
-    if (!statsLoaded || balance === null) return
-
-    if (saveStatsTimeoutRef.current) {
-      clearTimeout(saveStatsTimeoutRef.current)
-    }
-
-    saveStatsTimeoutRef.current = setTimeout(() => {
-      saveStatsTimeoutRef.current = null
-      void saveUserStats()
-    }, 750)
-
-    return () => {
-      if (saveStatsTimeoutRef.current) {
-        clearTimeout(saveStatsTimeoutRef.current)
-        saveStatsTimeoutRef.current = null
-      }
-    }
-  }, [
     activeChallenge,
-    balance,
-    correctMoves,
-    deck,
-    handsPlayed,
-    learningMode,
-    level,
-    levelWinnings,
-    losses,
-    modeStats,
-    saveUserStats,
+    roundResult,
     statsLoaded,
-    totalMoves,
-    totalWinnings,
-    wins,
-    xp,
-  ])
+    deps: {
+      balance,
+      totalWinnings,
+      levelWinnings,
+      level,
+      xp,
+      handsPlayed,
+      correctMoves,
+      totalMoves,
+      wins,
+      losses,
+      drillTier,
+      lastDrillCompletedAt,
+      modeStats,
+      learningMode,
+      deck,
+      userId,
+      activeChallenge,
+    },
+  })
 
   // Check for 24-hour tier reset when returning to home screen
   useEffect(() => {

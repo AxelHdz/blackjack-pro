@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Swords, Clock, DollarSign, X, CheckCircle } from "lucide-react"
 import { type Challenge } from "@/types/challenge"
@@ -64,20 +64,10 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
     return () => window.removeEventListener("challenge:progress", handleChallengeProgress as EventListener)
   }, [challenge])
 
-  // Poll for updates when challenge is active (not completed)
-  useEffect(() => {
-    if (!challenge || challenge.status !== "active") return
-
-    // Fetch immediately
-    void fetchActiveChallenge()
-
-    // Then poll every 2 seconds
-    const interval = setInterval(() => {
-      void fetchActiveChallenge()
-    }, 2000)
-
-    return () => clearInterval(interval)
-  }, [challenge?.status, challenge?.id, fetchActiveChallenge])
+  // No polling needed - challenge updates come via:
+  // 1. challenge:progress event (already handled above)
+  // 2. Props updates from parent component
+  // 3. Timer expiration triggers completion check
 
   useEffect(() => {
     // Only show timer for active challenges

@@ -158,35 +158,26 @@ export function ChallengeModal({
     return () => clearInterval(interval)
   }, [challenge, liveChallenge])
 
-  // Poll challenge while active to auto-refresh into results
+  // Listen for challenge completion via events instead of polling
+  // The timer countdown will handle expiration, and challenge:progress events handle updates
   useEffect(() => {
-    const currentChallenge = liveChallenge ?? challenge
-    if (!open || !currentChallenge || currentChallenge.status !== "active") return
+    if (!open) return
 
-    let cancelled = false
-
-    const pollChallenge = async () => {
-      try {
-        const response = await fetch(`/api/challenges/${currentChallenge.id}`)
-        if (!response.ok) return
-        const latest = await response.json()
-        if (cancelled || !latest) return
-        if (latest.status && (latest.status === "completed" || latest.status === "cancelled")) {
-          setLiveChallenge(latest as Challenge)
+    const handleChallengeProgress = (event: Event) => {
+      const detail = (event as CustomEvent<Challenge | null>).detail
+      if (!detail) return
+      const currentChallenge = liveChallenge ?? challenge
+      if (currentChallenge && detail.id === currentChallenge.id) {
+        if (detail.status === "completed" || detail.status === "cancelled") {
+          setLiveChallenge(detail)
           setMode("results")
           onChallengeUpdated?.()
         }
-      } catch (err) {
-        console.error("[ChallengeModal] Failed to poll challenge:", err)
       }
     }
 
-    pollChallenge()
-    const interval = setInterval(pollChallenge, 2000)
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
+    window.addEventListener("challenge:progress", handleChallengeProgress as EventListener)
+    return () => window.removeEventListener("challenge:progress", handleChallengeProgress as EventListener)
   }, [open, challenge, liveChallenge, onChallengeUpdated])
 
   const currentChallenge = liveChallenge ?? challenge

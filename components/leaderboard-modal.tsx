@@ -83,8 +83,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     void loadLeaderboard(true, scopeToUse, metricToUse)
     void loadFriends()
     void loadFriendRequests()
-    void loadUserProfile()
-    void loadUserBalance()
+    void loadUserProfile() // Combined function - loads both profile and balance
     void loadBlockingChallenge()
   }, [open])
 
@@ -141,6 +140,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     }
   }
 
+  // Combined function to fetch user profile data once instead of twice
   const loadUserProfile = async () => {
     try {
       const response = await fetch("/api/me/profile")
@@ -148,20 +148,11 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       if (data.profile?.display_name) {
         setUserDisplayName(data.profile.display_name)
       }
-    } catch (error) {
-      console.error("[v0] Failed to load user profile:", error)
-    }
-  }
-
-  const loadUserBalance = async () => {
-    try {
-      const response = await fetch("/api/me/profile")
-      const data = await response.json()
       if (data.stats?.total_money !== undefined) {
         setUserBalance(data.stats.total_money)
       }
     } catch (error) {
-      console.error("[v0] Failed to load user balance:", error)
+      console.error("[v0] Failed to load user profile:", error)
     }
   }
 

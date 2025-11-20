@@ -6,6 +6,9 @@ import { ChallengeChip } from "@/components/challenge-chip"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
 
+// Module-level guard to prevent duplicate fetches in React Strict Mode
+let isInitialFetchInProgress = false
+
 interface LeaderboardChipProps {
   onClick: () => void
   metric: "balance" | "level"
@@ -78,11 +81,25 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     }
   }, [])
 
+  // Initial fetch on mount only - with module-level guard to prevent duplicates in React Strict Mode
   useEffect(() => {
+    if (isInitialFetchInProgress) return
+    isInitialFetchInProgress = true
+    
+    // Reset guard after a short delay to allow for legitimate re-fetches
+    const timeoutId = setTimeout(() => {
+      isInitialFetchInProgress = false
+    }, 1000)
+    
     void fetchRank()
     void fetchChallenge()
     void fetchUserBalance()
-  }, [fetchRank, fetchChallenge, fetchUserBalance])
+    
+    return () => {
+      clearTimeout(timeoutId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run once on mount
 
   useEffect(() => {
     const handleChallengeProgress = (event: Event) => {
@@ -97,21 +114,39 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     return () => window.removeEventListener("challenge:progress", handleChallengeProgress as EventListener)
   }, [challenge])
 
+  // Smart polling: only when page becomes visible (to detect new challenges)
+  // Challenge updates are handled via the challenge:progress event system
+  const fetchChallengeRef = useRef(fetchChallenge)
+  const challengeRef = useRef(challenge)
+  
   useEffect(() => {
-    const getPollInterval = () => {
-      if (!challenge) return 3000
-      if (challenge.status === "active") return 2000
-      if (challenge.status === "pending") return 2000
-      if (challenge.status === "completed") return 10000
-      return 3000
+    fetchChallengeRef.current = fetchChallenge
+  }, [fetchChallenge])
+
+  useEffect(() => {
+    challengeRef.current = challenge
+  }, [challenge])
+
+  useEffect(() => {
+    let isInitialMount = true
+
+    const handleVisibilityChange = () => {
+      // Skip the first visibility change (happens on mount)
+      if (isInitialMount) {
+        isInitialMount = false
+        return
+      }
+
+      // Only poll when page becomes visible and we don't have a challenge
+      // This detects new challenges if user was away
+      if (document.visibilityState === "visible" && !challengeRef.current) {
+        void fetchChallengeRef.current()
+      }
     }
 
-    const interval = setInterval(() => {
-      void fetchChallenge()
-    }, getPollInterval())
-
-    return () => clearInterval(interval)
-  }, [challenge?.status, challenge?.id, fetchChallenge])
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, []) // Only set up once, use refs for current values
 
   const handleChallengeChipClick = () => {
     if (challenge) {

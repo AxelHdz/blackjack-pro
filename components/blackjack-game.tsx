@@ -191,8 +191,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   useEffect(() => {
-    loadUserStats()
-    fetchActiveChallenge()
+    loadUserStats() // This already fetches active challenge, no need for separate fetchActiveChallenge()
   }, [userId])
 
   const learningModeRef = useRef<LearningMode>("guided")
@@ -300,8 +299,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setShowChallengeResultModal(false)
     setCompletedChallengeResult(null)
     applyChallengeContext(null)
-    void loadUserStats()
-    void fetchActiveChallenge()
+    void loadUserStats() // This already fetches active challenge
   }
 
   const syncChallengeProgress = useCallback(
@@ -361,46 +359,63 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }
 
-  // Keep challenge state fresh and auto-enter Expert mode when an active challenge begins
+  // Smart challenge polling: only when needed
+  // - Initial fetch on mount
+  // - When page becomes visible (user returns to tab)
+  // - After user actions (hand completion syncs progress already)
+  const applyChallengeContextRef = useRef(applyChallengeContext)
+  const updateActiveChallengeStateRef = useRef(updateActiveChallengeState)
+  const enterChallengeExpertModeRef = useRef(enterChallengeExpertMode)
+  const activeChallengeRef = useRef(activeChallenge)
+
   useEffect(() => {
-    let cancelled = false
+    applyChallengeContextRef.current = applyChallengeContext
+  }, [applyChallengeContext])
 
-    const pollActiveChallenge = async () => {
-      try {
-        const response = await fetch("/api/challenges/active")
-        if (!response.ok) return
-        const data = await response.json()
-        const serverActive: Challenge | null =
-          data.challenge && data.challenge.status === "active" ? data.challenge : null
+  useEffect(() => {
+    updateActiveChallengeStateRef.current = updateActiveChallengeState
+  }, [updateActiveChallengeState])
 
-        if (!serverActive || cancelled) return
-        if (!activeChallenge) {
-          applyChallengeContext(serverActive)
-          enterChallengeExpertMode()
-          return
-        }
+  useEffect(() => {
+    enterChallengeExpertModeRef.current = enterChallengeExpertMode
+  }, [enterChallengeExpertMode])
 
-        if (activeChallenge && serverActive.id === activeChallenge.id) {
-          updateActiveChallengeState(serverActive)
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("[v0] Failed to poll active challenge:", error)
-        }
+  useEffect(() => {
+    activeChallengeRef.current = activeChallenge
+  }, [activeChallenge])
+
+  // Note: Active challenge is already fetched in loadUserStats() on mount
+  // No need for duplicate fetch here
+
+  // Poll when page becomes visible (user returns to tab)
+  // Skip initial visibility check to avoid duplicate fetch on mount
+  useEffect(() => {
+    let isInitialMount = true
+
+    const handleVisibilityChange = () => {
+      // Skip the first visibility change (happens on mount)
+      if (isInitialMount) {
+        isInitialMount = false
+        return
+      }
+
+      if (document.visibilityState === "visible" && !activeChallengeRef.current) {
+        // Only poll if we don't have an active challenge (to detect new ones)
+        void fetch("/api/challenges/active")
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.challenge?.status === "active") {
+              applyChallengeContextRef.current(data.challenge)
+              enterChallengeExpertModeRef.current()
+            }
+          })
+          .catch((err) => console.error("[v0] Failed to fetch challenge on visibility:", err))
       }
     }
 
-    // Quick initial check so newly-started challenges are applied immediately
-    void pollActiveChallenge()
-    const interval = setInterval(() => {
-      void pollActiveChallenge()
-    }, activeChallenge ? 6000 : 2500)
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [activeChallenge, applyChallengeContext, updateActiveChallengeState])
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
+  }, [])
 
   // Poll challenge completion
   useEffect(() => {
@@ -479,8 +494,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
             applyChallengeContext(null)
             setChallengeTimeRemaining(null)
-            void loadUserStats()
-            void fetchActiveChallenge()
+            void loadUserStats() // This already fetches active challenge
           }
         } catch (error) {
           console.error("[v0] Failed to complete challenge:", error)

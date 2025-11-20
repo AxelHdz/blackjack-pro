@@ -47,27 +47,6 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
   const streakRequired = getStreakRequired(currentTier)
   const rewardAmount = getReward(currentTier)
 
-  useEffect(() => {
-    generateNewHand()
-  }, [])
-
-  useEffect(() => {
-    if (drillComplete || drillFailed || isLoading) return
-
-    const timer = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer)
-          setDrillFailed(true)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [drillComplete, drillFailed, isLoading])
-
   const generateNewHand = () => {
     let attempts = 0
     let playerCard1: Card
@@ -98,6 +77,27 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
     setIsLoading(false)
     setAnswerStartTime(Date.now())
   }
+
+  useEffect(() => {
+    generateNewHand()
+  }, [])
+
+  useEffect(() => {
+    if (drillComplete || drillFailed || isLoading) return
+
+    const timer = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          setDrillFailed(true)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [drillComplete, drillFailed, isLoading])
 
   const handleActionSelect = (action: GameAction) => {
     const answerTime = Date.now() - answerStartTime

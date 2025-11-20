@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast"
 import { getXPNeeded, getCashBonusWithCap, getXPPerWin, getXPPerWinWithBet, LEVELING_CONFIG } from "@/lib/leveling-config"
 import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
 import { type Challenge } from "@/types/challenge"
+import { fetchCached } from "@/lib/fetch-cache"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -170,7 +171,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // XP popup state
   const [showXpPopup, setShowXpPopup] = useState(false)
   const xpPopupTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const xpProgressBarRef = useRef<HTMLDivElement>(null)
+  const xpProgressBarRef = useRef<HTMLDivElement | null>(null)
 
   // Helper to close popup and clear timeout
   const closeXpPopup = useCallback(() => {
@@ -346,8 +347,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // Fetch active challenge
   const fetchActiveChallenge = async () => {
     try {
-      const response = await fetch("/api/challenges/active")
-      const data = await response.json()
+      const data = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
       if (data.challenge && data.challenge.status === "active") {
         applyChallengeContext(data.challenge)
         enterChallengeExpertMode()
@@ -401,8 +401,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       if (document.visibilityState === "visible" && !activeChallengeRef.current) {
         // Only poll if we don't have an active challenge (to detect new ones)
-        void fetch("/api/challenges/active")
-          .then((res) => res.json())
+        void fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
           .then((data) => {
             if (data.challenge?.status === "active") {
               applyChallengeContextRef.current(data.challenge)
@@ -683,8 +682,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         // But check for active challenge first - if active, force expert mode
         const savedMode = data.last_play_mode
         let appliedChallengeState = false
-        const challengeResponse = await fetch("/api/challenges/active")
-        const challengeData = await challengeResponse.json()
+        const challengeData = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
         if (challengeData.challenge && challengeData.challenge.status === "active") {
           applyChallengeContext(challengeData.challenge)
           enterChallengeExpertMode()

@@ -5,7 +5,7 @@ import { type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // POST: Complete challenge (called when timer expires)
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const admin = createServiceClient()
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
-      .eq("id", params.id)
+      .eq("id", (await params).id)
       .single()
 
     if (fetchError || !challenge) {

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Swords, Clock, DollarSign, X, CheckCircle } from "lucide-react"
 import { type Challenge } from "@/types/challenge"
+import { fetchCached } from "@/lib/fetch-cache"
 
 interface ChallengeChipProps {
   challenge: Challenge | null
@@ -17,33 +18,21 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
 
   // Poll for latest challenge data when active
   const fetchActiveChallenge = useCallback(async () => {
-    if (!challenge || challenge.status !== "active") return
+    if (!challenge) return
+    if (challenge.status !== "active") {
+      setCurrentChallenge(challenge)
+      return
+    }
 
     try {
-      const response = await fetch("/api/challenges/active")
-      if (!response.ok) {
-        // Challenge might be completed, use prop data
-        if (challenge.status === "completed") {
-          setCurrentChallenge(challenge)
-        }
-        return
-      }
-      const data = await response.json()
+      const data = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
       if (data.challenge && data.challenge.status === "active") {
         setCurrentChallenge(data.challenge)
       } else if (data.challenge && data.challenge.status === "completed") {
-        // Challenge was just completed, update to completed state
         setCurrentChallenge(data.challenge)
-      } else if (!data.challenge && challenge.status === "completed") {
-        // No active challenge found, but we have a completed one in props
-        setCurrentChallenge(challenge)
       }
     } catch (error) {
       console.error("[v0] Failed to fetch active challenge:", error)
-      // On error, fall back to prop data if it's completed
-      if (challenge.status === "completed") {
-        setCurrentChallenge(challenge)
-      }
     }
   }, [challenge])
 

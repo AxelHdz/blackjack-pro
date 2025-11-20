@@ -5,12 +5,16 @@
       "dom.iterable",
       "esnext"
     ],
-    "allowJs": true,
+    "allowJs": false,
     "target": "ES6",
+    // Third-party packages (React 19 canary, Next 16, Radix) currently ship type definitions
+    // that are noisy under full library checking. Keep app code strict while skipping lib checks.
     "skipLibCheck": true,
     "strict": true,
+    "noImplicitAny": true,
     "noEmit": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,

@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service"
 import { formatChallengeResponse, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const admin = createServiceClient()
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
-      .eq("id", params.id)
+      .eq("id", (await params).id)
       .single()
 
     if (fetchError || !challenge) {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const { data: updatedChallenge, error: updateError } = await admin
       .from("challenges")
       .update(updates)
-      .eq("id", params.id)
+      .eq("id", (await params).id)
       .select("*")
       .single()
 

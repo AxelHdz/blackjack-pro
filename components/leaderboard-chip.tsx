@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { ChallengeChip } from "@/components/challenge-chip"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
+import { fetchCached } from "@/lib/fetch-cache"
 
 // Module-level guard to prevent duplicate fetches in React Strict Mode
 let isInitialFetchInProgress = false
@@ -31,9 +32,8 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
   const fetchRank = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/me/rank?scope=${scope}&metric=${metric}`)
-      const data = await response.json()
-      setRank(data.rank)
+      const data = await fetchCached<{ rank?: number | null }>(`/api/me/rank?scope=${scope}&metric=${metric}`)
+      setRank(typeof data.rank === "number" ? data.rank : null)
     } catch (error) {
       console.error("[v0] Failed to fetch rank:", error)
       setRank(null)
@@ -44,10 +44,9 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
 
   const fetchChallenge = useCallback(async () => {
     try {
-      const response = await fetch(
+      const data = await fetchCached<{ challenges?: Challenge[] }>(
         `/api/challenges?status=${encodeURIComponent("pending,active,completed,cancelled")}`,
       )
-      const data = await response.json()
       if (!data.challenges || data.challenges.length === 0) {
         setChallenge(null)
         return
@@ -71,8 +70,7 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
 
   const fetchUserBalance = useCallback(async () => {
     try {
-      const response = await fetch("/api/me/profile")
-      const data = await response.json()
+      const data = await fetchCached<{ stats?: { total_money?: number } }>("/api/me/profile")
       if (data.stats?.total_money !== undefined) {
         setUserBalance(data.stats.total_money)
       }
@@ -98,7 +96,6 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     return () => {
       clearTimeout(timeoutId)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Only run once on mount
 
   useEffect(() => {

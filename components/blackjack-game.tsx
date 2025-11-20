@@ -1139,7 +1139,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     const dealerPlay = () => {
       const { value: dealerValue, isSoft: dealerIsSoft } = getHandValueInfo(currentDealerHand)
-      const dealerAction = getDealerAction(currentDealerHand, "H17")
+      const dealerAction = getDealerAction(currentDealerHand)
 
       // H17: Hit on soft 17, stand on hard 17+
       if (dealerAction === "stand") {

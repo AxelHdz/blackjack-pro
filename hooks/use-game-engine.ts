@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from "react"
+import { useEffect, useReducer, useCallback } from "react"
 import { calculateHandValue, createDeck, getCardValue, isSoftHand, type Card as CardType } from "@/lib/card-utils"
 import { settle } from "@/lib/settlement"
 import { getOptimalMove, type GameAction } from "@/lib/blackjack-strategy"

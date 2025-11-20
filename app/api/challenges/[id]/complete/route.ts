@@ -49,8 +49,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Challenge expiration missing" }, { status: 400 })
     }
 
-    const challengerCredits = challenge.challenger_credit_balance ?? 0
-    const challengedCredits = challenge.challenged_credit_balance ?? 0
+    const challengerCredits = Math.max(0, challenge.challenger_credit_balance ?? 0)
+    const challengedCredits = Math.max(0, challenge.challenged_credit_balance ?? 0)
 
     let winnerId: string | null = null
     if (challengerCredits > challengedCredits) {

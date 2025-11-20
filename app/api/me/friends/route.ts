@@ -26,7 +26,14 @@ export async function GET() {
     }
 
     const friends = data?.map((f) => f.friend_user_id) || []
-    return NextResponse.json({ friends })
+    return NextResponse.json(
+      { friends },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+        },
+      },
+    )
   } catch (err) {
     console.error("[v0] Friends error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

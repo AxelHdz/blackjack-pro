@@ -695,33 +695,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           setBalance(baseBalance)
         }
 
-        // Load deck from database, or create new one if missing/invalid
+        // Load deck from database, or create new one if missing/invalid (without writing during read)
         if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
-          // Validate deck structure (check if it has valid card objects)
-          const isValidDeck = data.deck.every(
-            (card: any) => card && typeof card === "object" && card.suit && card.rank
-          )
-          if (isValidDeck) {
-            setDeck(data.deck as CardType[])
-          } else {
-            // Invalid deck structure, create new one and save it
-            const newDeck = createDeck()
-            setDeck(newDeck)
-            // Save the new deck immediately
-            await supabase
-              .from("game_stats")
-              .update({ deck: newDeck })
-              .eq("user_id", userId)
-          }
+          const isValidDeck = data.deck.every((card: any) => card && typeof card === "object" && card.suit && card.rank)
+          setDeck(isValidDeck ? (data.deck as CardType[]) : createDeck())
         } else {
-          // No deck in database, create new one and save it
-          const newDeck = createDeck()
-          setDeck(newDeck)
-          // Save the new deck immediately
-          await supabase
-            .from("game_stats")
-            .update({ deck: newDeck })
-            .eq("user_id", userId)
+          setDeck(createDeck())
         }
 
         setModeStats({

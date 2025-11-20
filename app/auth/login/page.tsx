@@ -49,7 +49,7 @@ export default function LoginPage() {
         // Check if the error is due to invalid credentials (user doesn't exist)
         if (
           signInError.message.includes("Invalid login credentials") ||
-          signInError.message.includes("Email not confirmed")
+          signInError.message.includes("Check your email for a confirmation link.")
         ) {
           // Try to create a new account
           const { error: signUpError } = await supabase.auth.signUp({

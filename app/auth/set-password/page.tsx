@@ -22,28 +22,40 @@ function SetPasswordContent() {
   const friendId = searchParams.get("friend")
 
   // Check if user is authenticated
+  // When arriving from the callback route, the user should already be logged in
   useEffect(() => {
     let isMounted = true
 
     const checkAuth = async () => {
+      // Try to get the user - if coming from callback route, they should already be logged in
       const {
         data: { user },
+        error,
       } = await supabase.auth.getUser()
 
       if (!isMounted) return
 
       if (!user) {
-        // Not authenticated, redirect to login
-        const errorMessage = "You must be signed in to set a password. Please use the magic link from your email."
-        const redirectPath = friendId
-          ? `/auth/login?error=${encodeURIComponent(errorMessage)}&friend=${friendId}`
-          : `/auth/login?error=${encodeURIComponent(errorMessage)}`
-        setIsAuthenticated(false)
-        router.push(redirectPath)
-        return
+        // If no user, try getting session as fallback (in case getUser() hasn't synced yet)
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (!session && isMounted) {
+          // Not authenticated, redirect to login
+          const errorMessage = "You must be signed in to set a password. Please use the confirmation link from your email."
+          const redirectPath = friendId
+            ? `/auth/login?error=${encodeURIComponent(errorMessage)}&friend=${friendId}`
+            : `/auth/login?error=${encodeURIComponent(errorMessage)}`
+          setIsAuthenticated(false)
+          router.push(redirectPath)
+          return
+        }
       }
 
-      setIsAuthenticated(true)
+      if (isMounted) {
+        setIsAuthenticated(true)
+      }
     }
 
     checkAuth()

@@ -50,8 +50,9 @@ export async function GET(request: Request) {
   }
 
   // Exchange code for session (works for OAuth, magic links, and email confirmation)
+  // This automatically creates a session and stores it in cookies via the server client
   const supabase = await createClient()
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+  const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
   
   if (exchangeError) {
     console.error("Session exchange error:", exchangeError)
@@ -62,6 +63,19 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
 
+  // Verify session was created successfully
+  if (!data.session) {
+    console.error("Session exchange succeeded but no session was returned")
+    const friendlyMessage = "Failed to create session. Please try again."
+    const redirectPath = friendId 
+      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${friendId}` 
+      : `/auth/login?error=${encodeURIComponent(friendlyMessage)}`
+    return NextResponse.redirect(`${origin}${redirectPath}`)
+  }
+
+  // Session is now stored in cookies via the server client's setAll callback
+  // The user is automatically logged in at this point
+
   // Check if user wants to set password
   if (setPassword === "true") {
     const redirectPath = friendId
@@ -70,7 +84,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
 
-  // Normal redirect to home
+  // Normal redirect to home - user is now logged in
   const redirectPath = friendId ? `/?friend=${friendId}` : "/"
   return NextResponse.redirect(`${origin}${redirectPath}`)
 }

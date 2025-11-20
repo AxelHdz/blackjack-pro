@@ -15,6 +15,7 @@ import {
   getCardValue,
   isSoftHand,
 } from "@/lib/card-utils"
+import { getDealerAction } from "@/lib/dealer-rules"
 import {
   Lightbulb,
   X,
@@ -1137,11 +1138,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     )
 
     const dealerPlay = () => {
-      const dealerValue = calculateHandValue(currentDealerHand)
-      const dealerIsSoft = isSoftHand(currentDealerHand)
+      const { value: dealerValue, isSoft: dealerIsSoft } = getHandValueInfo(currentDealerHand)
+      const dealerAction = getDealerAction(currentDealerHand, "H17")
 
       // H17: Hit on soft 17, stand on hard 17+
-      if (dealerValue > 17 || (dealerValue === 17 && !dealerIsSoft)) {
+      if (dealerAction === "stand") {
         console.log("[v0] Dealer finished (H17 rule), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: STAND")
         if (isSplit) {
           finishSplitHand(firstHandCards, playerHand, currentDealerHand)

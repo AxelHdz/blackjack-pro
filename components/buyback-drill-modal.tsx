@@ -151,6 +151,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
     setNotCountedReason(reason)
     setShowFeedback(true)
 
+    // Faster hand-to-hand transition for snappier drills
     setTimeout(() => {
       if (correct && !drillComplete) {
         generateNewHand()
@@ -158,7 +159,7 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
       } else if (!correct) {
         setDrillFailed(true)
       }
-    }, 1500)
+    }, 600)
   }
 
   const handleSuccess = () => {

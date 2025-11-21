@@ -42,11 +42,19 @@ export async function GET(request: NextRequest) {
     // Count users with better stats
     if (metric === "balance") {
       query = query.or(
-        `total_money.gt.${userStats.total_money},and(total_money.eq.${userStats.total_money},level.gt.${userStats.level})`,
+        [
+          `total_money.gt.${userStats.total_money}`,
+          `and(total_money.eq.${userStats.total_money},level.gt.${userStats.level})`,
+          `and(total_money.eq.${userStats.total_money},level.eq.${userStats.level},user_id.lt.${user.id})`,
+        ].join(","),
       )
     } else {
       query = query.or(
-        `level.gt.${userStats.level},and(level.eq.${userStats.level},total_money.gt.${userStats.total_money})`,
+        [
+          `level.gt.${userStats.level}`,
+          `and(level.eq.${userStats.level},total_money.gt.${userStats.total_money})`,
+          `and(level.eq.${userStats.level},total_money.eq.${userStats.total_money},user_id.lt.${user.id})`,
+        ].join(","),
       )
     }
 

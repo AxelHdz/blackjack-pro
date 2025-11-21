@@ -5,10 +5,10 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { ChallengeChip } from "@/components/challenge-chip"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
-import { fetchCached } from "@/lib/fetch-cache"
+import { fetchCached, bustFetchCache } from "@/lib/fetch-cache"
 
 // Module-level guard to prevent duplicate fetches in React Strict Mode
-let isInitialFetchInProgress = false
+let hasInitialFetchRun = false
 
 interface LeaderboardChipProps {
   onClick: () => void
@@ -22,17 +22,22 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
   const [loading, setLoading] = useState(true)
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [showChallengeModal, setShowChallengeModal] = useState(false)
-  const [userBalance, setUserBalance] = useState<number>(0)
+  const [userBalance, setUserBalance] = useState<number | null>(null)
   const dismissedChallengeIdRef = useRef<string | null>(null)
 
   const dismissChallenge = (id: string | null) => {
     dismissedChallengeIdRef.current = id
   }
 
-  const fetchRank = useCallback(async () => {
+  const fetchRank = useCallback(async (force = false) => {
     try {
       setLoading(true)
-      const data = await fetchCached<{ rank?: number | null }>(`/api/me/rank?scope=${scope}&metric=${metric}`)
+      const url = `/api/me/rank?scope=${scope}&metric=${metric}`
+      if (force) {
+        bustFetchCache(url)
+      }
+      const res = await fetch(url, { cache: "no-store" })
+      const data = await res.json().catch(() => ({}))
       setRank(typeof data.rank === "number" ? data.rank : null)
     } catch (error) {
       console.error("[v0] Failed to fetch rank:", error)
@@ -111,21 +116,14 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
 
   // Initial fetch on mount only - with module-level guard to prevent duplicates in React Strict Mode
   useEffect(() => {
-    if (isInitialFetchInProgress) return
-    isInitialFetchInProgress = true
-    
-    // Reset guard after a short delay to allow for legitimate re-fetches
-    const timeoutId = setTimeout(() => {
-      isInitialFetchInProgress = false
-    }, 1000)
+    if (hasInitialFetchRun) return
+    hasInitialFetchRun = true
     
     void fetchRank()
     void fetchChallenge()
     void fetchUserBalance()
     
-    return () => {
-      clearTimeout(timeoutId)
-    }
+    return () => {}
   }, []) // Only run once on mount
 
   useEffect(() => {
@@ -140,6 +138,23 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     window.addEventListener("challenge:progress", handleChallengeProgress as EventListener)
     return () => window.removeEventListener("challenge:progress", handleChallengeProgress as EventListener)
   }, [challenge])
+
+  useEffect(() => {
+    const handleStatsUpdate = () => {
+      void fetchRank(true)
+      void fetchUserBalance()
+    }
+    window.addEventListener("stats:update", handleStatsUpdate)
+    return () => window.removeEventListener("stats:update", handleStatsUpdate)
+  }, [fetchRank, fetchUserBalance])
+
+  useEffect(() => {
+    const handleRankRefresh = () => {
+      void fetchRank(true)
+    }
+    window.addEventListener("rank:refresh", handleRankRefresh)
+    return () => window.removeEventListener("rank:refresh", handleRankRefresh)
+  }, [fetchRank])
 
   // Smart polling: only when page becomes visible (to detect new challenges)
   // Challenge updates are handled via the challenge:progress event system
@@ -182,6 +197,11 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     }
   }
 
+  // Re-fetch rank when metric/scope toggles
+  useEffect(() => {
+    void fetchRank()
+  }, [metric, scope, fetchRank])
+
   return (
     <div className="flex flex-col gap-2 items-center">
       <button
@@ -211,7 +231,7 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
           onOpenChange={setShowChallengeModal}
           challenge={challenge}
           userId={userId}
-          userBalance={userBalance}
+          userBalance={userBalance ?? 0}
           onChallengeUpdated={() => {
             void fetchChallenge()
             void fetchUserBalance()

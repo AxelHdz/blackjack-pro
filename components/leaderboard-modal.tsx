@@ -12,7 +12,7 @@ import { UsernameEditor } from "@/components/username-editor"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
 import { cn } from "@/lib/utils"
-import { fetchCached } from "@/lib/fetch-cache"
+import { fetchCached, bustFetchCache } from "@/lib/fetch-cache"
 
 interface LeaderboardEntry {
   userId: string
@@ -81,27 +81,38 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       setMetric(savedMetric)
     }
 
-    void loadLeaderboard(true, scopeToUse, metricToUse)
+    void loadLeaderboard(true, scopeToUse, metricToUse, true)
     void loadFriends()
     void loadFriendRequests()
     void loadUserProfile() // Combined function - loads both profile and balance
     void loadBlockingChallenge()
   }, [open])
 
+  const scopeRef = useRef(scope)
+  const metricRef = useRef(metric)
+
+  useEffect(() => {
+    scopeRef.current = scope
+    metricRef.current = metric
+  }, [scope, metric])
+
   const loadLeaderboard = async (
     reset = false,
     scopeOverride?: "global" | "friends",
     metricOverride?: "balance" | "level",
+    force = false,
   ) => {
     try {
       setLoading(true)
       const scopeToUse = scopeOverride ?? scope
       const metricToUse = metricOverride ?? metric
       const cursor = reset ? null : nextCursor
-      const data = await fetchCached<{
-        entries: LeaderboardEntry[]
-        nextCursor: string | null
-      }>(`/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`)
+      const url = `/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`
+      if (force) {
+        bustFetchCache(url)
+      }
+      const res = await fetch(url, { cache: "no-store" })
+      const data = (await res.json()) as { entries: LeaderboardEntry[]; nextCursor: string | null }
 
       if (reset) {
         setEntries(data.entries)
@@ -155,6 +166,19 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       console.error("[v0] Failed to load user profile:", error)
     }
   }
+
+  useEffect(() => {
+    const handleStatsOrRank = () => {
+      if (!open) return
+      void loadLeaderboard(true, scopeRef.current, metricRef.current, true)
+    }
+    window.addEventListener("stats:update", handleStatsOrRank)
+    window.addEventListener("rank:refresh", handleStatsOrRank)
+    return () => {
+      window.removeEventListener("stats:update", handleStatsOrRank)
+      window.removeEventListener("rank:refresh", handleStatsOrRank)
+    }
+  }, [open, loadLeaderboard])
 
   const loadBlockingChallenge = async () => {
     try {

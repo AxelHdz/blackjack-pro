@@ -16,6 +16,15 @@ import {
   isSoftHand,
 } from "@/lib/card-utils"
 import {
+  dealCard,
+  dealerShouldHitH17,
+  ensureDeckHasCards,
+  resolveSingleHand,
+  resolveSplitHands,
+  type SingleHandResolution,
+  type SplitHandResolution,
+} from "@/lib/game-engine"
+import {
   Lightbulb,
   X,
   GraduationCap,
@@ -45,6 +54,7 @@ import { type Challenge } from "@/types/challenge"
 import { fetchCached } from "@/lib/fetch-cache"
 import { useStatsPersistence } from "@/hooks/use-stats-persistence"
 import { useChallenge } from "@/contexts/challenge-context"
+import { useGameEngine } from "@/hooks/use-game-engine"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -73,31 +83,36 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const [statsLoaded, setStatsLoaded] = useState(false)
 
-  const [deck, setDeck] = useState<CardType[]>([])
-  const [playerHand, setPlayerHand] = useState<CardType[]>([])
-  const [dealerHand, setDealerHand] = useState<CardType[]>([])
-  const [gameState, setGameState] = useState<"betting" | "playing" | "dealer" | "finished">("betting")
   const [currentBet, setCurrentBet] = useState(0)
   const [balance, setBalance] = useState<number | null>(null)
   const [totalWinnings, setTotalWinnings] = useState(0)
   const [levelWinnings, setLevelWinnings] = useState(0)
   const [handsPlayed, setHandsPlayed] = useState(0)
   const [showHint, setShowHint] = useState(true)
-  const [message, setMessage] = useState("")
-  const [dealerRevealed, setDealerRevealed] = useState(false)
-  const [isDealing, setIsDealing] = useState(false)
-  const [activeBet, setActiveBet] = useState(0)
-  const [initialBet, setInitialBet] = useState(0)
   const [level, setLevel] = useState(1)
   const [xp, setXp] = useState(0)
   // Use a ref to track level for XP calculations to avoid stale closure issues
   const levelRef = useRef(1)
-
-  const [isSplit, setIsSplit] = useState(false)
-  const [splitHand, setSplitHand] = useState<CardType[]>([])
-  const [currentHandIndex, setCurrentHandIndex] = useState(0)
-  const [firstHandResult, setFirstHandResult] = useState<{ value: number; busted: boolean } | null>(null)
-  const [firstHandCards, setFirstHandCards] = useState<CardType[]>([])
+  const { state: engine, patchState, resetRoundState } = useGameEngine()
+  const {
+    deck,
+    playerHand,
+    dealerHand,
+    splitHand,
+    firstHandResult,
+    firstHandCards,
+    gameState,
+    activeBet,
+    initialBet,
+    isSplit,
+    currentHandIndex,
+    dealerRevealed,
+    isDealing,
+    showBustMessage,
+    viewHandIndex,
+    isDoubled,
+    message,
+  } = engine
 
   const [learningMode, setLearningMode] = useState<LearningMode>("guided")
   const [showFeedback, setShowFeedback] = useState(false)
@@ -139,12 +154,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     accuracy: number
   } | null>(null)
 
-  const [showBustMessage, setShowBustMessage] = useState(false)
-
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
-
-  const [viewHandIndex, setViewHandIndex] = useState(0)
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [showBuybackDrill, setShowBuybackDrill] = useState(false)
@@ -152,7 +163,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [lastDrillCompletedAt, setLastDrillCompletedAt] = useState<Date | null>(null) // Track last drill completion timestamp
   const [showFeedbackModal, setShowFeedbackModal] = useState(false) // Track feedback modal visibility
 
-  const [isDoubled, setIsDoubled] = useState(false) // Reset doubled flag
   const isDoubledRef = useRef(false) // Ref to track doubled status synchronously
   // Leaderboard state
   const [showLeaderboard, setShowLeaderboard] = useState(false)
@@ -390,178 +400,56 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // Load user stats - wrapped in useCallback to use in useEffect dependencies
   const loadUserStats = useCallback(async () => {
     try {
-      console.log("[v0] Loading stats for user:", userId)
-      const { data, error } = await supabase.from("game_stats").select("*").eq("user_id", userId).single()
+      console.log("[v0] Loading stats for user via API:", userId)
+      const response = await fetch("/api/me/stats")
+      const result = await response.json()
+      if (!response.ok || !result?.stats) {
+        throw new Error(result?.error || "Failed to load stats")
+      }
 
-      if (error) {
-        console.error("[v0] Error loading stats:", error)
-        if (error.code === "PGRST116") {
-          // No rows found - create initial stats
-          console.log("[v0] No stats found, creating initial stats")
-          const newDeck = createDeck()
-          const { error: insertError } = await supabase.from("game_stats").insert({
-            user_id: userId,
-            total_money: 500,
-            total_winnings: 0,
-            level: 1,
-            experience: 0,
-            hands_played: 0,
-            correct_moves: 0,
-            total_moves: 0,
-            wins: 0,
-            losses: 0,
-            drill_tier: 0,
-            last_drill_completed_at: null,
-            last_play_mode: "guided",
-            learning_hands_played: 0,
-            learning_correct_moves: 0,
-            learning_total_moves: 0,
-            learning_wins: 0,
-            learning_losses: 0,
-            practice_hands_played: 0,
-            practice_correct_moves: 0,
-            practice_total_moves: 0,
-            practice_wins: 0,
-            practice_losses: 0,
-            expert_hands_played: 0,
-            expert_correct_moves: 0,
-            expert_total_moves: 0,
-            expert_wins: 0,
-            expert_losses: 0,
-            deck: newDeck, // Include deck in initial insert
-          })
-
-          if (insertError) {
-            console.error("[v0] Error creating initial stats:", insertError)
-          } else {
-            console.log("[v0] Successfully created initial stats")
-          }
-          
-          // Set default values and mark as loaded
-          setBalance(500)
-          setTotalWinnings(0)
-          setLevelWinnings(0)
-          setLevel(1)
-          levelRef.current = 1
-          setXp(0)
-          setHandsPlayed(0)
-          setCorrectMoves(0)
-          setTotalMoves(0)
-          setWins(0)
-          setLosses(0)
-          setDrillTier(0)
-          setModeStats({
-            guided: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-            practice: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-            expert: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-          })
-          setDeck(newDeck)
-          setStatsLoaded(true)
-          return
+      const data = result.stats
+      const baseBalance = data.total_money ?? 500
+      setTotalWinnings(data.total_winnings ?? 0)
+      setLevelWinnings(data.level_winnings ?? 0)
+      const loadedLevel = data.level ?? 1
+      setLevel(loadedLevel)
+      levelRef.current = loadedLevel
+      setXp(data.experience ?? 0)
+      setHandsPlayed(data.hands_played ?? 0)
+      setCorrectMoves(data.correct_moves ?? 0)
+      setTotalMoves(data.total_moves ?? 0)
+      setWins(data.wins ?? 0)
+      setLosses(data.losses ?? 0)
+      
+      const loadedLastDrillCompletedAt = data.last_drill_completed_at         ? new Date(data.last_drill_completed_at)         : null
+      setLastDrillCompletedAt(loadedLastDrillCompletedAt)
+      
+      const shouldResetTier = loadedLastDrillCompletedAt         ? (Date.now() - loadedLastDrillCompletedAt.getTime()) >= 24 * 60 * 60 * 1000
+        : false
+      
+      if (shouldResetTier) {
+        setDrillTier(0)
+        setLastDrillCompletedAt(null)
+      } else {
+        setDrillTier(data.drill_tier ?? 0)
+      }
+      
+      const savedMode = data.last_play_mode
+      if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
+        if (!contextActiveChallenge || contextActiveChallenge.status !== "active") {
+          setLearningMode(savedMode)
         }
       }
 
-      if (data) {
-        const baseBalance = data.total_money ?? 500
-        setTotalWinnings(data.total_winnings ?? 0)
-        setLevelWinnings(data.level_winnings ?? 0)
-        const loadedLevel = data.level ?? 1
-        setLevel(loadedLevel)
-        levelRef.current = loadedLevel
-        setXp(data.experience ?? 0)
-        setHandsPlayed(data.hands_played ?? 0)
-        setCorrectMoves(data.correct_moves ?? 0)
-        setTotalMoves(data.total_moves ?? 0)
-        setWins(data.wins ?? 0)
-        setLosses(data.losses ?? 0)
-        
-        // Load and check drill tier with 24-hour reset logic
-        const loadedLastDrillCompletedAt = data.last_drill_completed_at 
-          ? new Date(data.last_drill_completed_at) 
-          : null
-        setLastDrillCompletedAt(loadedLastDrillCompletedAt)
-        
-        // Check if 24 hours have passed since last drill completion
-        const shouldResetTier = loadedLastDrillCompletedAt 
-          ? (Date.now() - loadedLastDrillCompletedAt.getTime()) >= 24 * 60 * 60 * 1000
-          : false
-        
-        if (shouldResetTier) {
-          setDrillTier(0) // Reset to tier 1
-          setLastDrillCompletedAt(null) // Reset timestamp
-        } else {
-          setDrillTier(data.drill_tier ?? 0) // Load drill tier
-        }
-        
-        // Load last play mode, defaulting to "guided" if not set or invalid
-        // But check for active challenge first - if active, force expert mode
-        // Active challenge is now provided by context, which will be synced via useEffect
-        const savedMode = data.last_play_mode
-        if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
-          // Only set mode if we don't have an active challenge (context will handle that)
-          if (!contextActiveChallenge || contextActiveChallenge.status !== "active") {
-            setLearningMode(savedMode)
-          }
-        }
+      if (!contextActiveChallenge || contextActiveChallenge.status !== "active") {
+        setBalance(baseBalance)
+      }
 
-        // Only set balance if we don't have an active challenge (challenge sets its own balance)
-        if (!contextActiveChallenge || contextActiveChallenge.status !== "active") {
-          setBalance(baseBalance)
-        }
-
-        // Load deck from database, or create new one if missing/invalid (without writing during read)
-        if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
-          const isValidDeck = data.deck.every((card: any) => card && typeof card === "object" && card.suit && card.rank)
-          setDeck(isValidDeck ? (data.deck as CardType[]) : createDeck())
-        } else {
-          setDeck(createDeck())
-        }
-
-        setModeStats({
-          guided: {
-            handsPlayed: data.learning_hands_played ?? 0,
-            correctMoves: data.learning_correct_moves ?? 0,
-            totalMoves: data.learning_total_moves ?? 0,
-            wins: data.learning_wins ?? 0,
-            losses: data.learning_losses ?? 0,
-          },
-          practice: {
-            handsPlayed: data.practice_hands_played ?? 0,
-            correctMoves: data.practice_correct_moves ?? 0,
-            totalMoves: data.practice_total_moves ?? 0,
-            wins: data.practice_wins ?? 0,
-            losses: data.practice_losses ?? 0,
-          },
-          expert: {
-            handsPlayed: data.expert_hands_played ?? 0,
-            correctMoves: data.expert_correct_moves ?? 0,
-            totalMoves: data.expert_total_moves ?? 0,
-            wins: data.expert_wins ?? 0,
-            losses: data.expert_losses ?? 0,
-          },
-        })
+      if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
+        const isValidDeck = data.deck.every((card: any) => card && typeof card === "object" && card.suit && card.rank)
+        patchState({ deck: isValidDeck ? (data.deck as any) : createDeck() })
       } else {
-        // If no data, initialize with default values and set statsLoaded to true
-        setBalance(500)
-        setTotalWinnings(0)
-        setLevelWinnings(0)
-        setLevel(1)
-        levelRef.current = 1
-        setXp(0)
-        setHandsPlayed(0)
-        setCorrectMoves(0)
-        setTotalMoves(0)
-        setWins(0)
-        setLosses(0)
-        setDrillTier(0) // Initialize drill tier
-        setModeStats({
-          guided: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-          practice: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-          expert: { handsPlayed: 0, correctMoves: 0, totalMoves: 0, wins: 0, losses: 0 },
-        })
-        // Create new deck when no data exists
-        const newDeck = createDeck()
-        setDeck(newDeck)
+        patchState({ deck: createDeck() })
       }
 
       setStatsLoaded(true)
@@ -569,7 +457,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       console.error("[v0] Error in loadUserStats:", err)
       setStatsLoaded(true) // Ensure loading state is updated
     }
-  }, [userId, supabase, contextActiveChallenge, setLearningMode])
+  }, [userId, contextActiveChallenge, setLearningMode, patchState])
 
   useEffect(() => {
     loadUserStats() // This already fetches active challenge via context
@@ -788,7 +676,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // loadUserStats is now defined above as a useCallback
 
   const { saveUserStats } = useStatsPersistence({
-    supabase,
     userId,
     activeChallenge,
     roundResult,
@@ -830,6 +717,33 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }, [gameState, showModeSelector, statsLoaded, lastDrillCompletedAt])
 
+  // When returning to the select play mode screen, force a fresh rank fetch via event
+  useEffect(() => {
+    const prev = { current: gameState }
+  }, [gameState])
+
+  useEffect(() => {
+    const prevStateRef = { current: gameState }
+    return () => {
+      prevStateRef.current = gameState
+    }
+  }, [gameState])
+
+  const prevGameStateRef = useRef(gameState)
+
+  useEffect(() => {
+    if (!statsLoaded) {
+      prevGameStateRef.current = gameState
+      return
+    }
+    if (prevGameStateRef.current !== "betting" && gameState === "betting") {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("rank:refresh"))
+      }
+    }
+    prevGameStateRef.current = gameState
+  }, [gameState, statsLoaded])
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push("/auth/login")
@@ -848,27 +762,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     handleLogout()
   }
 
-  // Helper function to ensure deck has cards, reshuffle if empty
-  const ensureDeckHasCards = (currentDeck: CardType[]): CardType[] => {
-    if (currentDeck.length === 0) {
-      return createDeck()
-    }
-    return currentDeck
-  }
-
-  const dealCard = (hand: CardType[], deckCopy: CardType[]): [CardType[], CardType[]] => {
-    // Ensure deck has cards before dealing
-    const deckWithCards = ensureDeckHasCards(deckCopy)
-    const card = deckWithCards.pop()!
-    return [[...hand, card], deckWithCards]
-  }
-
   const startNewHand = () => {
     if (currentBet === 0) return
     if (balance === null || balance < currentBet) return // Check if balance is loaded and sufficient
 
-    setGameState("playing")
-    setIsDealing(true)
+    patchState({ gameState: "playing", isDealing: true })
     setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
     const betAmount = currentBet
     const newBalance = balance - currentBet
@@ -877,19 +775,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       // Persist challenge credits immediately so polling UIs don't reset to the old value mid-hand
       void syncChallengeProgress(newBalance, pendingChallengeXp)
     }
-    setActiveBet(betAmount)
-    setInitialBet(betAmount)
+    patchState({
+      activeBet: betAmount,
+      initialBet: betAmount,
+      isSplit: false,
+      splitHand: [],
+      currentHandIndex: 0,
+      firstHandResult: null,
+      firstHandCards: [],
+      showBustMessage: false,
+      viewHandIndex: 0,
+      isDoubled: false,
+    })
     setShowFeedback(false)
     setFeedbackData(null)
-    setIsSplit(false)
-    setSplitHand([])
-    setCurrentHandIndex(0)
-    setFirstHandResult(null)
-    setFirstHandCards([])
-    setShowBustMessage(false)
-    setViewHandIndex(0) // Reset view hand index
-    setIsDoubled(false) // Reset doubled flag
-    isDoubledRef.current = false // Reset ref
     isDoubledRef.current = false // Reset ref
 
     let deckCopy = [...deck]
@@ -906,12 +805,14 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       const [newPlayerHand1, deck3] = dealCard([], deck2)
       const [newPlayerHand2, deck4] = dealCard(newPlayerHand1, deck3)
 
-      setDealerHand(newDealerHand2)
-      setPlayerHand(newPlayerHand2)
-      setDeck(deck4)
-      setDealerRevealed(false)
-      setMessage("")
-      setIsDealing(false)
+      patchState({
+        dealerHand: newDealerHand2,
+        playerHand: newPlayerHand2,
+        deck: deck4,
+        dealerRevealed: false,
+        isDealing: false,
+        message: "",
+      })
 
       const dealerUpcard = newDealerHand2[0]
       const dealerUpcardValue = getCardValue(dealerUpcard)
@@ -923,13 +824,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
         if (dealerValue === 21 && newDealerHand2.length === 2) {
           // Dealer has blackjack - resolve immediately
-          setDealerRevealed(true)
+          patchState({ dealerRevealed: true })
 
           if (playerValue === 21 && newPlayerHand2.length === 2) {
             // Both have blackjack - push
             const payout = settle({ result: "push", baseBet: betAmount, isDoubled: false, isBlackjack: true })
             const msg = "Push! Both Have Blackjack"
-            setMessage(msg)
+            patchState({ message: msg })
             setBalance((prev) => (prev !== null ? prev + payout : payout))
             setTotalWinnings((prev) => prev + (payout - betAmount)) // Net change is 0, but track payout
             // levelWinnings doesn't change for push (no net change)
@@ -941,7 +842,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           } else {
             // Dealer wins with blackjack
             const msg = "Dealer Blackjack! You Lose"
-            setMessage(msg)
+            patchState({ message: msg })
             setTotalWinnings((prev) => prev - betAmount)
             setLevelWinnings((prev) => prev - betAmount)
             setRoundResult({
@@ -959,7 +860,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             }))
           }
 
-          setGameState("finished")
+          patchState({ gameState: "finished" })
           setHandsPlayed((prev) => prev + 1)
           setModeStats((prev) => ({
             ...prev,
@@ -985,12 +886,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const playerValue = calculateHandValue(pHand)
 
     if (playerValue === 21 && pHand.length === 2) {
-      setDealerRevealed(true)
+      patchState({ dealerRevealed: true })
       const payout = settle({ result: "win", baseBet: betAmount, isDoubled: false, isBlackjack: true })
       const profit = payout - betAmount
       const msg = "Blackjack! You Win 3:2"
 
-      setMessage(msg)
+      patchState({ message: msg, gameState: "finished" })
       setBalance((prev) => (prev !== null ? prev + payout : payout))
       setTotalWinnings((prev) => prev + profit)
       setLevelWinnings((prev) => prev + profit)
@@ -999,7 +900,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         winAmount: profit,
         newBalance: currentBalance + payout,
       })
-      setGameState("finished")
       // Award XP for blackjack win (scaled by level and bet amount)
       addExperience(getXPPerWinWithBet(level, betAmount))
 
@@ -1079,50 +979,42 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     const deckCopy = ensureDeckHasCards([...deck])
     const [newHand, newDeck] = dealCard(playerHand, deckCopy)
-    setPlayerHand(newHand)
-    setDeck(newDeck)
+    patchState({ playerHand: newHand, deck: newDeck })
 
     const value = calculateHandValue(newHand)
     if (value > 21) {
       if (isSplit && currentHandIndex === 0) {
-        setFirstHandResult({ value, busted: true })
-        setFirstHandCards(newHand)
-        setShowBustMessage(true)
-        setMessage("Hand 1 Busts!")
+        patchState({
+          firstHandResult: { value, busted: true },
+          firstHandCards: newHand,
+          showBustMessage: true,
+          message: "Hand 1 Busts!",
+        })
 
         setTimeout(() => {
-          setShowBustMessage(false)
-          setCurrentHandIndex(1) // Switch to the second hand
-          setPlayerHand(splitHand) // Load the second hand cards
-          setMessage("Playing second hand...")
+          patchState({
+            showBustMessage: false,
+            currentHandIndex: 1,
+            playerHand: splitHand,
+            message: "Playing second hand...",
+          })
         }, 600)
       } else {
-        const msg = "Bust! You Lose"
-        setMessage(msg)
-        setTotalWinnings((prev) => (prev !== null ? prev - activeBet : -activeBet))
-        setRoundResult({
-          message: msg,
+        patchState({ dealerRevealed: true })
+        const bustResolution: SingleHandResolution = {
+          result: "loss",
+          message: "Bust! You Lose",
+          payout: 0,
+          totalBet: activeBet,
           winAmount: -activeBet,
-          newBalance: balance !== null ? balance - activeBet : activeBet, // Fallback if balance is null
-        })
-        setGameState("finished")
-        setDealerRevealed(true)
-        setHandsPlayed((prev) => prev + 1)
-
-        setLosses((prev) => prev + 1)
-        setTotalWinnings((prev) => prev - activeBet)
-        setLevelWinnings((prev) => prev - activeBet)
-        setModeStats((prev) => ({
-          ...prev,
-          [learningMode]: {
-            ...prev[learningMode],
-            handsPlayed: prev[learningMode].handsPlayed + 1,
-            losses: prev[learningMode].losses + 1,
-          },
-        }))
-        setTotalMoves((prev) => prev + 1)
-
-        // No XP awarded for bust (loss)
+          winsDelta: 0,
+          lossesDelta: 1,
+          totalMovesDelta: 1,
+          correctMovesDelta: 0,
+          handsPlayedDelta: 1,
+          xpGain: 0,
+        }
+        applyResolution(bustResolution)
       }
     } else if (value === 21) {
       stand(newHand, true)
@@ -1136,18 +1028,68 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     if (isSplit && currentHandIndex === 0) {
       const handToUse = finalPlayerHand || playerHand
-      setFirstHandCards(handToUse)
-      setFirstHandResult({ value: calculateHandValue(handToUse), busted: false })
-      setCurrentHandIndex(1) // Move to the second hand
-      setPlayerHand(splitHand) // Load the second hand cards for playing
-      setMessage("Playing second hand...")
+      patchState({
+        firstHandCards: handToUse,
+        firstHandResult: { value: calculateHandValue(handToUse), busted: false },
+        currentHandIndex: 1,
+        playerHand: splitHand,
+        message: "Playing second hand...",
+      })
       console.log("[v0] Finished Hand 1, cards:", handToUse, "value:", calculateHandValue(handToUse))
     } else {
-      setGameState("dealer")
-      setDealerRevealed(true)
+      patchState({ gameState: "dealer", dealerRevealed: true })
       const handToUse = finalPlayerHand || playerHand || []
       console.log("[v0] Standing on Hand 2, cards:", handToUse, "value:", calculateHandValue(handToUse))
       playDealerHand(handToUse)
+    }
+  }
+
+  type RoundResolution = SingleHandResolution | SplitHandResolution
+
+  const applyResolution = (resolution: RoundResolution) => {
+    setBalance((prevBalance) => {
+      const nextBalance = prevBalance !== null ? prevBalance + resolution.payout : resolution.payout
+      setRoundResult({
+        message: resolution.message,
+        winAmount: resolution.winAmount,
+        newBalance: nextBalance,
+      })
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("stats:update", { detail: { balance: nextBalance } }))
+      }
+      if (nextBalance === 0) {
+        setTimeout(() => {
+          patchState({ gameState: "betting" })
+          setShowModeSelector(true)
+        }, 2000)
+      }
+      return nextBalance
+    })
+
+    patchState({ message: resolution.message, gameState: "finished" })
+    setHandsPlayed((prev) => prev + resolution.handsPlayedDelta)
+    setWins((prev) => prev + resolution.winsDelta)
+    setLosses((prev) => prev + resolution.lossesDelta)
+    setTotalWinnings((prev) => prev + resolution.winAmount)
+    setLevelWinnings((prev) => prev + resolution.winAmount)
+    setModeStats((prev) => ({
+      ...prev,
+      [learningMode]: {
+        ...prev[learningMode],
+        handsPlayed: prev[learningMode].handsPlayed + resolution.handsPlayedDelta,
+        wins: prev[learningMode].wins + resolution.winsDelta,
+        losses: prev[learningMode].losses + resolution.lossesDelta,
+      },
+    }))
+
+    if (resolution.correctMovesDelta) {
+      setCorrectMoves((prev) => prev + resolution.correctMovesDelta)
+    }
+    if (resolution.totalMovesDelta) {
+      setTotalMoves((prev) => prev + resolution.totalMovesDelta)
+    }
+    if (resolution.xpGain > 0) {
+      addExperience(resolution.xpGain)
     }
   }
 
@@ -1161,14 +1103,21 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       "value:",
       calculateHandValue(finalPlayerHand),
     )
-
     const dealerPlay = () => {
-      const dealerValue = calculateHandValue(currentDealerHand)
-      const dealerIsSoft = isSoftHand(currentDealerHand)
+      const shouldHit = dealerShouldHitH17(currentDealerHand)
 
-      // H17: Hit on soft 17, stand on hard 17+
-      if (dealerValue > 17 || (dealerValue === 17 && !dealerIsSoft)) {
-        console.log("[v0] Dealer finished (H17 rule), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: STAND")
+      if (!shouldHit) {
+        const dealerValue = calculateHandValue(currentDealerHand)
+        const dealerIsSoft = isSoftHand(currentDealerHand)
+        console.log(
+          "[v0] Dealer finished (H17 rule), hand:",
+          currentDealerHand,
+          "value:",
+          dealerValue,
+          "soft:",
+          dealerIsSoft,
+          "action: STAND",
+        )
         if (isSplit) {
           finishSplitHand(firstHandCards, playerHand, currentDealerHand)
         } else {
@@ -1177,22 +1126,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         return
       }
 
-      // H17: Dealer hits on soft 17 or less
-      if (dealerValue === 17 && dealerIsSoft) {
-        console.log("[v0] Dealer hits soft 17 (H17 rule), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: HIT")
-      } else {
-        console.log("[v0] Dealer hits (value < 17), hand:", currentDealerHand, "value:", dealerValue, "soft:", dealerIsSoft, "action: HIT")
-      }
-
-      // Dealer must hit on 16 or less, or soft 17 (H17 rule)
+      console.log("[v0] Dealer hits (H17 rule), hand:", currentDealerHand, "value:", calculateHandValue(currentDealerHand))
       setTimeout(() => {
-        // Ensure deck has cards before dealing
         currentDeck = ensureDeckHasCards(currentDeck)
         const [newHand, newDeck] = dealCard(currentDealerHand, currentDeck)
         currentDealerHand = newHand
         currentDeck = newDeck
-        setDealerHand(newHand)
-        setDeck(newDeck)
+        patchState({ dealerHand: newHand, deck: newDeck })
         dealerPlay()
       }, 400)
     }
@@ -1201,217 +1141,30 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   const finishSplitHand = (firstHandCards: CardType[], secondHandCards: CardType[], finalDealerHand: CardType[]) => {
-    const dealerValue = calculateHandValue(finalDealerHand)
-    const firstHandValue = calculateHandValue(firstHandCards)
-    const secondHandValue = calculateHandValue(secondHandCards)
-
-    console.log("[v0] ===== FINISH SPLIT HAND =====")
-    console.log("[v0] Dealer hand:", finalDealerHand, "Value:", dealerValue)
-    console.log("[v0] First hand cards:", firstHandCards, "Value:", firstHandValue)
-    console.log("[v0] Second hand cards:", secondHandCards, "Value:", secondHandValue)
-    console.log("[v0] First hand result from state:", firstHandResult)
-
-    let totalPayout = 0
-    const results: string[] = []
-    let winsCount = 0
-
-    let handsWon = 0
-    let handsLost = 0
-    let handsTotal = 2
-
-    console.log("[v0] Evaluating first hand - Value:", firstHandValue)
-    if (firstHandValue > 21) {
-      results.push("Hand 1: Lose")
-      handsLost++
-      console.log("[v0] First hand busted")
-    } else if (dealerValue > 21) {
-      results.push("Hand 1: Win")
-      totalPayout += activeBet * 2
-      winsCount++
-      handsWon++
-      console.log("[v0] Dealer busted, first hand wins")
-    } else if (firstHandValue > dealerValue) {
-      results.push("Hand 1: Win")
-      totalPayout += activeBet * 2
-      winsCount++
-      handsWon++
-      console.log("[v0] First hand wins:", firstHandValue, ">", dealerValue)
-    } else if (firstHandValue < dealerValue) {
-      results.push("Hand 1: Lose")
-      handsLost++
-      console.log("[v0] First hand loses:", firstHandValue, "<", dealerValue)
-    } else {
-      results.push("Hand 1: Push")
-      totalPayout += activeBet
-      handsTotal-- // Don't count pushes in win rate
-      console.log("[v0] First hand pushes")
-    }
-
-    console.log("[v0] Evaluating second hand - Value:", secondHandValue, "vs Dealer:", dealerValue)
-    if (secondHandValue > 21) {
-      results.push("Hand 2: Lose")
-      handsLost++
-      console.log("[v0] Second hand busted")
-    } else if (dealerValue > 21) {
-      results.push("Hand 2: Win")
-      totalPayout += activeBet * 2
-      winsCount++
-      handsWon++
-      console.log("[v0] Dealer busted, second hand wins")
-    } else if (secondHandValue > dealerValue) {
-      results.push("Hand 2: Win")
-      totalPayout += activeBet * 2
-      winsCount++
-      handsWon++
-      console.log("[v0] Second hand wins:", secondHandValue, ">", dealerValue)
-    } else if (secondHandValue < dealerValue) {
-      results.push("Hand 2: Lose")
-      handsLost++
-      console.log("[v0] Second hand loses:", secondHandValue, "<", dealerValue)
-    } else {
-      results.push("Hand 2: Push")
-      totalPayout += activeBet
-      handsTotal-- // Don't count pushes in win rate
-      console.log("[v0] Second hand pushes")
-    }
-
-    console.log("[v0] Total payout:", totalPayout, "Active bet per hand:", activeBet)
-    console.log("[v0] Results:", results)
-
-    const totalBetAmount = activeBet * 2
-    const netWinAmount = totalPayout - totalBetAmount
-
-    const newBalance = balance !== null ? balance + totalPayout : totalPayout
-    setBalance(newBalance)
-
-    const resultMessage = results.join(" | ")
-    setMessage(resultMessage)
-    setRoundResult({
-      message: resultMessage,
-      winAmount: netWinAmount,
-      newBalance: newBalance,
+    const resolution = resolveSplitHands({
+      firstHand: firstHandCards,
+      secondHand: secondHandCards,
+      dealerHand: finalDealerHand,
+      betPerHand: activeBet,
+      level,
     })
-    setGameState("finished")
-    setHandsPlayed((prev) => prev + 1)
 
-    setWins((prev) => prev + handsWon)
-    setLosses((prev) => prev + handsLost)
-    setTotalWinnings((prev) => prev + netWinAmount)
-    setLevelWinnings((prev) => prev + netWinAmount)
-    setModeStats((prev) => ({
-      ...prev,
-      [learningMode]: {
-        ...prev[learningMode],
-        handsPlayed: prev[learningMode].handsPlayed + 1,
-        wins: prev[learningMode].wins + handsWon,
-        losses: prev[learningMode].losses + handsLost,
-      },
-    }))
-
-    setCorrectMoves((prev) => prev + handsWon)
-    setTotalMoves((prev) => prev + handsTotal)
-
-    // Only award XP on wins: 2 wins = 2x XP, 1 win = 1x XP, 0 wins = 0 XP (scaled by level and bet)
-    // For split hands, use activeBet per hand (each hand gets XP based on its bet)
-    const xpPerWin = getXPPerWinWithBet(level, activeBet)
-    if (winsCount === 2) {
-      addExperience(xpPerWin * 2) // Two wins = two hands won
-    } else if (winsCount === 1) {
-      addExperience(xpPerWin) // One win = one hand won
-    }
-    // No XP for 0 wins
+    applyResolution(resolution)
   }
 
   const finishHand = (finalPlayerHand: CardType[], finalDealerHand: CardType[]) => {
     const safePlayerHand = Array.isArray(finalPlayerHand) && finalPlayerHand.length > 0 ? finalPlayerHand : playerHand
     const safeDealerHand = Array.isArray(finalDealerHand) && finalDealerHand.length > 0 ? finalDealerHand : dealerHand
 
-    const playerValue = calculateHandValue(safePlayerHand)
-    const dealerValue = calculateHandValue(safeDealerHand)
-
-    console.log("[v0] ===== FINISH HAND =====")
-    console.log("[v0] Player hand:", safePlayerHand, "Value:", playerValue)
-    console.log("[v0] Dealer hand:", safeDealerHand, "Value:", dealerValue)
-
-    let result: "win" | "push" | "loss"
-    let resultMessage = ""
-    let didWin = false
-
-    if (dealerValue > 21) {
-      result = "win"
-      resultMessage = "Dealer Busts! You Win"
-      didWin = true
-    } else if (playerValue > dealerValue) {
-      result = "win"
-      resultMessage = "You Win!"
-      didWin = true
-    } else if (playerValue < dealerValue) {
-      result = "loss"
-      resultMessage = "Dealer Wins"
-    } else {
-      result = "push"
-      resultMessage = "Push! It's A Tie"
-    }
-
-    // Use ref to check if doubled to avoid closure issues with async state updates
-    const wasDoubled = isDoubledRef.current
-    const payout = settle({ result, baseBet: initialBet, isDoubled: wasDoubled, isBlackjack: false })
-    const totalBetAmount = wasDoubled ? initialBet * 2 : initialBet
-    const winAmount = payout - totalBetAmount
-    
-    // Use functional update to ensure we have the latest balance (important after doubleDown)
-    setBalance((prevBalance) => {
-      const calculatedNewBalance = prevBalance !== null ? prevBalance + payout : payout
-      setRoundResult({
-        message: resultMessage,
-        winAmount: winAmount,
-        newBalance: calculatedNewBalance,
-      })
-      // Check if balance is zero after this update
-      if (calculatedNewBalance === 0) {
-        setTimeout(() => {
-          setGameState("betting")
-          setShowModeSelector(true)
-        }, 2000)
-      }
-      return calculatedNewBalance
+    const resolution = resolveSingleHand({
+      playerHand: safePlayerHand,
+      dealerHand: safeDealerHand,
+      baseBet: initialBet,
+      isDoubled: isDoubledRef.current,
+      level,
     })
-    setMessage(resultMessage)
-    setGameState("finished")
-    setHandsPlayed((prev) => prev + 1)
 
-    if (didWin) {
-      setWins((prev) => prev + 1)
-      setTotalWinnings((prev) => prev + winAmount)
-      setLevelWinnings((prev) => prev + winAmount)
-    } else if (result === "loss") {
-      setLosses((prev) => prev + 1)
-      setTotalWinnings((prev) => prev + winAmount)
-      setLevelWinnings((prev) => prev + winAmount) // Can be negative
-    } else {
-      // Push - update total winnings but not level winnings (no net change)
-      setTotalWinnings((prev) => prev + winAmount)
-    }
-
-    setModeStats((prev) => ({
-      ...prev,
-      [learningMode]: {
-        ...prev[learningMode],
-        handsPlayed: prev[learningMode].handsPlayed + 1,
-        wins: didWin ? prev[learningMode].wins + 1 : prev[learningMode].wins,
-        losses: result === "loss" ? prev[learningMode].losses + 1 : prev[learningMode].losses,
-      },
-    }))
-
-    if (didWin) {
-      setCorrectMoves((prev) => prev + 1)
-      // Only award XP on wins (scaled by level and bet amount)
-      // Use totalBetAmount to account for doubling
-      addExperience(getXPPerWinWithBet(level, totalBetAmount))
-    }
-    if (result !== "push") {
-      setTotalMoves((prev) => prev + 1)
-    }
+    applyResolution(resolution)
   }
 
   const doubleDown = () => {
@@ -1419,7 +1172,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     if (balance === null || balance < activeBet) return // Check if balance is loaded and sufficient
 
-    setIsDoubled(true)
+    patchState({ isDoubled: true })
     isDoubledRef.current = true // Update ref synchronously
     const additionalBet = activeBet
     setBalance((prev) => {
@@ -1431,58 +1184,44 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       return newBalance
     })
     const newActiveBet = activeBet * 2
-    setActiveBet(newActiveBet)
+    patchState({ activeBet: newActiveBet })
 
     const deckCopy = ensureDeckHasCards([...deck])
     const [newHand, newDeck] = dealCard(playerHand, deckCopy)
-    setPlayerHand(newHand)
-    setDeck(newDeck)
+    patchState({ playerHand: newHand, deck: newDeck })
 
     const value = calculateHandValue(newHand)
     if (value > 21) {
-      const msg = "Bust! You Lose"
-      setMessage(msg)
       const totalBetAmount = initialBet * 2
-      setTotalWinnings((prev) => prev - totalBetAmount)
-      setLevelWinnings((prev) => prev - totalBetAmount)
-      // Use functional update to ensure we have the latest balance (already reduced by additionalBet)
-      setBalance((prevBalance) => {
-        const calculatedBalance = prevBalance !== null ? prevBalance : 0
-        setRoundResult({
-          message: msg,
-          winAmount: -totalBetAmount,
-          newBalance: calculatedBalance,
-        })
-        return calculatedBalance
-      })
-      setGameState("finished")
-      setDealerRevealed(true)
-      setHandsPlayed((prev) => prev + 1)
-
-      setLosses((prev) => prev + 1)
-      setModeStats((prev) => ({
-        ...prev,
-        [learningMode]: {
-          ...prev[learningMode],
-          handsPlayed: prev[learningMode].handsPlayed + 1,
-          losses: prev[learningMode].losses + 1,
-        },
-      }))
-
-      // No XP awarded for bust (loss)
+      patchState({ dealerRevealed: true })
+      const bustResolution: SingleHandResolution = {
+        result: "loss",
+        message: "Bust! You Lose",
+        payout: 0,
+        totalBet: totalBetAmount,
+        winAmount: -totalBetAmount,
+        winsDelta: 0,
+        lossesDelta: 1,
+        totalMovesDelta: 1,
+        correctMovesDelta: 0,
+        handsPlayedDelta: 1,
+        xpGain: 0,
+      }
+      applyResolution(bustResolution)
     } else {
       // After doubling, automatically stand but don't call checkPlayerAction again
       // The feedback was already set when double was called
       if (isSplit && currentHandIndex === 0) {
-        setFirstHandCards(newHand)
-        setFirstHandResult({ value: calculateHandValue(newHand), busted: false })
-        setCurrentHandIndex(1) // Move to the second hand
-        setPlayerHand(splitHand) // Load the second hand cards for playing
-        setMessage("Playing second hand...")
+        patchState({
+          firstHandCards: newHand,
+          firstHandResult: { value: calculateHandValue(newHand), busted: false },
+          currentHandIndex: 1,
+          playerHand: splitHand,
+          message: "Playing second hand...",
+        })
         console.log("[v0] Finished Hand 1, cards:", newHand, "value:", calculateHandValue(newHand))
       } else {
-        setGameState("dealer")
-        setDealerRevealed(true)
+        patchState({ gameState: "dealer", dealerRevealed: true })
         console.log("[v0] Standing on Hand 2 after double, cards:", newHand, "value:", calculateHandValue(newHand))
         playDealerHand(newHand)
       }
@@ -1514,7 +1253,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }
       return newBalance
     })
-    setIsSplit(true)
+    patchState({ isSplit: true })
 
     // Split the cards
     const firstHand = [playerHand[0]]
@@ -1525,11 +1264,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const [newFirstHand, deck1] = dealCard(firstHand, deckCopy)
     const [newSecondHand, deck2] = dealCard(secondHand, deck1)
 
-    setPlayerHand(newFirstHand)
-    setSplitHand(newSecondHand)
-    setDeck(deck2)
-    setCurrentHandIndex(0)
-    setMessage("Playing first hand...")
+    patchState({
+      playerHand: newFirstHand,
+      splitHand: newSecondHand,
+      deck: deck2,
+      currentHandIndex: 0,
+      message: "Playing first hand...",
+    })
 
     checkPlayerAction("split", originalHand)
   }
@@ -1564,37 +1305,43 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const continueToNextHand = () => {
     setRoundResult(null)
-    setGameState("betting")
-    setPlayerHand([])
-    setDealerHand([])
+    patchState({
+      gameState: "betting",
+      playerHand: [],
+      dealerHand: [],
+      splitHand: [],
+      firstHandResult: null,
+      firstHandCards: [],
+      showBustMessage: false,
+      viewHandIndex: 0,
+      isSplit: false,
+      currentHandIndex: 0,
+      activeBet: 0,
+      initialBet: 0,
+      isDoubled: false,
+    })
     setCurrentBet(0)
     setShowFeedback(false)
     setFeedbackData(null)
-    setIsSplit(false)
-    setSplitHand([])
-    setCurrentHandIndex(0)
-    setFirstHandResult(null)
-    setFirstHandCards([])
-    setShowBustMessage(false)
-    setViewHandIndex(0) // Reset view hand index
-    setInitialBet(0) // Reset initial bet
   }
 
   const repeatBet = () => {
     setCurrentBet(initialBet)
     setRoundResult(null)
-    setPlayerHand([])
-    setDealerHand([])
+    patchState({
+      playerHand: [],
+      dealerHand: [],
+      splitHand: [],
+      firstHandResult: null,
+      firstHandCards: [],
+      showBustMessage: false,
+      viewHandIndex: 0,
+      isSplit: false,
+      currentHandIndex: 0,
+      isDoubled: false,
+    })
     setShowFeedback(false)
     setFeedbackData(null)
-    setIsSplit(false)
-    setSplitHand([])
-    setCurrentHandIndex(0)
-    setFirstHandResult(null)
-    setFirstHandCards([])
-    setShowBustMessage(false)
-    setViewHandIndex(0)
-    setIsDoubled(false) // Reset doubled flag
     isDoubledRef.current = false // Reset ref
     setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
 
@@ -1699,23 +1446,21 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const isRightSwipe = distance < -minSwipeDistance
 
     if (isLeftSwipe && viewHandIndex === 0) {
-      setViewHandIndex(1)
-      setPlayerHand(splitHand)
+      patchState({ viewHandIndex: 1, playerHand: splitHand })
     }
 
     if (isRightSwipe && viewHandIndex === 1) {
-      setViewHandIndex(0)
-      setPlayerHand(firstHandCards)
+      patchState({ viewHandIndex: 0, playerHand: firstHandCards })
     }
   }
 
   const switchToHand = (handIndex: number) => {
     if (!isSplit || gameState !== "finished") return
-    setViewHandIndex(handIndex)
+    patchState({ viewHandIndex: handIndex })
     if (handIndex === 0) {
-      setPlayerHand(firstHandCards)
+      patchState({ playerHand: firstHandCards })
     } else {
-      setPlayerHand(splitHand)
+      patchState({ playerHand: splitHand })
     }
   }
 

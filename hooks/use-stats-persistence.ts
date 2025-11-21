@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useCallback } from "react"
+import { useEffect, useCallback, useRef } from "react"
 
 type SaveDeps = {
   balance: number | null
@@ -21,11 +21,10 @@ type SaveDeps = {
 }
 
 type SaveUserStatsArgs = SaveDeps & {
-  supabase: any
+  activeChallenge: any
 }
 
 async function persistStats({
-  supabase,
   userId,
   activeChallenge,
   balance,
@@ -46,74 +45,122 @@ async function persistStats({
 }: SaveUserStatsArgs) {
   if (balance === null) return
 
-  const moneyFields = activeChallenge
-    ? {}
-    : {
-        total_money: Math.floor(balance),
-        total_winnings: Math.floor(totalWinnings),
-        level_winnings: Math.floor(levelWinnings),
-      }
+  const payload = {
+    balance,
+    totalWinnings,
+    levelWinnings,
+    level,
+    xp,
+    handsPlayed,
+    correctMoves,
+    totalMoves,
+    wins,
+    losses,
+    drillTier,
+    lastDrillCompletedAt: lastDrillCompletedAt?.toISOString() || null,
+    modeStats,
+    learningMode,
+    deck,
+    activeChallenge: Boolean(activeChallenge),
+  }
 
-  await supabase
-    .from("game_stats")
-    .update({
-      level: Math.floor(level),
-      experience: Math.floor(xp),
-      hands_played: Math.floor(handsPlayed),
-      correct_moves: Math.floor(correctMoves),
-      total_moves: Math.floor(totalMoves),
-      wins: Math.floor(wins),
-      losses: Math.floor(losses),
-      drill_tier: Math.floor(drillTier),
-      last_drill_completed_at: lastDrillCompletedAt?.toISOString() || null,
-      learning_hands_played: Math.floor(modeStats.guided.handsPlayed),
-      learning_correct_moves: Math.floor(modeStats.guided.correctMoves),
-      learning_total_moves: Math.floor(modeStats.guided.totalMoves),
-      learning_wins: Math.floor(modeStats.guided.wins),
-      learning_losses: Math.floor(modeStats.guided.losses),
-      practice_hands_played: Math.floor(modeStats.practice.handsPlayed),
-      practice_correct_moves: Math.floor(modeStats.practice.correctMoves),
-      practice_total_moves: Math.floor(modeStats.practice.totalMoves),
-      practice_wins: Math.floor(modeStats.practice.wins),
-      practice_losses: Math.floor(modeStats.practice.losses),
-      expert_hands_played: Math.floor(modeStats.expert.handsPlayed),
-      expert_correct_moves: Math.floor(modeStats.expert.correctMoves),
-      expert_total_moves: Math.floor(modeStats.expert.totalMoves),
-      expert_wins: Math.floor(modeStats.expert.wins),
-      expert_losses: Math.floor(modeStats.expert.losses),
-      last_play_mode: learningMode,
-      deck: deck,
-      updated_at: new Date().toISOString(),
-      ...moneyFields,
-    })
-    .eq("user_id", userId)
+  await fetch("/api/me/stats", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
 }
 
 /**
  * Persist stats when notable events happen (round completion, mode/tier metadata changes).
  */
 export function useStatsPersistence({
-  supabase,
   userId,
   activeChallenge,
   roundResult,
   statsLoaded,
   deps,
 }: {
-  supabase: any
   userId: string
   activeChallenge: any
   roundResult: any
   statsLoaded: boolean
   deps: SaveDeps
 }) {
+  const lastSaveRef = useRef<{ signature: string; at: number } | null>(null)
+  const inFlightRef = useRef(false)
+  const scheduledRef = useRef<NodeJS.Timeout | null>(null)
+  const latestPayloadRef = useRef<SaveUserStatsArgs | null>(null)
+  const coolingRef = useRef(false)
+  const hasHydratedRef = useRef(false)
+
+  const getSignature = useCallback(() => {
+    const lastDrill = deps.lastDrillCompletedAt?.toISOString() || "null"
+    const deckSig = Array.isArray(deps.deck) ? deps.deck.length.toString() : "no-deck"
+    return [
+      deps.balance ?? "null",
+      deps.totalWinnings,
+      deps.levelWinnings,
+      deps.level,
+      deps.xp,
+      deps.handsPlayed,
+      deps.correctMoves,
+      deps.totalMoves,
+      deps.wins,
+      deps.losses,
+      deps.drillTier,
+      lastDrill,
+      deps.learningMode,
+      deckSig,
+      JSON.stringify(deps.modeStats),
+      Boolean(activeChallenge),
+    ].join("|")
+  }, [deps.balance, deps.correctMoves, deps.deck, deps.drillTier, deps.handsPlayed, deps.lastDrillCompletedAt, deps.learningMode, deps.level, deps.levelWinnings, deps.losses, deps.modeStats, deps.totalMoves, deps.totalWinnings, deps.wins, deps.xp, activeChallenge])
+
   const save = useCallback(async () => {
-    try {
-      await persistStats({ ...deps, supabase, activeChallenge, userId })
-    } catch (err) {
-      console.error("[v0] Error saving stats:", err)
+    if (!statsLoaded || deps.balance === null) return
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true
+      return
     }
-  }, [deps, supabase, activeChallenge, userId])
+
+    const signature = getSignature()
+    const now = Date.now()
+    const last = lastSaveRef.current
+    if (last && last.signature === signature && now - last.at < 750) {
+      return
+    }
+    // Debounce saves: schedule a single write with the latest payload
+    latestPayloadRef.current = { ...deps, activeChallenge, userId }
+    if (scheduledRef.current || coolingRef.current) return
+    scheduledRef.current = setTimeout(async () => {
+      scheduledRef.current = null
+      const payload = latestPayloadRef.current
+      if (!payload) return
+      const finalSignature = getSignature()
+      const nowTs = Date.now()
+      const lastFinal = lastSaveRef.current
+      if (lastFinal && lastFinal.signature === finalSignature && nowTs - lastFinal.at < 250) {
+        return
+      }
+      if (inFlightRef.current) {
+        return
+      }
+      inFlightRef.current = true
+      try {
+        await persistStats(payload)
+        lastSaveRef.current = { signature: finalSignature, at: Date.now() }
+        coolingRef.current = true
+        setTimeout(() => {
+          coolingRef.current = false
+        }, 500)
+      } catch (err) {
+        console.error("[v0] Error saving stats:", err)
+      } finally {
+        inFlightRef.current = false
+      }
+    }, 300)
+  }, [deps, activeChallenge, userId, statsLoaded, getSignature])
 
   // Save snapshots after a round finishes
   useEffect(() => {

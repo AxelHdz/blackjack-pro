@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Swords, Clock, DollarSign, X, CheckCircle } from "lucide-react"
 import { type Challenge } from "@/types/challenge"
-import { fetchCached } from "@/lib/fetch-cache"
+import { useChallenge } from "@/contexts/challenge-context"
 
 interface ChallengeChipProps {
   challenge: Challenge | null
@@ -15,8 +15,18 @@ interface ChallengeChipProps {
 export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps) {
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null)
   const [currentChallenge, setCurrentChallenge] = useState<Challenge | null>(challenge)
+  const { activeChallenge: contextActiveChallenge, refreshActiveChallenge } = useChallenge()
 
-  // Poll for latest challenge data when active
+  // Use context active challenge if available and matches the prop challenge
+  useEffect(() => {
+    if (challenge?.status === "active" && contextActiveChallenge?.id === challenge.id) {
+      setCurrentChallenge(contextActiveChallenge)
+    } else {
+      setCurrentChallenge(challenge)
+    }
+  }, [challenge, contextActiveChallenge])
+
+  // Refresh challenge data when timer expires (uses context to avoid redundant fetch)
   const fetchActiveChallenge = useCallback(async () => {
     if (!challenge) return
     if (challenge.status !== "active") {
@@ -24,17 +34,17 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
       return
     }
 
+    // Use context refresh instead of direct fetch
     try {
-      const data = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
-      if (data.challenge && data.challenge.status === "active") {
-        setCurrentChallenge(data.challenge)
-      } else if (data.challenge && data.challenge.status === "completed") {
-        setCurrentChallenge(data.challenge)
+      await refreshActiveChallenge()
+      // Context will update via event system, but we can also check context directly
+      if (contextActiveChallenge && contextActiveChallenge.id === challenge.id) {
+        setCurrentChallenge(contextActiveChallenge)
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch active challenge:", error)
+      console.error("[v0] Failed to refresh active challenge:", error)
     }
-  }, [challenge])
+  }, [challenge, refreshActiveChallenge, contextActiveChallenge])
 
   // Update current challenge when prop changes
   useEffect(() => {

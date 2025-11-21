@@ -158,7 +158,8 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
 
   const loadBlockingChallenge = async () => {
     try {
-      const data = await fetchCached<{ challenges?: Challenge[] }>("/api/challenges?status=pending,active")
+      // Use 15s TTL for challenge list queries (optimized from 3s)
+      const data = await fetchCached<{ challenges?: Challenge[] }>("/api/challenges?status=pending,active", undefined, 15000)
       if (Array.isArray(data.challenges) && data.challenges.length > 0) {
         setBlockingChallenge(data.challenges[0])
       } else {

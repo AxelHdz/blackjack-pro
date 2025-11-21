@@ -15,6 +15,9 @@ export async function GET() {
   }
 
   try {
+    // Optimized with composite indexes:
+    // - idx_challenges_challenger_status_created: for challenger queries with status filter
+    // - idx_challenges_challenged_status_created: for challenged queries with status filter
     const { data: challenge, error } = await supabase
       .from("challenges")
       .select("*")

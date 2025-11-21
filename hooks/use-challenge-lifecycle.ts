@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { fetchCached } from "@/lib/fetch-cache"
 import { type Challenge } from "@/types/challenge"
+import { useChallenge } from "@/contexts/challenge-context"
 
 type UseChallengeOptions = {
   userId: string
@@ -15,12 +15,23 @@ export function useChallengeLifecycle({
   enterChallengeExpertMode,
   restoreLearningMode,
 }: UseChallengeOptions) {
+  // Get active challenge from context (eliminates redundant fetches)
+  const { activeChallenge: contextActiveChallenge, refreshActiveChallenge } = useChallenge()
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null)
   const [pendingChallengeXp, setPendingChallengeXp] = useState(0)
   const [lastSyncedChallengeCredit, setLastSyncedChallengeCredit] = useState<number | null>(null)
   const activeChallengeRef = useRef<Challenge | null>(null)
   const applyChallengeContextRef = useRef(applyChallengeContext)
   const enterChallengeExpertModeRef = useRef(enterChallengeExpertMode)
+
+  // Sync local state with context
+  useEffect(() => {
+    if (contextActiveChallenge) {
+      setActiveChallenge(contextActiveChallenge)
+    } else {
+      setActiveChallenge(null)
+    }
+  }, [contextActiveChallenge])
 
   useEffect(() => {
     applyChallengeContextRef.current = applyChallengeContext
@@ -96,40 +107,17 @@ export function useChallengeLifecycle({
   )
 
   const fetchActiveChallenge = useCallback(async () => {
+    // Use context refresh instead of direct fetch
     try {
-      const data = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
-      if (data.challenge && data.challenge.status === "active") {
-        applyChallengeContextWrapped(data.challenge)
-        enterChallengeExpertMode()
-      } else {
-        applyChallengeContextWrapped(null)
-      }
+      await refreshActiveChallenge()
+      // Context will update via event system, sync will happen via useEffect above
     } catch (error) {
-      console.error("[v0] Failed to fetch active challenge:", error)
+      console.error("[v0] Failed to refresh active challenge:", error)
     }
-  }, [applyChallengeContextWrapped, enterChallengeExpertMode])
+  }, [refreshActiveChallenge])
 
-  useEffect(() => {
-    let isInitialMount = true
-    const handleVisibilityChange = () => {
-      if (isInitialMount) {
-        isInitialMount = false
-        return
-      }
-      if (document.visibilityState === "visible" && !activeChallengeRef.current) {
-        void fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
-          .then((data) => {
-            if (data.challenge?.status === "active") {
-              applyChallengeContextRef.current(data.challenge)
-              enterChallengeExpertModeRef.current()
-            }
-          })
-          .catch((err) => console.error("[v0] Failed to fetch challenge on visibility:", err))
-      }
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [])
+  // Visibility change handler removed - consolidated in blackjack-game.tsx
+  // Components should listen to 'challenge:progress' events instead of polling
 
   return {
     activeChallenge,

@@ -44,24 +44,54 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
 
   const fetchChallenge = useCallback(async () => {
     try {
-      const data = await fetchCached<{ challenges?: Challenge[] }>(
-        `/api/challenges?status=${encodeURIComponent("pending,active,completed,cancelled")}`,
-      )
-      if (!data.challenges || data.challenges.length === 0) {
-        setChallenge(null)
+      const dismissedId = dismissedChallengeIdRef.current
+      
+      // Optimized: Fetch only what's needed in priority order
+      // Priority 1: Active challenge (most important, always shown)
+      const activeData = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
+      if (activeData.challenge && activeData.challenge.status === "active") {
+        setChallenge(activeData.challenge)
         return
       }
 
-      const list: Challenge[] = data.challenges
-      const dismissedId = dismissedChallengeIdRef.current
-      // Prioritize: active > completed (not dismissed) > pending (awaiting) > pending (outgoing) > cancelled
-      const active = list.find((c) => c.status === "active")
-      const completed = list.find((c) => c.status === "completed" && c.id !== dismissedId)
-      const awaiting = list.find((c) => c.status === "pending" && c.awaitingUserId === userId)
-      const outgoing = list.find((c) => c.status === "pending" && c.challengerId === userId)
-      const cancelled = list.find((c) => c.status === "cancelled" && c.id !== dismissedId)
+      // Priority 2: Pending challenges (awaiting user response)
+      // Use 15s TTL for challenge list queries (optimized from 3s)
+      const pendingData = await fetchCached<{ challenges?: Challenge[] }>("/api/challenges?status=pending", undefined, 15000)
+      if (pendingData.challenges && pendingData.challenges.length > 0) {
+        const awaiting = pendingData.challenges.find((c) => c.awaitingUserId === userId)
+        if (awaiting) {
+          setChallenge(awaiting)
+          return
+        }
+        const outgoing = pendingData.challenges.find((c) => c.challengerId === userId)
+        if (outgoing) {
+          setChallenge(outgoing)
+          return
+        }
+      }
 
-      setChallenge(active || completed || awaiting || outgoing || cancelled || null)
+      // Priority 3: Completed challenge (only if not dismissed)
+      const completedData = await fetchCached<{ challenges?: Challenge[] }>("/api/challenges?status=completed", undefined, 15000)
+      if (completedData.challenges && completedData.challenges.length > 0) {
+        const completed = completedData.challenges.find((c) => c.id !== dismissedId)
+        if (completed) {
+          setChallenge(completed)
+          return
+        }
+      }
+
+      // Priority 4: Cancelled challenge (only if not dismissed)
+      const cancelledData = await fetchCached<{ challenges?: Challenge[] }>("/api/challenges?status=cancelled", undefined, 15000)
+      if (cancelledData.challenges && cancelledData.challenges.length > 0) {
+        const cancelled = cancelledData.challenges.find((c) => c.id !== dismissedId)
+        if (cancelled) {
+          setChallenge(cancelled)
+          return
+        }
+      }
+
+      // No challenge found
+      setChallenge(null)
     } catch (error) {
       console.error("[v0] Failed to fetch challenge:", error)
       setChallenge(null)

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { BlackjackGame } from "@/components/blackjack-game"
+import { ChallengeProviderWrapper } from "@/components/challenge-provider-wrapper"
 
 export default async function Home({
   searchParams,
@@ -25,7 +25,7 @@ export default async function Home({
 
   return (
     <main className="h-dvh overflow-hidden bg-black">
-      <BlackjackGame userId={user.id} friendReferralId={friendId} />
+      <ChallengeProviderWrapper userId={user.id} friendReferralId={friendId} />
     </main>
   )
 }

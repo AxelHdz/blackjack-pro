@@ -44,6 +44,7 @@ import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
 import { type Challenge } from "@/types/challenge"
 import { fetchCached } from "@/lib/fetch-cache"
 import { useStatsPersistence } from "@/hooks/use-stats-persistence"
+import { useChallenge } from "@/contexts/challenge-context"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -158,7 +159,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
   const [leaderboardScope, setLeaderboardScope] = useState<"global" | "friends">("global")
 
-  // Challenge state
+  // Get active challenge from context (eliminates redundant fetches)
+  const { activeChallenge: contextActiveChallenge, setActiveChallenge: setContextActiveChallenge } = useChallenge()
+  
+  // Local challenge state for game-specific logic
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null)
   const [challengeTimeRemaining, setChallengeTimeRemaining] = useState<number | null>(null)
   const [pendingChallengeXp, setPendingChallengeXp] = useState(0)
@@ -190,10 +194,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
-  useEffect(() => {
-    loadUserStats() // This already fetches active challenge, no need for separate fetchActiveChallenge()
-  }, [userId])
-
   const learningModeRef = useRef<LearningMode>("guided")
   const previousLearningModeRef = useRef<LearningMode | null>(null)
   useEffect(() => {
@@ -214,6 +214,39 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     previousLearningModeRef.current = null
   }, [setLearningMode])
 
+  // Sync local activeChallenge with context
+  // Only update if context challenge is different from local state
+  useEffect(() => {
+    if (contextActiveChallenge && contextActiveChallenge.id !== activeChallenge?.id) {
+      setActiveChallenge(contextActiveChallenge)
+      // Apply context but don't update context (to avoid circular updates)
+      if (contextActiveChallenge.status === "active") {
+        enterChallengeExpertMode()
+        setPendingChallengeXp(0)
+        const playerCredit =
+          contextActiveChallenge.challengerId === userId
+            ? contextActiveChallenge.challengerCreditBalance
+            : contextActiveChallenge.challengedCreditBalance
+        const resolvedCredit =
+          playerCredit !== null && playerCredit !== undefined
+            ? playerCredit
+            : balance !== null
+              ? balance
+              : CHALLENGE_CREDIT_START
+        setBalance(resolvedCredit)
+        setLastSyncedChallengeCredit(resolvedCredit)
+      }
+    } else if (!contextActiveChallenge && activeChallenge) {
+      setActiveChallenge(null)
+      setPendingChallengeXp(0)
+      setLastSyncedChallengeCredit(null)
+      restoreLearningMode()
+    }
+  }, [contextActiveChallenge, activeChallenge?.id, userId, balance, enterChallengeExpertMode, restoreLearningMode])
+
+  // loadUserStats will be defined below, but we need to reference it in useEffect
+  // So we'll move it up or use a ref pattern
+
   useEffect(() => {
     if (!activeChallenge && previousLearningModeRef.current !== null) {
       restoreLearningMode()
@@ -223,6 +256,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const applyChallengeContext = useCallback(
     (challengeData: Challenge | null) => {
       setActiveChallenge(challengeData)
+      // Update context to share with other components (only if different)
+      if (challengeData?.id !== contextActiveChallenge?.id) {
+        setContextActiveChallenge(challengeData)
+      }
       if (challengeData) {
         setPendingChallengeXp(0)
         const playerCredit =
@@ -246,7 +283,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         restoreLearningMode()
       }
     },
-    [userId, balance, restoreLearningMode],
+    [userId, balance, restoreLearningMode, setContextActiveChallenge, contextActiveChallenge?.id],
   )
 
   const updateActiveChallengeState = useCallback(
@@ -254,6 +291,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       // If the incoming payload is no longer active, clear challenge context and restore modes
       if (challengeData.status !== "active") {
         setActiveChallenge(null)
+        setContextActiveChallenge(null)
         setPendingChallengeXp(0)
         setLastSyncedChallengeCredit(null)
         restoreLearningMode()
@@ -269,6 +307,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }
 
       setActiveChallenge(challengeData)
+      // Update context to share with other components
+      setContextActiveChallenge(challengeData)
       const playerCredit =
         challengeData.challengerId === userId
           ? challengeData.challengerCreditBalance
@@ -286,7 +326,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         window.dispatchEvent(new CustomEvent("challenge:progress", { detail: challengeData }))
       }
     },
-    [activeChallenge?.updatedAt, balance, userId],
+    [activeChallenge?.updatedAt, balance, userId, setContextActiveChallenge],
   )
 
   const handleChallengeResultsOpenChange = (open: boolean) => {
@@ -343,236 +383,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     [activeChallenge, lastSyncedChallengeCredit, updateActiveChallengeState],
   )
 
-  // Fetch active challenge
-  const fetchActiveChallenge = async () => {
-    try {
-      const data = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
-      if (data.challenge && data.challenge.status === "active") {
-        applyChallengeContext(data.challenge)
-        enterChallengeExpertMode()
-      } else {
-        applyChallengeContext(null)
-      }
-    } catch (error) {
-      console.error("[v0] Failed to fetch active challenge:", error)
-    }
-  }
+  // Challenge fetching is now handled by ChallengeContext
+  // No need for local fetchActiveChallenge or visibility handlers
+  // The context handles all fetching and shares data via events
 
-  // Smart challenge polling: only when needed
-  // - Initial fetch on mount
-  // - When page becomes visible (user returns to tab)
-  // - After user actions (hand completion syncs progress already)
-  const applyChallengeContextRef = useRef(applyChallengeContext)
-  const updateActiveChallengeStateRef = useRef(updateActiveChallengeState)
-  const enterChallengeExpertModeRef = useRef(enterChallengeExpertMode)
-  const activeChallengeRef = useRef(activeChallenge)
-
-  useEffect(() => {
-    applyChallengeContextRef.current = applyChallengeContext
-  }, [applyChallengeContext])
-
-  useEffect(() => {
-    updateActiveChallengeStateRef.current = updateActiveChallengeState
-  }, [updateActiveChallengeState])
-
-  useEffect(() => {
-    enterChallengeExpertModeRef.current = enterChallengeExpertMode
-  }, [enterChallengeExpertMode])
-
-  useEffect(() => {
-    activeChallengeRef.current = activeChallenge
-  }, [activeChallenge])
-
-  // Note: Active challenge is already fetched in loadUserStats() on mount
-  // No need for duplicate fetch here
-
-  // Poll when page becomes visible (user returns to tab)
-  // Skip initial visibility check to avoid duplicate fetch on mount
-  useEffect(() => {
-    let isInitialMount = true
-
-    const handleVisibilityChange = () => {
-      // Skip the first visibility change (happens on mount)
-      if (isInitialMount) {
-        isInitialMount = false
-        return
-      }
-
-      if (document.visibilityState === "visible" && !activeChallengeRef.current) {
-        // Only poll if we don't have an active challenge (to detect new ones)
-        void fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
-          .then((data) => {
-            if (data.challenge?.status === "active") {
-              applyChallengeContextRef.current(data.challenge)
-              enterChallengeExpertModeRef.current()
-            }
-          })
-          .catch((err) => console.error("[v0] Failed to fetch challenge on visibility:", err))
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange)
-  }, [])
-
-  // Poll challenge completion
-  useEffect(() => {
-    if (!activeChallenge || !activeChallenge.expiresAt) return
-
-    const checkChallengeCompletion = async () => {
-      const expiresAt = new Date(activeChallenge.expiresAt!)
-      const now = new Date()
-
-      if (now >= expiresAt) {
-        try {
-          await syncChallengeProgress(balance ?? 0, pendingChallengeXp)
-          const response = await fetch(`/api/challenges/${activeChallenge.id}/complete`, {
-            method: "POST",
-          })
-          const data = await response.json()
-
-          if (response.ok) {
-            const didWin = data.winnerId === userId
-            toast({
-              title: data.isTie ? "Challenge Tied!" : didWin ? "Challenge Won!" : "Challenge Lost",
-              description: data.isTie
-                ? "The challenge ended in a tie. Wager refunded."
-                : didWin
-                  ? `You won $${activeChallenge.wagerAmount.toLocaleString()}!`
-                  : `You lost $${activeChallenge.wagerAmount.toLocaleString()}.`,
-            })
-
-            const xpResults = data.xpResults || {}
-            const playerResult =
-              activeChallenge.challengerId === userId ? xpResults.challenger : xpResults.challenged
-            if (playerResult?.xpApplied) {
-              toast({
-                title: "Challenge XP Applied",
-                description:
-                  playerResult.levelsGained > 0
-                  ? `You gained ${playerResult.xpApplied.toLocaleString()} XP and reached level ${playerResult.newLevel}!`
-                  : `You gained ${playerResult.xpApplied.toLocaleString()} XP from the challenge.`,
-              })
-            }
-
-            let completedChallenge: Challenge | null = null
-            try {
-              const challengeResponse = await fetch(`/api/challenges/${activeChallenge.id}`)
-              const challengeData = await challengeResponse.json()
-              if (challengeResponse.ok && challengeData?.id) {
-                completedChallenge = challengeData as Challenge
-              }
-            } catch (fetchErr) {
-              console.error("[v0] Failed to fetch completed challenge details:", fetchErr)
-            }
-
-            if (!completedChallenge) {
-              completedChallenge = {
-                ...activeChallenge,
-                status: "completed",
-                challengerCreditBalance: data.challengerCredits ?? activeChallenge.challengerCreditBalance,
-                challengedCreditBalance: data.challengedCredits ?? activeChallenge.challengedCreditBalance,
-                challengerBalanceEnd: data.updatedChallenge?.challenger_balance_end ?? activeChallenge.challengerBalanceEnd,
-                challengedBalanceEnd:
-                  data.updatedChallenge?.challenged_balance_end ?? activeChallenge.challengedBalanceEnd,
-                winnerId: data.winnerId ?? activeChallenge.winnerId ?? null,
-                completedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              }
-            }
-
-            if (completedChallenge) {
-              setCompletedChallengeResult(completedChallenge)
-              setRequireChallengeDismissal(true)
-              setShowChallengeResultModal(true)
-              if (typeof window !== "undefined") {
-                window.dispatchEvent(new CustomEvent("challenge:progress", { detail: completedChallenge }))
-              }
-            }
-
-            applyChallengeContext(null)
-            setChallengeTimeRemaining(null)
-            void loadUserStats() // This already fetches active challenge
-          }
-        } catch (error) {
-          console.error("[v0] Failed to complete challenge:", error)
-        }
-      } else {
-        const diff = expiresAt.getTime() - now.getTime()
-        setChallengeTimeRemaining(Math.floor(diff / 1000))
-      }
-    }
-
-    checkChallengeCompletion()
-    const interval = setInterval(checkChallengeCompletion, 30000)
-
-    return () => clearInterval(interval)
-  }, [activeChallenge, userId, toast, balance, pendingChallengeXp, syncChallengeProgress, applyChallengeContext])
-
-  // Ensure challenge credits persist immediately after each round result
-  useEffect(() => {
-    if (!activeChallenge || !roundResult || typeof roundResult.newBalance !== "number") return
-    void syncChallengeProgress(roundResult.newBalance, pendingChallengeXp)
-  }, [activeChallenge, roundResult, pendingChallengeXp, syncChallengeProgress])
-
-  // Update challenge timer display
-  useEffect(() => {
-    if (!activeChallenge || !activeChallenge.expiresAt) {
-      setChallengeTimeRemaining(null)
-      return
-    }
-
-    const updateTimer = () => {
-      const expiresAt = new Date(activeChallenge.expiresAt!)
-      const now = new Date()
-      const diff = Math.max(0, expiresAt.getTime() - now.getTime())
-      setChallengeTimeRemaining(Math.floor(diff / 1000))
-    }
-
-    updateTimer()
-    const interval = setInterval(updateTimer, 1000)
-
-    return () => clearInterval(interval)
-  }, [activeChallenge])
-
-  useEffect(() => {
-    if (friendReferralId && friendReferralId !== userId) {
-      handleFriendReferral(friendReferralId)
-    }
-  }, [friendReferralId, userId])
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (xpPopupTimeoutRef.current) {
-        clearTimeout(xpPopupTimeoutRef.current)
-      }
-    }
-  }, [])
-
-  // Close popup when clicking outside
-  useEffect(() => {
-    if (!showXpPopup) return
-
-    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      if (xpProgressBarRef.current && !xpProgressBarRef.current.contains(event.target as Node)) {
-        closeXpPopup()
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    document.addEventListener("touchstart", handleClickOutside)
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-      document.removeEventListener("touchstart", handleClickOutside)
-    }
-  }, [showXpPopup, closeXpPopup])
-
-  // Deck is now loaded from database in loadUserStats
-  // No need to initialize here - it will be loaded or created when stats are loaded
-
-  const loadUserStats = async () => {
+  // Load user stats - wrapped in useCallback to use in useEffect dependencies
+  const loadUserStats = useCallback(async () => {
     try {
       console.log("[v0] Loading stats for user:", userId)
       const { data, error } = await supabase.from("game_stats").select("*").eq("user_id", userId).single()
@@ -679,19 +495,17 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         
         // Load last play mode, defaulting to "guided" if not set or invalid
         // But check for active challenge first - if active, force expert mode
+        // Active challenge is now provided by context, which will be synced via useEffect
         const savedMode = data.last_play_mode
-        let appliedChallengeState = false
-        const challengeData = await fetchCached<{ challenge?: Challenge }>("/api/challenges/active")
-        if (challengeData.challenge && challengeData.challenge.status === "active") {
-          applyChallengeContext(challengeData.challenge)
-          enterChallengeExpertMode()
-          appliedChallengeState = true
-        } else if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
-          setLearningMode(savedMode)
-          applyChallengeContext(null)
+        if (savedMode === "guided" || savedMode === "practice" || savedMode === "expert") {
+          // Only set mode if we don't have an active challenge (context will handle that)
+          if (!contextActiveChallenge || contextActiveChallenge.status !== "active") {
+            setLearningMode(savedMode)
+          }
         }
 
-        if (!appliedChallengeState) {
+        // Only set balance if we don't have an active challenge (challenge sets its own balance)
+        if (!contextActiveChallenge || contextActiveChallenge.status !== "active") {
           setBalance(baseBalance)
         }
 
@@ -754,12 +568,224 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     } catch (err) {
       console.error("[v0] Error in loadUserStats:", err)
       setStatsLoaded(true) // Ensure loading state is updated
-      setBalance(500) // Fallback balance
-      // Create a new deck as fallback if loading fails
-      const newDeck = createDeck()
-      setDeck(newDeck)
     }
-  }
+  }, [userId, supabase, contextActiveChallenge, setLearningMode])
+
+  useEffect(() => {
+    loadUserStats() // This already fetches active challenge via context
+  }, [loadUserStats])
+
+  // Optimized challenge completion polling:
+  // - Base interval: 60s (increased from 30s)
+  // - Only poll when challenge expires within 5 minutes
+  // - Use exponential backoff for challenges with >10 minutes remaining
+  useEffect(() => {
+    if (!activeChallenge || !activeChallenge.expiresAt) return
+
+    let pollInterval: ReturnType<typeof setInterval> | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const checkChallengeCompletion = async () => {
+      const expiresAt = new Date(activeChallenge.expiresAt!)
+      const now = new Date()
+      const timeUntilExpiry = expiresAt.getTime() - now.getTime()
+      const minutesUntilExpiry = timeUntilExpiry / (60 * 1000)
+
+      if (now >= expiresAt) {
+        // Challenge expired - complete it
+        try {
+          await syncChallengeProgress(balance ?? 0, pendingChallengeXp)
+          const response = await fetch(`/api/challenges/${activeChallenge.id}/complete`, {
+            method: "POST",
+          })
+          const data = await response.json()
+
+          if (response.ok) {
+            const didWin = data.winnerId === userId
+            toast({
+              title: data.isTie ? "Challenge Tied!" : didWin ? "Challenge Won!" : "Challenge Lost",
+              description: data.isTie
+                ? "The challenge ended in a tie. Wager refunded."
+                : didWin
+                  ? `You won $${activeChallenge.wagerAmount.toLocaleString()}!`
+                  : `You lost $${activeChallenge.wagerAmount.toLocaleString()}.`,
+            })
+
+            const xpResults = data.xpResults || {}
+            const playerResult =
+              activeChallenge.challengerId === userId ? xpResults.challenger : xpResults.challenged
+            if (playerResult?.xpApplied) {
+              toast({
+                title: "Challenge XP Applied",
+                description:
+                  playerResult.levelsGained > 0
+                  ? `You gained ${playerResult.xpApplied.toLocaleString()} XP and reached level ${playerResult.newLevel}!`
+                  : `You gained ${playerResult.xpApplied.toLocaleString()} XP from the challenge.`,
+              })
+            }
+
+            let completedChallenge: Challenge | null = null
+            try {
+              const challengeResponse = await fetch(`/api/challenges/${activeChallenge.id}`)
+              const challengeData = await challengeResponse.json()
+              if (challengeResponse.ok && challengeData?.id) {
+                completedChallenge = challengeData as Challenge
+              }
+            } catch (fetchErr) {
+              console.error("[v0] Failed to fetch completed challenge details:", fetchErr)
+            }
+
+            if (!completedChallenge) {
+              completedChallenge = {
+                ...activeChallenge,
+                status: "completed",
+                challengerCreditBalance: data.challengerCredits ?? activeChallenge.challengerCreditBalance,
+                challengedCreditBalance: data.challengedCredits ?? activeChallenge.challengedCreditBalance,
+                challengerBalanceEnd: data.updatedChallenge?.challenger_balance_end ?? activeChallenge.challengerBalanceEnd,
+                challengedBalanceEnd:
+                  data.updatedChallenge?.challenged_balance_end ?? activeChallenge.challengedBalanceEnd,
+                winnerId: data.winnerId ?? activeChallenge.winnerId ?? null,
+                completedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }
+            }
+
+            if (completedChallenge) {
+              setCompletedChallengeResult(completedChallenge)
+              setRequireChallengeDismissal(true)
+              setShowChallengeResultModal(true)
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("challenge:progress", { detail: completedChallenge }))
+              }
+            }
+
+            applyChallengeContext(null)
+            setChallengeTimeRemaining(null)
+            void loadUserStats() // This already fetches active challenge
+          }
+        } catch (error) {
+          console.error("[v0] Failed to complete challenge:", error)
+        }
+        // Stop polling after completion
+        if (pollInterval) clearInterval(pollInterval)
+        if (timeoutId) clearTimeout(timeoutId)
+        return
+      }
+
+      // Update timer display
+      const diff = expiresAt.getTime() - now.getTime()
+      setChallengeTimeRemaining(Math.floor(diff / 1000))
+
+      // Optimized polling strategy:
+      // - Only poll if challenge expires within 5 minutes
+      // - Use exponential backoff for challenges with >10 minutes remaining
+      if (minutesUntilExpiry <= 5) {
+        // Within 5 minutes: poll every 60s
+        if (!pollInterval) {
+          pollInterval = setInterval(checkChallengeCompletion, 60000) // 60s base interval
+        }
+      } else if (minutesUntilExpiry <= 10) {
+        // 5-10 minutes: poll every 2 minutes (exponential backoff)
+        if (!pollInterval) {
+          pollInterval = setInterval(checkChallengeCompletion, 120000) // 2 minutes
+        }
+      } else {
+        // >10 minutes: poll every 5 minutes (more aggressive backoff)
+        if (!pollInterval) {
+          pollInterval = setInterval(checkChallengeCompletion, 300000) // 5 minutes
+        }
+      }
+    }
+
+    // Initial check
+    checkChallengeCompletion()
+
+    // Schedule next check based on time remaining
+    const expiresAt = new Date(activeChallenge.expiresAt!)
+    const now = new Date()
+    const timeUntilExpiry = expiresAt.getTime() - now.getTime()
+    const minutesUntilExpiry = timeUntilExpiry / (60 * 1000)
+
+    if (minutesUntilExpiry > 5) {
+      // Schedule first poll when we get within 5 minutes
+      const delayUntilActivePolling = Math.max(0, timeUntilExpiry - 5 * 60 * 1000)
+      timeoutId = setTimeout(() => {
+        checkChallengeCompletion()
+        pollInterval = setInterval(checkChallengeCompletion, 60000) // Start 60s polling
+      }, delayUntilActivePolling)
+    } else {
+      // Start polling immediately if within 5 minutes
+      pollInterval = setInterval(checkChallengeCompletion, 60000)
+    }
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [activeChallenge, userId, toast, balance, pendingChallengeXp, syncChallengeProgress, applyChallengeContext, loadUserStats])
+
+  // Ensure challenge credits persist immediately after each round result
+  useEffect(() => {
+    if (!activeChallenge || !roundResult || typeof roundResult.newBalance !== "number") return
+    void syncChallengeProgress(roundResult.newBalance, pendingChallengeXp)
+  }, [activeChallenge, roundResult, pendingChallengeXp, syncChallengeProgress])
+
+  // Update challenge timer display
+  useEffect(() => {
+    if (!activeChallenge || !activeChallenge.expiresAt) {
+      setChallengeTimeRemaining(null)
+      return
+    }
+
+    const updateTimer = () => {
+      const expiresAt = new Date(activeChallenge.expiresAt!)
+      const now = new Date()
+      const diff = Math.max(0, expiresAt.getTime() - now.getTime())
+      setChallengeTimeRemaining(Math.floor(diff / 1000))
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+
+    return () => clearInterval(interval)
+  }, [activeChallenge])
+
+  useEffect(() => {
+    if (friendReferralId && friendReferralId !== userId) {
+      handleFriendReferral(friendReferralId)
+    }
+  }, [friendReferralId, userId])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (xpPopupTimeoutRef.current) {
+        clearTimeout(xpPopupTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    if (!showXpPopup) return
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (xpProgressBarRef.current && !xpProgressBarRef.current.contains(event.target as Node)) {
+        closeXpPopup()
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    document.addEventListener("touchstart", handleClickOutside)
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+      document.removeEventListener("touchstart", handleClickOutside)
+    }
+  }, [showXpPopup, closeXpPopup])
+
+  // Deck is now loaded from database in loadUserStats
+  // loadUserStats is now defined above as a useCallback
 
   const { saveUserStats } = useStatsPersistence({
     supabase,

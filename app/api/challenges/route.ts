@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
     const statusFilter = searchParams.get("status") // 'pending' | 'active' | 'pending,active' | null (all)
 
     // Only return challenges the user participates in AND has not archived
+    // Optimized with composite indexes:
+    // - idx_challenges_challenger_status_created: for challenger queries
+    // - idx_challenges_challenged_status_created: for challenged queries
+    // - idx_challenges_challenger_not_archived: partial index for non-archived challenger queries
+    // - idx_challenges_challenged_not_archived: partial index for non-archived challenged queries
     let query = supabase
       .from("challenges")
       .select("*")
@@ -143,6 +148,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if challenger already has an active/pending challenge
+    // Optimized with composite indexes: idx_challenges_challenger_status_created, idx_challenges_challenged_status_created
     const { data: existingChallenge, error: existingError } = await supabase
       .from("challenges")
       .select("id")
@@ -160,6 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if challenged user already has an active/pending challenge
+    // Optimized with composite indexes: idx_challenges_challenger_status_created, idx_challenges_challenged_status_created
     const { data: challengedExisting, error: challengedExistingError } = await supabase
       .from("challenges")
       .select("id")

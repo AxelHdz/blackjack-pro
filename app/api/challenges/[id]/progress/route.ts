@@ -53,9 +53,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     if (typeof creditBalance === "number" && Number.isFinite(creditBalance)) {
       const sanitized = Math.max(0, Math.round(creditBalance))
-      // Guard against regressions unless updated_at moves forward
       const existing = isChallenger ? challenge.challenger_credit_balance : challenge.challenged_credit_balance
-      if (existing === null || sanitized >= existing) {
+
+      // Accept both increases and decreases; we only bail if the value is unchanged
+      if (existing === null || sanitized !== existing) {
         if (isChallenger) {
           updates.challenger_credit_balance = sanitized
         } else {

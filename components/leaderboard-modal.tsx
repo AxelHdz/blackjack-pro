@@ -36,15 +36,24 @@ interface LeaderboardModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   userId: string
+  metric: "balance" | "level"
+  scope: "global" | "friends"
+  onMetricChange: (metric: "balance" | "level") => void
+  onScopeChange: (scope: "global" | "friends") => void
 }
 
 const SHOW_CHALLENGE_BUTTONS = false
 
-export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModalProps) {
-  const SHOW_CHALLENGE_BUTTONS = false
+export function LeaderboardModal({
+  open,
+  onOpenChange,
+  userId,
+  metric,
+  scope,
+  onMetricChange,
+  onScopeChange,
+}: LeaderboardModalProps) {
   const { toast } = useToast()
-  const [metric, setMetric] = useState<"balance" | "level">("balance")
-  const [scope, setScope] = useState<"global" | "friends">("global")
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -75,10 +84,10 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     const metricToUse = savedMetric ?? metric
 
     if (savedScope && savedScope !== scope) {
-      setScope(savedScope)
+      onScopeChange(savedScope)
     }
     if (savedMetric && savedMetric !== metric) {
-      setMetric(savedMetric)
+      onMetricChange(savedMetric)
     }
 
     void loadLeaderboard(true, scopeToUse, metricToUse, true)
@@ -173,12 +182,10 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       void loadLeaderboard(true, scopeRef.current, metricRef.current, true)
     }
     window.addEventListener("stats:update", handleStatsOrRank)
-    window.addEventListener("rank:refresh", handleStatsOrRank)
     return () => {
       window.removeEventListener("stats:update", handleStatsOrRank)
-      window.removeEventListener("rank:refresh", handleStatsOrRank)
     }
-  }, [open, loadLeaderboard])
+  }, [open])
 
   const loadBlockingChallenge = async () => {
     try {
@@ -288,7 +295,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const handleMetricChange = (value: string) => {
     if (value && (value === "balance" || value === "level")) {
       console.log("[v0] leaderboard_metric_changed", { from: metric, to: value })
-      setMetric(value)
+      onMetricChange(value)
       if (typeof window !== "undefined") {
         localStorage.setItem("leaderboard_metric", value)
       }
@@ -299,7 +306,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const handleScopeChange = (value: string) => {
     const nextScope = value as "global" | "friends"
     console.log("[v0] leaderboard_scope_changed", { from: scope, to: nextScope })
-    setScope(nextScope)
+    onScopeChange(nextScope)
     if (typeof window !== "undefined") {
       localStorage.setItem("leaderboard_scope", nextScope)
     }

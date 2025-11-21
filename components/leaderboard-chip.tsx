@@ -141,12 +141,11 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
 
   useEffect(() => {
     const handleStatsUpdate = () => {
-      void fetchRank(true)
       void fetchUserBalance()
     }
     window.addEventListener("stats:update", handleStatsUpdate)
     return () => window.removeEventListener("stats:update", handleStatsUpdate)
-  }, [fetchRank, fetchUserBalance])
+  }, [fetchUserBalance])
 
   useEffect(() => {
     const handleRankRefresh = () => {

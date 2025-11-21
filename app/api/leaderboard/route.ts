@@ -58,6 +58,8 @@ export async function GET(request: NextRequest) {
     } else {
       query = query.order("level", { ascending: false }).order("total_money", { ascending: false })
     }
+    // Deterministic tie-breaker to match rank calculation
+    query = query.order("user_id", { ascending: true })
 
     // Apply pagination
     if (cursor) {

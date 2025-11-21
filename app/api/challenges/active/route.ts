@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server"
 import { formatChallengeResponse, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { NextResponse } from "next/server"
 
+// Force dynamic rendering since this is user-specific and requires authentication
+export const dynamic = 'force-dynamic'
+
 // GET: Get user's active challenge
 export async function GET() {
   const supabase = await createClient()
@@ -31,7 +34,14 @@ export async function GET() {
     }
 
     if (!challenge) {
-      return NextResponse.json({ challenge: null })
+      return NextResponse.json(
+        { challenge: null },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=5, stale-while-revalidate=10",
+          },
+        },
+      )
     }
 
     // Fetch user profiles
@@ -47,7 +57,14 @@ export async function GET() {
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
     const formatted = formatChallengeResponse(challenge as ChallengeRecord, profilesMap)
-    return NextResponse.json({ challenge: formatted })
+    return NextResponse.json(
+      { challenge: formatted },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=5, stale-while-revalidate=10",
+        },
+      },
+    )
   } catch (err) {
     console.error("[v0] Active challenge error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

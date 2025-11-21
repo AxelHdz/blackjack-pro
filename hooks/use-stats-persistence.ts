@@ -154,6 +154,11 @@ export function useStatsPersistence({
         setTimeout(() => {
           coolingRef.current = false
         }, 500)
+        // Dispatch rank refresh event after stats are successfully saved at end of hand
+        // Only refresh when roundResult exists (hand has finished)
+        if (typeof window !== "undefined" && roundResult) {
+          window.dispatchEvent(new CustomEvent("rank:refresh"))
+        }
       } catch (err) {
         console.error("[v0] Error saving stats:", err)
       } finally {

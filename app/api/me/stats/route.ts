@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createDeck, type Card as CardType } from "@/lib/card-utils"
 
+// Force dynamic rendering since this is user-specific and requires authentication
+export const dynamic = 'force-dynamic'
+
 type StatsPayload = {
   balance?: number
   totalWinnings?: number
@@ -86,10 +89,24 @@ export async function GET() {
         return NextResponse.json({ error: "Failed to create stats" }, { status: 500 })
       }
 
-      return NextResponse.json({ stats: inserted })
+      return NextResponse.json(
+        { stats: inserted },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=10, stale-while-revalidate=20",
+          },
+        },
+      )
     }
 
-    return NextResponse.json({ stats: data })
+    return NextResponse.json(
+      { stats: data },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=10, stale-while-revalidate=20",
+        },
+      },
+    )
   } catch (err) {
     console.error("[v0] Stats GET error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

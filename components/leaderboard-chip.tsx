@@ -36,7 +36,13 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
       if (force) {
         bustFetchCache(url)
       }
-      const res = await fetch(url, { cache: "no-store" })
+      // Always use no-store to bypass any caching
+      const res = await fetch(url, { 
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      })
       const data = await res.json().catch(() => ({}))
       setRank(typeof data.rank === "number" ? data.rank : null)
     } catch (error) {
@@ -139,15 +145,16 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     return () => window.removeEventListener("challenge:progress", handleChallengeProgress as EventListener)
   }, [challenge])
 
+  // Only fetch user balance on stats update, not rank (rank updates only at end of hand)
   useEffect(() => {
     const handleStatsUpdate = () => {
-      void fetchRank(true)
       void fetchUserBalance()
     }
     window.addEventListener("stats:update", handleStatsUpdate)
     return () => window.removeEventListener("stats:update", handleStatsUpdate)
-  }, [fetchRank, fetchUserBalance])
+  }, [fetchUserBalance])
 
+  // Only refresh rank when explicitly requested (at end of hand, not during gameplay)
   useEffect(() => {
     const handleRankRefresh = () => {
       void fetchRank(true)

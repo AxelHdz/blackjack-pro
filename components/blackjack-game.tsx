@@ -41,12 +41,27 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
-import { BuybackDrillModal } from "@/components/buyback-drill-modal"
-import { FeedbackModal } from "@/components/feedback-modal"
+import dynamic from "next/dynamic"
 import { settle } from "@/lib/settlement" // Import the settlement helper
 import { LeaderboardChip } from "@/components/leaderboard-chip"
-import { LeaderboardModal } from "@/components/leaderboard-modal"
-import { ChallengeModal } from "@/components/challenge-modal"
+
+// Lazy load heavy modal components for code splitting
+const BuybackDrillModal = dynamic(
+  () => import("@/components/buyback-drill-modal").then((mod) => ({ default: mod.BuybackDrillModal })),
+  { ssr: false },
+)
+const FeedbackModal = dynamic(
+  () => import("@/components/feedback-modal").then((mod) => ({ default: mod.FeedbackModal })),
+  { ssr: false },
+)
+const LeaderboardModal = dynamic(
+  () => import("@/components/leaderboard-modal").then((mod) => ({ default: mod.LeaderboardModal })),
+  { ssr: false },
+)
+const ChallengeModal = dynamic(
+  () => import("@/components/challenge-modal").then((mod) => ({ default: mod.ChallengeModal })),
+  { ssr: false },
+)
 import { useToast } from "@/hooks/use-toast"
 import { getXPNeeded, getCashBonusWithCap, getXPPerWin, getXPPerWinWithBet, LEVELING_CONFIG } from "@/lib/leveling-config"
 import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
@@ -729,20 +744,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }, [gameState])
 
-  const prevGameStateRef = useRef(gameState)
-
-  useEffect(() => {
-    if (!statsLoaded) {
-      prevGameStateRef.current = gameState
-      return
-    }
-    if (prevGameStateRef.current !== "betting" && gameState === "betting") {
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("rank:refresh"))
-      }
-    }
-    prevGameStateRef.current = gameState
-  }, [gameState, statsLoaded])
+  // Removed automatic rank refresh on gameState change to betting
+  // Rank is now only refreshed when user explicitly continues/repeats after a finished hand
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -1323,6 +1326,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setCurrentBet(0)
     setShowFeedback(false)
     setFeedbackData(null)
+    // Refresh rank after hand finishes and user continues to next hand
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("rank:refresh"))
+    }
   }
 
   const repeatBet = () => {
@@ -1344,6 +1351,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setFeedbackData(null)
     isDoubledRef.current = false // Reset ref
     setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
+
+    // Refresh rank after hand finishes and user repeats bet
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("rank:refresh"))
+    }
 
     if (initialBet > 0 && balance !== null && balance >= initialBet) {
       // Check if balance is loaded

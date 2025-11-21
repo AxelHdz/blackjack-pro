@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server"
 import { formatChallengeResponse, deriveAwaitingUserId, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
+// Force dynamic rendering since this is user-specific and requires authentication
+export const dynamic = 'force-dynamic'
+
 const fetchChallengeById = (supabase: any, id: string) => {
   const query = supabase.from("challenges").select("*").eq("id", id)
   return query.maybeSingle()
@@ -39,7 +42,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
-    return NextResponse.json(formatChallengeResponse(challenge as ChallengeRecord, profilesMap))
+    return NextResponse.json(
+      formatChallengeResponse(challenge as ChallengeRecord, profilesMap),
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=5, stale-while-revalidate=10",
+        },
+      },
+    )
   } catch (err) {
     console.error("[v0] Challenge fetch error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

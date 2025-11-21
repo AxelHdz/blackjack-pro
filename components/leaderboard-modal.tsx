@@ -38,10 +38,9 @@ interface LeaderboardModalProps {
   userId: string
 }
 
-const SHOW_CHALLENGE_BUTTONS = false
+const SHOW_CHALLENGE_BUTTONS = true
 
 export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModalProps) {
-  const SHOW_CHALLENGE_BUTTONS = false
   const { toast } = useToast()
   const [metric, setMetric] = useState<"balance" | "level">("balance")
   const [scope, setScope] = useState<"global" | "friends">("global")

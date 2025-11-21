@@ -7,8 +7,11 @@ type CacheEntry<T> = {
 
 const cache = new Map<string, CacheEntry<unknown>>()
 
-const DEFAULT_TTL_MS = 3000
-const DEFAULT_STALE_TTL_MS = 10000 // Stale-while-revalidate window: 10s after expiry
+// Optimized TTL values for better cache hit rates while maintaining responsiveness
+// Increased from 3s to 5s for better deduplication of rapid successive calls
+const DEFAULT_TTL_MS = 5000
+// Increased stale window from 10s to 15s to allow longer stale-while-revalidate periods
+const DEFAULT_STALE_TTL_MS = 15000 // Stale-while-revalidate window: 15s after expiry
 
 /**
  * Lightweight in-memory fetch cache for GET requests to dedupe bursts of identical calls.

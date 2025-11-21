@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
+// Force dynamic rendering since this is user-specific and requires authentication
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
 
@@ -25,7 +28,14 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (userError || !userStats) {
-      return NextResponse.json({ rank: null })
+      return NextResponse.json(
+        { rank: null },
+        {
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+          },
+        },
+      )
     }
 
     let query = supabase.from("game_stats").select("user_id", { count: "exact", head: true })
@@ -62,7 +72,14 @@ export async function GET(request: NextRequest) {
 
     const rank = (count || 0) + 1
 
-    return NextResponse.json({ rank })
+    return NextResponse.json(
+      { rank },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      },
+    )
   } catch (err) {
     console.error("[v0] Rank calculation error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

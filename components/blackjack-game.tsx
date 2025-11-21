@@ -2343,7 +2343,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               Clear
             </Button>
             <Button
-              onClick={startNewHand}
+              onClick={() => startNewHand()}
               disabled={currentBet === 0 || isDealing || balance === null || balance < currentBet}
               size="sm"
               className="h-9 sm:h-10 px-4 sm:px-6 text-sm sm:text-base transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 bg-success hover:bg-success/90"

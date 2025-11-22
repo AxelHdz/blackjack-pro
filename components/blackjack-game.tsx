@@ -1636,7 +1636,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               <div className="relative flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.45)]">
                 <Image
                   src="/apple-icon.svg"
-                  alt="Blackjack Mastery"
+                  alt="Blackjack Pro"
                   width={64}
                   height={64}
                   className="h-9 w-9 sm:h-10 sm:w-10"

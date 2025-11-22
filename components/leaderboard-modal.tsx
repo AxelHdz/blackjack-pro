@@ -12,7 +12,7 @@ import { UsernameEditor } from "@/components/username-editor"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
 import { cn } from "@/lib/utils"
-import { fetchCached, bustFetchCache } from "@/lib/fetch-cache"
+import { fetchCached } from "@/lib/fetch-cache"
 
 interface LeaderboardEntry {
   userId: string
@@ -90,7 +90,7 @@ export function LeaderboardModal({
       onMetricChange(savedMetric)
     }
 
-    void loadLeaderboard(true, scopeToUse, metricToUse, true)
+    void loadLeaderboard(true, scopeToUse, metricToUse)
     void loadFriends()
     void loadFriendRequests()
     void loadUserProfile() // Combined function - loads both profile and balance
@@ -109,7 +109,6 @@ export function LeaderboardModal({
     reset = false,
     scopeOverride?: "global" | "friends",
     metricOverride?: "balance" | "level",
-    force = false,
   ) => {
     try {
       setLoading(true)
@@ -117,9 +116,6 @@ export function LeaderboardModal({
       const metricToUse = metricOverride ?? metric
       const cursor = reset ? null : nextCursor
       const url = `/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`
-      if (force) {
-        bustFetchCache(url)
-      }
       const res = await fetch(url, { cache: "no-store" })
       const data = (await res.json()) as { entries: LeaderboardEntry[]; nextCursor: string | null }
 
@@ -179,7 +175,7 @@ export function LeaderboardModal({
   useEffect(() => {
     const handleStatsOrRank = () => {
       if (!open) return
-      void loadLeaderboard(true, scopeRef.current, metricRef.current, true)
+      void loadLeaderboard(true, scopeRef.current, metricRef.current)
     }
     window.addEventListener("stats:update", handleStatsOrRank)
     return () => {

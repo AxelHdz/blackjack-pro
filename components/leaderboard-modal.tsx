@@ -12,7 +12,7 @@ import { UsernameEditor } from "@/components/username-editor"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
 import { cn } from "@/lib/utils"
-import { fetchCached, bustFetchCache } from "@/lib/fetch-cache"
+import { fetchCached } from "@/lib/fetch-cache"
 
 interface LeaderboardEntry {
   userId: string
@@ -36,14 +36,24 @@ interface LeaderboardModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   userId: string
+  metric: "balance" | "level"
+  scope: "global" | "friends"
+  onMetricChange: (metric: "balance" | "level") => void
+  onScopeChange: (scope: "global" | "friends") => void
 }
 
 const SHOW_CHALLENGE_BUTTONS = true
 
-export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModalProps) {
+export function LeaderboardModal({
+  open,
+  onOpenChange,
+  userId,
+  metric,
+  scope,
+  onMetricChange,
+  onScopeChange,
+}: LeaderboardModalProps) {
   const { toast } = useToast()
-  const [metric, setMetric] = useState<"balance" | "level">("balance")
-  const [scope, setScope] = useState<"global" | "friends">("global")
   const [entries, setEntries] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -74,13 +84,13 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     const metricToUse = savedMetric ?? metric
 
     if (savedScope && savedScope !== scope) {
-      setScope(savedScope)
+      onScopeChange(savedScope)
     }
     if (savedMetric && savedMetric !== metric) {
-      setMetric(savedMetric)
+      onMetricChange(savedMetric)
     }
 
-    void loadLeaderboard(true, scopeToUse, metricToUse, true)
+    void loadLeaderboard(true, scopeToUse, metricToUse)
     void loadFriends()
     void loadFriendRequests()
     void loadUserProfile() // Combined function - loads both profile and balance
@@ -99,7 +109,6 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
     reset = false,
     scopeOverride?: "global" | "friends",
     metricOverride?: "balance" | "level",
-    force = false,
   ) => {
     try {
       setLoading(true)
@@ -107,9 +116,6 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
       const metricToUse = metricOverride ?? metric
       const cursor = reset ? null : nextCursor
       const url = `/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`
-      if (force) {
-        bustFetchCache(url)
-      }
       const res = await fetch(url, { cache: "no-store" })
       const data = (await res.json()) as { entries: LeaderboardEntry[]; nextCursor: string | null }
 
@@ -169,15 +175,13 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   useEffect(() => {
     const handleStatsOrRank = () => {
       if (!open) return
-      void loadLeaderboard(true, scopeRef.current, metricRef.current, true)
+      void loadLeaderboard(true, scopeRef.current, metricRef.current)
     }
     window.addEventListener("stats:update", handleStatsOrRank)
-    window.addEventListener("rank:refresh", handleStatsOrRank)
     return () => {
       window.removeEventListener("stats:update", handleStatsOrRank)
-      window.removeEventListener("rank:refresh", handleStatsOrRank)
     }
-  }, [open, loadLeaderboard])
+  }, [open])
 
   const loadBlockingChallenge = async () => {
     try {
@@ -287,7 +291,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const handleMetricChange = (value: string) => {
     if (value && (value === "balance" || value === "level")) {
       console.log("[v0] leaderboard_metric_changed", { from: metric, to: value })
-      setMetric(value)
+      onMetricChange(value)
       if (typeof window !== "undefined") {
         localStorage.setItem("leaderboard_metric", value)
       }
@@ -298,7 +302,7 @@ export function LeaderboardModal({ open, onOpenChange, userId }: LeaderboardModa
   const handleScopeChange = (value: string) => {
     const nextScope = value as "global" | "friends"
     console.log("[v0] leaderboard_scope_changed", { from: scope, to: nextScope })
-    setScope(nextScope)
+    onScopeChange(nextScope)
     if (typeof window !== "undefined") {
       localStorage.setItem("leaderboard_scope", nextScope)
     }

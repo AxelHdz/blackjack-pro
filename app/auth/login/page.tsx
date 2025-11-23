@@ -197,7 +197,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="space-y-2 text-center pb-4">
-            <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">Blackjack Mastery </CardTitle>
+            <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">Blackjack Pro</CardTitle>
             <CardDescription className="text-sm sm:text-base text-muted-foreground">
               Sign in to save your progress
             </CardDescription>

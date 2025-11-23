@@ -58,6 +58,8 @@ export async function GET(request: NextRequest) {
     } else {
       query = query.order("level", { ascending: false }).order("total_money", { ascending: false })
     }
+    // Deterministic tie-breaker to match rank calculation
+    query = query.order("user_id", { ascending: true })
 
     // Apply pagination
     if (cursor) {
@@ -87,11 +89,14 @@ export async function GET(request: NextRequest) {
 
     const nextCursor = entries.length === limit ? ((cursor ? Number.parseInt(cursor) : 0) + limit).toString() : null
 
-    const headers = {
-      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
-    }
-
-    return NextResponse.json({ entries, nextCursor }, { headers })
+    return NextResponse.json(
+      { entries, nextCursor },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        },
+      },
+    )
   } catch (err) {
     console.error("[v0] Leaderboard error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

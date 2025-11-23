@@ -184,6 +184,51 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
   const [leaderboardScope, setLeaderboardScope] = useState<"global" | "friends">("global")
 
+  const handleLeaderboardMetricChange = useCallback((value: "balance" | "level") => {
+    setLeaderboardMetric(value)
+  }, [])
+
+  const handleLeaderboardScopeChange = useCallback((value: "global" | "friends") => {
+    setLeaderboardScope(value)
+  }, [])
+
+  const sanitizeBet = useCallback((bet: number | null | undefined) => {
+    if (typeof bet !== "number") return 0
+    if (!Number.isFinite(bet)) return 0
+    return Math.max(0, bet)
+  }, [])
+
+  const openModeSelector = useCallback(() => {
+    resetRoundState()
+    setCurrentBet(0)
+    setRoundResult(null)
+    setShowFeedback(false)
+    setFeedbackData(null)
+    isDoubledRef.current = false
+    setShowModeSelector(true)
+  }, [resetRoundState])
+
+  useEffect(() => {
+    const savedScope =
+      typeof window !== "undefined" ? (localStorage.getItem("leaderboard_scope") as "global" | "friends" | null) : null
+    const savedMetric =
+      typeof window !== "undefined" ? (localStorage.getItem("leaderboard_metric") as "balance" | "level" | null) : null
+
+    if (savedScope === "global" || savedScope === "friends") {
+      setLeaderboardScope(savedScope)
+    }
+    if (savedMetric === "balance" || savedMetric === "level") {
+      setLeaderboardMetric(savedMetric)
+    }
+  }, [])
+
+  // Ensure bet display resets when bankroll hits zero
+  useEffect(() => {
+    if (balance !== null && balance <= 0 && currentBet !== 0) {
+      setCurrentBet(0)
+    }
+  }, [balance, currentBet])
+
   // Get active challenge from context (eliminates redundant fetches)
   const { activeChallenge: contextActiveChallenge, setActiveChallenge: setContextActiveChallenge } = useChallenge()
   
@@ -744,9 +789,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }, [gameState])
 
-  // Removed automatic rank refresh on gameState change to betting
-  // Rank is now only refreshed when user explicitly continues/repeats after a finished hand
-
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push("/auth/login")
@@ -765,14 +807,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     handleLogout()
   }
 
-  const startNewHand = () => {
-    if (currentBet === 0) return
-    if (balance === null || balance < currentBet) return // Check if balance is loaded and sufficient
+  const startNewHand = (betOverride?: number) => {
+    const betToUse = sanitizeBet(betOverride) || sanitizeBet(currentBet)
+    if (betToUse === 0) return
+    if (balance === null || !Number.isFinite(balance) || balance < betToUse) return // Check if balance is loaded and sufficient
 
     patchState({ gameState: "playing", isDealing: true })
     setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
-    const betAmount = currentBet
-    const newBalance = balance - currentBet
+    setCurrentBet(betToUse)
+    const betAmount = betToUse
+    const newBalance = balance - betAmount
     setBalance(newBalance)
     if (activeChallenge) {
       // Persist challenge credits immediately so polling UIs don't reset to the old value mid-hand
@@ -1062,8 +1106,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }
       if (nextBalance === 0) {
         setTimeout(() => {
-          patchState({ gameState: "betting" })
-          setShowModeSelector(true)
+          openModeSelector()
         }, 2000)
       }
       return nextBalance
@@ -1093,6 +1136,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
     if (resolution.xpGain > 0) {
       addExperience(resolution.xpGain)
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("rank:refresh"))
     }
   }
 
@@ -1333,7 +1380,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   const repeatBet = () => {
-    setCurrentBet(initialBet)
     setRoundResult(null)
     patchState({
       playerHand: [],
@@ -1352,14 +1398,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     isDoubledRef.current = false // Reset ref
     setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
 
-    // Refresh rank after hand finishes and user repeats bet
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("rank:refresh"))
-    }
-
-    if (initialBet > 0 && balance !== null && balance >= initialBet) {
+    const betToRepeat = sanitizeBet(initialBet)
+    if (betToRepeat > 0 && balance !== null && balance >= betToRepeat) {
       // Check if balance is loaded
-      startNewHand()
+      startNewHand(betToRepeat)
+    } else {
+      setCurrentBet(betToRepeat || 0)
     }
   }
 
@@ -1611,7 +1655,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               <div className="relative flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.45)]">
                 <Image
                   src="/apple-icon.svg"
-                  alt="Blackjack Mastery"
+                  alt="Blackjack Pro"
                   width={64}
                   height={64}
                   className="h-9 w-9 sm:h-10 sm:w-10"
@@ -1644,7 +1688,15 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         />
       )}
 
-      <LeaderboardModal open={showLeaderboard} onOpenChange={setShowLeaderboard} userId={userId} />
+      <LeaderboardModal
+        open={showLeaderboard}
+        onOpenChange={setShowLeaderboard}
+        userId={userId}
+        metric={leaderboardMetric}
+        scope={leaderboardScope}
+        onMetricChange={handleLeaderboardMetricChange}
+        onScopeChange={handleLeaderboardScopeChange}
+      />
       {completedChallengeResult && (
         <ChallengeModal
           open={showChallengeResultModal}
@@ -1792,7 +1844,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               variant="ghost"
               size="sm"
               className="h-8 w-8 sm:h-9 sm:w-9 p-0 transition-all duration-200 hover:scale-110"
-              onClick={() => setShowModeSelector(true)}
+              onClick={openModeSelector}
               aria-label="Return to mode selection"
             >
               <Home className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -2310,7 +2362,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               Clear
             </Button>
             <Button
-              onClick={startNewHand}
+              onClick={() => startNewHand()}
               disabled={currentBet === 0 || isDealing || balance === null || balance < currentBet}
               size="sm"
               className="h-9 sm:h-10 px-4 sm:px-6 text-sm sm:text-base transition-all duration-300 ease-out hover:scale-105 disabled:hover:scale-100 bg-success hover:bg-success/90"

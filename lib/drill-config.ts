@@ -7,7 +7,6 @@ export const DRILL_CONFIG = {
   unlimited_attempts: true,
   unlimited_clears: true,
   cooldown_busts_after_clear: 0,
-  fast_tap_ms: 900,
   allow_hints: false,
   count_all_correct: true,
   rules: {

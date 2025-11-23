@@ -27,6 +27,7 @@ export async function GET(request: Request) {
   const error = requestUrl.searchParams.get("error")
   const errorDescription = requestUrl.searchParams.get("error_description")
   const setPassword = requestUrl.searchParams.get("setPassword")
+  const recoveryType = requestUrl.searchParams.get("type")
   const friendId = requestUrl.searchParams.get("friend")
   const origin = requestUrl.origin
 
@@ -75,6 +76,14 @@ export async function GET(request: Request) {
 
   // Session is now stored in cookies via the server client's setAll callback
   // The user is automatically logged in at this point
+
+  // Check if this is a password recovery flow
+  if (recoveryType === "recovery") {
+    const redirectPath = friendId
+      ? `/auth/reset-password?friend=${friendId}`
+      : "/auth/reset-password"
+    return NextResponse.redirect(`${origin}${redirectPath}`)
+  }
 
   // Check if user wants to set password
   if (setPassword === "true") {

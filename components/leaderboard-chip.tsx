@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { ChallengeChip } from "@/components/challenge-chip"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
-import { fetchCached, bustFetchCache } from "@/lib/fetch-cache"
+import { fetchCached } from "@/lib/fetch-cache"
 
 // Module-level guard to prevent duplicate fetches in React Strict Mode
 let hasInitialFetchRun = false
@@ -29,20 +29,11 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     dismissedChallengeIdRef.current = id
   }
 
-  const fetchRank = useCallback(async (force = false) => {
+  const fetchRank = useCallback(async () => {
     try {
       setLoading(true)
       const url = `/api/me/rank?scope=${scope}&metric=${metric}`
-      if (force) {
-        bustFetchCache(url)
-      }
-      // Always use no-store to bypass any caching
-      const res = await fetch(url, { 
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-      })
+      const res = await fetch(url, { cache: "no-store" })
       const data = await res.json().catch(() => ({}))
       setRank(typeof data.rank === "number" ? data.rank : null)
     } catch (error) {
@@ -157,7 +148,7 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
   // Only refresh rank when explicitly requested (at end of hand, not during gameplay)
   useEffect(() => {
     const handleRankRefresh = () => {
-      void fetchRank(true)
+      void fetchRank()
     }
     window.addEventListener("rank:refresh", handleRankRefresh)
     return () => window.removeEventListener("rank:refresh", handleRankRefresh)

@@ -590,7 +590,7 @@ export function animateDealerPlay({
     steps.push({ dealerHand: dealer, deck })
   }
 
-  const splitBet = state.firstHandDoubled ? state.firstHandBet : state.initialBet
+  const splitBet = state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet
 
   if (steps.length === 0) {
     const resolution = state.isSplit

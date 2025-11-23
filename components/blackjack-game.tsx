@@ -7,23 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
 import { getOptimalMove, type GameAction } from "@/lib/blackjack-strategy"
-import {
-  calculateHandValue,
-  createDeck,
-  getHandValueInfo,
-  type Card as CardType,
-  getCardValue,
-  isSoftHand,
-} from "@/lib/card-utils"
-import {
-  dealCard,
-  dealerShouldHitH17,
-  ensureDeckHasCards,
-  resolveSingleHand,
-  resolveSplitHands,
-  type SingleHandResolution,
-  type SplitHandResolution,
-} from "@/lib/game-engine"
+import { calculateHandValue, createDeck, getHandValueInfo, type Card as CardType } from "@/lib/card-utils"
 import {
   Lightbulb,
   X,
@@ -43,7 +27,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { BuybackDrillModal } from "@/components/buyback-drill-modal"
 import { FeedbackModal } from "@/components/feedback-modal"
-import { settle } from "@/lib/settlement" // Import the settlement helper
 import { LeaderboardChip } from "@/components/leaderboard-chip"
 import { LeaderboardModal } from "@/components/leaderboard-modal"
 import { ChallengeModal } from "@/components/challenge-modal"
@@ -54,7 +37,8 @@ import { type Challenge } from "@/types/challenge"
 import { fetchCached } from "@/lib/fetch-cache"
 import { useStatsPersistence } from "@/hooks/use-stats-persistence"
 import { useChallenge } from "@/contexts/challenge-context"
-import { useGameEngine } from "@/hooks/use-game-engine"
+import { useGameEngine, useGameEngineController, type RoundResolution } from "@/hooks/use-game-engine"
+import { useChallengeLifecycle } from "@/hooks/use-challenge-lifecycle"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -164,7 +148,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [lastDrillCompletedAt, setLastDrillCompletedAt] = useState<Date | null>(null) // Track last drill completion timestamp
   const [showFeedbackModal, setShowFeedbackModal] = useState(false) // Track feedback modal visibility
 
-  const isDoubledRef = useRef(false) // Ref to track doubled status synchronously
   // Leaderboard state
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [leaderboardMetric, setLeaderboardMetric] = useState<"balance" | "level">("balance")
@@ -196,7 +179,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setRoundResult(null)
     setShowFeedback(false)
     setFeedbackData(null)
-    isDoubledRef.current = false
     setShowModeSelector(true)
   }, [resetRoundState])
 
@@ -223,12 +205,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   // Get active challenge from context (eliminates redundant fetches)
   const { activeChallenge: contextActiveChallenge, setActiveChallenge: setContextActiveChallenge } = useChallenge()
-  
-  // Local challenge state for game-specific logic
-  const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null)
+
+  // Challenge lifecycle state
   const [challengeTimeRemaining, setChallengeTimeRemaining] = useState<number | null>(null)
-  const [pendingChallengeXp, setPendingChallengeXp] = useState(0)
-  const [lastSyncedChallengeCredit, setLastSyncedChallengeCredit] = useState<number | null>(null)
   const [completedChallengeResult, setCompletedChallengeResult] = useState<Challenge | null>(null)
   const [showChallengeResultModal, setShowChallengeResultModal] = useState(false)
   const [requireChallengeDismissal, setRequireChallengeDismissal] = useState(false)
@@ -276,54 +255,18 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     previousLearningModeRef.current = null
   }, [setLearningMode])
 
-  // Sync local activeChallenge with context
-  // Only update if context challenge is different from local state
-  useEffect(() => {
-    if (contextActiveChallenge && contextActiveChallenge.id !== activeChallenge?.id) {
-      setActiveChallenge(contextActiveChallenge)
-      // Apply context but don't update context (to avoid circular updates)
-      if (contextActiveChallenge.status === "active") {
-        enterChallengeExpertMode()
-        setPendingChallengeXp(0)
-        const playerCredit =
-          contextActiveChallenge.challengerId === userId
-            ? contextActiveChallenge.challengerCreditBalance
-            : contextActiveChallenge.challengedCreditBalance
-        const resolvedCredit =
-          playerCredit !== null && playerCredit !== undefined
-            ? playerCredit
-            : balance !== null
-              ? balance
-              : CHALLENGE_CREDIT_START
-        setBalance(resolvedCredit)
-        setLastSyncedChallengeCredit(resolvedCredit)
-      }
-    } else if (!contextActiveChallenge && activeChallenge) {
-      setActiveChallenge(null)
-      setPendingChallengeXp(0)
-      setLastSyncedChallengeCredit(null)
-      restoreLearningMode()
-    }
-  }, [contextActiveChallenge, activeChallenge?.id, userId, balance, enterChallengeExpertMode, restoreLearningMode])
-
   // loadUserStats will be defined below, but we need to reference it in useEffect
   // So we'll move it up or use a ref pattern
 
-  useEffect(() => {
-    if (!activeChallenge && previousLearningModeRef.current !== null) {
-      restoreLearningMode()
-    }
-  }, [activeChallenge, restoreLearningMode])
-
   const applyChallengeContext = useCallback(
     (challengeData: Challenge | null) => {
-      setActiveChallenge(challengeData)
-      // Update context to share with other components (only if different)
       if (challengeData?.id !== contextActiveChallenge?.id) {
         setContextActiveChallenge(challengeData)
       }
       if (challengeData) {
-        setPendingChallengeXp(0)
+        if (challengeData.status === "active") {
+          enterChallengeExpertMode()
+        }
         const playerCredit =
           challengeData.challengerId === userId
             ? challengeData.challengerCreditBalance
@@ -335,41 +278,45 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               ? balance
               : CHALLENGE_CREDIT_START
         setBalance(resolvedCredit)
-        setLastSyncedChallengeCredit(resolvedCredit)
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent("challenge:progress", { detail: challengeData }))
         }
       } else {
-        setPendingChallengeXp(0)
-        setLastSyncedChallengeCredit(null)
         restoreLearningMode()
       }
     },
-    [userId, balance, restoreLearningMode, setContextActiveChallenge, contextActiveChallenge?.id],
+    [userId, balance, restoreLearningMode, enterChallengeExpertMode, setContextActiveChallenge, contextActiveChallenge?.id],
   )
 
-  const updateActiveChallengeState = useCallback(
+  const {
+    activeChallenge,
+    pendingChallengeXp,
+    setPendingChallengeXp,
+    lastSyncedChallengeCredit,
+    setLastSyncedChallengeCredit,
+    applyChallengeContextWrapped,
+    updateActiveChallengeState,
+  } = useChallengeLifecycle({
+    userId,
+    applyChallengeContext,
+    enterChallengeExpertMode,
+    restoreLearningMode,
+  })
+
+  useEffect(() => {
+    if (contextActiveChallenge) {
+      applyChallengeContextWrapped(contextActiveChallenge)
+    } else {
+      applyChallengeContextWrapped(null)
+    }
+  }, [contextActiveChallenge, applyChallengeContextWrapped])
+
+  const syncActiveChallengeState = useCallback(
     (challengeData: Challenge) => {
-      // If the incoming payload is no longer active, clear challenge context and restore modes
+      updateActiveChallengeState(challengeData)
       if (challengeData.status !== "active") {
-        setActiveChallenge(null)
-        setContextActiveChallenge(null)
-        setPendingChallengeXp(0)
-        setLastSyncedChallengeCredit(null)
-        restoreLearningMode()
         return
       }
-
-      const incomingUpdatedAt = challengeData.updatedAt ? new Date(challengeData.updatedAt).getTime() : 0
-      const currentUpdatedAt = activeChallenge?.updatedAt ? new Date(activeChallenge.updatedAt).getTime() : 0
-
-      // Ignore stale payloads that are older than what we already have (prevents snapping back to 500)
-      if (currentUpdatedAt && incomingUpdatedAt && incomingUpdatedAt < currentUpdatedAt) {
-        return
-      }
-
-      setActiveChallenge(challengeData)
-      // Update context to share with other components
       setContextActiveChallenge(challengeData)
       const playerCredit =
         challengeData.challengerId === userId
@@ -378,17 +325,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       if (typeof playerCredit === "number") {
         setBalance(playerCredit)
-        setLastSyncedChallengeCredit(playerCredit)
-      } else if (balance !== null) {
-        // Keep existing local balance instead of resetting to 500 on null payloads
-        setLastSyncedChallengeCredit(balance)
-      }
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("challenge:progress", { detail: challengeData }))
       }
     },
-    [activeChallenge?.updatedAt, balance, userId, setContextActiveChallenge],
+    [setContextActiveChallenge, updateActiveChallengeState, userId],
   )
 
   const handleChallengeResultsOpenChange = (open: boolean) => {
@@ -400,7 +339,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setRequireChallengeDismissal(false)
     setShowChallengeResultModal(false)
     setCompletedChallengeResult(null)
-    applyChallengeContext(null)
+    applyChallengeContextWrapped(null)
     void loadUserStats() // This already fetches active challenge
   }
 
@@ -430,7 +369,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         if (response.ok) {
           const serverChallenge = (result?.challenge as Challenge) || null
           if (serverChallenge) {
-            updateActiveChallengeState(serverChallenge)
+            syncActiveChallengeState(serverChallenge)
           } else {
             setLastSyncedChallengeCredit(creditBalance)
           }
@@ -442,7 +381,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         console.error("[v0] Failed to sync challenge progress:", error)
       }
     },
-    [activeChallenge, lastSyncedChallengeCredit, updateActiveChallengeState],
+    [activeChallenge, lastSyncedChallengeCredit, syncActiveChallengeState],
   )
 
   // Challenge fetching is now handled by ChallengeContext
@@ -624,7 +563,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
               }
             }
 
-            applyChallengeContext(null)
+            applyChallengeContextWrapped(null)
             setChallengeTimeRemaining(null)
             void loadUserStats() // This already fetches active challenge
           }
@@ -825,168 +764,76 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const startNewHand = (betOverride?: number) => {
     const betToUse = sanitizeBet(betOverride) || sanitizeBet(currentBet)
     if (betToUse === 0) return
-    if (balance === null || !Number.isFinite(balance) || balance < betToUse) return // Check if balance is loaded and sufficient
+    if (balance === null || !Number.isFinite(balance) || balance < betToUse) return
 
-    patchState({ gameState: "playing", isDealing: true })
-    setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
+    setShowModeSelector(false)
     setCurrentBet(betToUse)
-    const betAmount = betToUse
-    const newBalance = balance - betAmount
+    const newBalance = balance - betToUse
     setBalance(newBalance)
     if (activeChallenge) {
-      // Persist challenge credits immediately so polling UIs don't reset to the old value mid-hand
       void syncChallengeProgress(newBalance, pendingChallengeXp)
     }
-    patchState({
-      activeBet: betAmount,
-      initialBet: betAmount,
-      isSplit: false,
-      splitHand: [],
-      currentHandIndex: 0,
-      firstHandResult: null,
-      firstHandCards: [],
-      showBustMessage: false,
-      viewHandIndex: 0,
-      isDoubled: false,
-    })
+
     setShowFeedback(false)
     setFeedbackData(null)
-    isDoubledRef.current = false // Reset ref
+    setRoundResult(null)
 
-    let deckCopy = [...deck]
+    startEngineHand(betToUse)
+  }
 
-    // Reshuffle if deck is empty (will be handled by dealCard, but ensure initial deck is ready)
-    if (deckCopy.length === 0) {
-      deckCopy = createDeck()
-    }
+  const addExperience = useCallback(
+    (amount: number) => {
+      if (activeChallenge) {
+        if (amount <= 0) return
+        const boosted = Math.max(1, Math.round(amount * CHALLENGE_XP_MULTIPLIER))
+        setPendingChallengeXp((prev) => prev + boosted)
+        return
+      }
 
-    setTimeout(() => {
-      // Deal all cards simultaneously
-      const [newDealerHand1, deck1] = dealCard([], deckCopy)
-      const [newDealerHand2, deck2] = dealCard(newDealerHand1, deck1)
-      const [newPlayerHand1, deck3] = dealCard([], deck2)
-      const [newPlayerHand2, deck4] = dealCard(newPlayerHand1, deck3)
+      setXp((prevXp) => {
+        let currentXp = prevXp + amount
+        let currentLevel = levelRef.current
+        let levelUpOccurred = false
+        let finalLevel = currentLevel
+        let finalCashBonus = 0
+        const currentLevelWinnings = levelWinnings
 
-      patchState({
-        dealerHand: newDealerHand2,
-        playerHand: newPlayerHand2,
-        deck: deck4,
-        dealerRevealed: false,
-        isDealing: false,
-        message: "",
-      })
+        while (currentXp >= getXPNeeded(currentLevel)) {
+          levelUpOccurred = true
+          const xpNeeded = getXPNeeded(currentLevel)
+          currentXp -= xpNeeded
+          currentLevel += 1
+          finalLevel = currentLevel
 
-      const dealerUpcard = newDealerHand2[0]
-      const dealerUpcardValue = getCardValue(dealerUpcard)
+          const bonus = getCashBonusWithCap(currentLevel - 1, LEVELING_CONFIG.cash_cap)
+          finalCashBonus += bonus
 
-      if (dealerUpcardValue === 11 || dealerUpcardValue === 10) {
-        // Dealer peeks for blackjack
-        const dealerValue = calculateHandValue(newDealerHand2)
-        const playerValue = calculateHandValue(newPlayerHand2)
-
-        if (dealerValue === 21 && newDealerHand2.length === 2) {
-          // Dealer has blackjack - resolve immediately
-          patchState({ dealerRevealed: true })
-
-          if (playerValue === 21 && newPlayerHand2.length === 2) {
-            // Both have blackjack - push
-            const payout = settle({ result: "push", baseBet: betAmount, isDoubled: false, isBlackjack: true })
-            const msg = "Push! Both Have Blackjack"
-            patchState({ message: msg })
-            setBalance((prev) => (prev !== null ? prev + payout : payout))
-            setTotalWinnings((prev) => prev + (payout - betAmount)) // Net change is 0, but track payout
-            // levelWinnings doesn't change for push (no net change)
-            setRoundResult({
-              message: msg,
-              winAmount: 0,
-              newBalance: newBalance + payout,
-            })
-          } else {
-            // Dealer wins with blackjack
-            const msg = "Dealer Blackjack! You Lose"
-            patchState({ message: msg })
-            setTotalWinnings((prev) => prev - betAmount)
-            setLevelWinnings((prev) => prev - betAmount)
-            setRoundResult({
-              message: msg,
-              winAmount: -betAmount,
-              newBalance: newBalance,
-            })
-            setLosses((prev) => prev + 1)
-            setModeStats((prev) => ({
-              ...prev,
-              [learningMode]: {
-                ...prev[learningMode],
-                losses: prev[learningMode].losses + 1,
-              },
-            }))
-          }
-
-          patchState({ gameState: "finished" })
-          setHandsPlayed((prev) => prev + 1)
-          setModeStats((prev) => ({
-            ...prev,
-            [learningMode]: {
-              ...prev[learningMode],
-              handsPlayed: prev[learningMode].handsPlayed + 1,
-            },
-          }))
-          // No XP awarded for dealer blackjack (push or loss)
-          return
+          setBalance((prevBalance) => {
+            if (prevBalance === null) return prevBalance
+            return prevBalance + bonus
+          })
         }
-      }
 
-      // Check for player blackjack (only if dealer doesn't have blackjack)
-      const playerValue = calculateHandValue(newPlayerHand2)
-      if (playerValue === 21 && newPlayerHand2.length === 2) {
-        checkForBlackjack(newPlayerHand2, newDealerHand2, betAmount, newBalance)
-      }
-    }, 100)
-  }
+        if (levelUpOccurred) {
+          levelRef.current = finalLevel
+          setLevel(finalLevel)
+          setLevelWinnings(0)
 
-  const checkForBlackjack = (pHand: CardType[], dHand: CardType[], betAmount: number, currentBalance: number) => {
-    const playerValue = calculateHandValue(pHand)
+          const accuracy = totalMoves > 0 ? Math.round((correctMoves / totalMoves) * 100) : 0
+          setLevelUpData({
+            newLevel: finalLevel,
+            levelWinnings: currentLevelWinnings,
+            cashBonus: finalCashBonus,
+            accuracy,
+          })
+          setShowLevelUp(true)
+        }
 
-    if (playerValue === 21 && pHand.length === 2) {
-      patchState({ dealerRevealed: true })
-      const payout = settle({ result: "win", baseBet: betAmount, isDoubled: false, isBlackjack: true })
-      const profit = payout - betAmount
-      const msg = "Blackjack! You Win 3:2"
-
-      patchState({ message: msg, gameState: "finished" })
-      setBalance((prev) => (prev !== null ? prev + payout : payout))
-      setTotalWinnings((prev) => prev + profit)
-      setLevelWinnings((prev) => prev + profit)
-      setRoundResult({
-        message: msg,
-        winAmount: profit,
-        newBalance: currentBalance + payout,
+        return currentXp
       })
-      // Award XP for blackjack win (scaled by level and bet amount)
-      addExperience(getXPPerWinWithBet(level, betAmount))
-
-      setWins((prev) => prev + 1)
-      setModeStats((prev) => ({
-        ...prev,
-        [learningMode]: {
-          ...prev[learningMode],
-          wins: prev[learningMode].wins + 1,
-        },
-      }))
-
-      setCorrectMoves((prev) => prev + 1)
-      setTotalMoves((prev) => prev + 1)
-
-      setHandsPlayed((prev) => prev + 1)
-      setModeStats((prev) => ({
-        ...prev,
-        [learningMode]: {
-          ...prev[learningMode],
-          handsPlayed: prev[learningMode].handsPlayed + 1,
-        },
-      }))
-    }
-  }
+    },
+    [activeChallenge, correctMoves, levelWinnings, setPendingChallengeXp, totalMoves],
+  )
 
   const checkPlayerAction = (action: GameAction, originalHand?: CardType[]) => {
     if (learningMode === "guided") return true
@@ -1038,357 +885,116 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const hit = () => {
     checkPlayerAction("hit")
-
-    const deckCopy = ensureDeckHasCards([...deck])
-    const [newHand, newDeck] = dealCard(playerHand, deckCopy)
-    const patchPayload: any = { playerHand: newHand, deck: newDeck }
-    if (isSplit && currentHandIndex === 1) {
-      patchPayload.splitHand = newHand // Keep split hand in sync while playing second hand
-    }
-    patchState(patchPayload)
-
-    const value = calculateHandValue(newHand)
-    if (value > 21) {
-      if (isSplit && currentHandIndex === 0) {
-        patchState({
-          firstHandResult: { value, busted: true },
-          firstHandCards: newHand,
-          showBustMessage: true,
-          message: "Hand 1 Busts!",
-        })
-
-        setTimeout(() => {
-          patchState({
-            showBustMessage: false,
-            currentHandIndex: 1,
-            playerHand: splitHand,
-            message: "Playing second hand...",
-          })
-        }, 600)
-      } else if (isSplit && currentHandIndex === 1) {
-        const firstHandBusted = firstHandResult?.busted ?? false
-        const splitBustPatch: any = { dealerRevealed: true, splitHand: newHand }
-
-        if (firstHandBusted) {
-          // Both hands busted—settle immediately
-          patchState(splitBustPatch)
-          const resolution = resolveSplitHands({
-            firstHand: firstHandCards,
-            secondHand: newHand,
-            dealerHand,
-            betPerHand: activeBet,
-            level,
-          })
-          applyResolution(resolution)
-        } else {
-          // First hand is still live—play out dealer hand for correct resolution
-          // Pass newHand (busted second hand) as secondHandOverride since state update may not be applied yet
-          patchState({ ...splitBustPatch, gameState: "dealer" })
-          playDealerHand(firstHandCards, newHand)
-        }
-      } else {
-        patchState({ dealerRevealed: true })
-        const bustResolution: SingleHandResolution = {
-          result: "loss",
-          message: "Bust! You Lose",
-          payout: 0,
-          totalBet: activeBet,
-          winAmount: -activeBet,
-          winsDelta: 0,
-          lossesDelta: 1,
-          totalMovesDelta: 1,
-          correctMovesDelta: 0,
-          handsPlayedDelta: 1,
-          xpGain: 0,
-        }
-        applyResolution(bustResolution)
-      }
-    } else if (value === 21) {
-      stand(newHand, true)
-    }
+    engineHit()
   }
 
   const stand = (finalPlayerHand?: CardType[], isAutomatic = false) => {
     if (!isAutomatic) {
       checkPlayerAction("stand")
     }
-
-    if (isSplit && currentHandIndex === 0) {
-      const handToUse = finalPlayerHand || playerHand
-      patchState({
-        firstHandCards: handToUse,
-        firstHandResult: { value: calculateHandValue(handToUse), busted: false },
-        currentHandIndex: 1,
-        playerHand: splitHand,
-        message: "Playing second hand...",
-      })
-      console.log("[v0] Finished Hand 1, cards:", handToUse, "value:", calculateHandValue(handToUse))
-    } else {
-      const handToUse = finalPlayerHand || playerHand || []
-      const patchPayload: any = { gameState: "dealer", dealerRevealed: true }
-      if (isSplit && currentHandIndex === 1) {
-        // Persist final second hand for post-round viewing and for playDealerHand to use
-        patchPayload.splitHand = handToUse
-      }
-      patchState(patchPayload)
-      console.log("[v0] Standing on Hand 2, cards:", handToUse, "value:", calculateHandValue(handToUse))
-      // Note: playDealerHand parameter is ignored for splits; it uses splitHand from state
-      playDealerHand(handToUse)
-    }
+    engineStand(finalPlayerHand)
   }
 
-  type RoundResolution = SingleHandResolution | SplitHandResolution
-
-  const applyResolution = (resolution: RoundResolution) => {
-    setBalance((prevBalance) => {
-      const nextBalance = prevBalance !== null ? prevBalance + resolution.payout : resolution.payout
-      setRoundResult({
-        message: resolution.message,
-        winAmount: resolution.winAmount,
-        newBalance: nextBalance,
-      })
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("stats:update", { detail: { balance: nextBalance } }))
-      }
-      if (nextBalance === 0) {
-        setTimeout(() => {
-          openModeSelector()
-        }, 2000)
-      }
-      return nextBalance
-    })
-
-    patchState({ message: resolution.message, gameState: "finished" })
-    setHandsPlayed((prev) => prev + resolution.handsPlayedDelta)
-    setWins((prev) => prev + resolution.winsDelta)
-    setLosses((prev) => prev + resolution.lossesDelta)
-    setTotalWinnings((prev) => prev + resolution.winAmount)
-    setLevelWinnings((prev) => prev + resolution.winAmount)
-    setModeStats((prev) => ({
-      ...prev,
-      [learningMode]: {
-        ...prev[learningMode],
-        handsPlayed: prev[learningMode].handsPlayed + resolution.handsPlayedDelta,
-        wins: prev[learningMode].wins + resolution.winsDelta,
-        losses: prev[learningMode].losses + resolution.lossesDelta,
-        correctMoves: prev[learningMode].correctMoves + (resolution.correctMovesDelta || 0),
-        totalMoves: prev[learningMode].totalMoves + (resolution.totalMovesDelta || 0),
-      },
-    }))
-
-    if (resolution.correctMovesDelta) {
-      setCorrectMoves((prev) => prev + resolution.correctMovesDelta)
-    }
-    if (resolution.totalMovesDelta) {
-      setTotalMoves((prev) => prev + resolution.totalMovesDelta)
-    }
-    if (resolution.xpGain > 0) {
-      addExperience(resolution.xpGain)
-    }
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("rank:refresh"))
-    }
-  }
-
-  const playDealerHand = (finalPlayerHand: CardType[], secondHandOverride?: CardType[]) => {
-    let currentDealerHand = [...dealerHand]
-    let currentDeck = ensureDeckHasCards([...deck])
-
-    console.log(
-      "[v0] playDealerHand called with player hand:",
-      finalPlayerHand,
-      "value:",
-      calculateHandValue(finalPlayerHand),
-    )
-    const dealerPlay = () => {
-      const shouldHit = dealerShouldHitH17(currentDealerHand)
-
-      if (!shouldHit) {
-        const dealerValue = calculateHandValue(currentDealerHand)
-        const dealerIsSoft = isSoftHand(currentDealerHand)
-        console.log(
-          "[v0] Dealer finished (H17 rule), hand:",
-          currentDealerHand,
-          "value:",
-          dealerValue,
-          "soft:",
-          dealerIsSoft,
-          "action: STAND",
-        )
-        if (isSplit) {
-          // For split hands:
-          // - First hand: use engine.firstHandCards (set when first hand was completed, stable)
-          // - Second hand: use secondHandOverride if provided (for bust scenarios where state isn't updated yet),
-          //   otherwise prefer finalPlayerHand when it's the second hand (standing/doubling on hand 2),
-          //   or fall back to engine.splitHand when finalPlayerHand is the first hand
-          const secondHand = secondHandOverride || (finalPlayerHand === engine.firstHandCards ? engine.splitHand : finalPlayerHand)
-          finishSplitHand(engine.firstHandCards, secondHand, currentDealerHand)
-        } else {
-          finishHand(finalPlayerHand, currentDealerHand)
+  const handleRoundResolution = useCallback(
+    (resolution: RoundResolution) => {
+      setBalance((prevBalance) => {
+        const nextBalance = prevBalance !== null ? prevBalance + resolution.payout : resolution.payout
+        setRoundResult({
+          message: resolution.message,
+          winAmount: resolution.winAmount,
+          newBalance: nextBalance,
+        })
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("stats:update", { detail: { balance: nextBalance } }))
         }
-        return
+        if (nextBalance === 0) {
+          setTimeout(() => {
+            openModeSelector()
+          }, 2000)
+        }
+        return nextBalance
+      })
+
+      setHandsPlayed((prev) => prev + resolution.handsPlayedDelta)
+      setWins((prev) => prev + resolution.winsDelta)
+      setLosses((prev) => prev + resolution.lossesDelta)
+      setTotalWinnings((prev) => prev + resolution.winAmount)
+      setLevelWinnings((prev) => prev + resolution.winAmount)
+      setModeStats((prev) => ({
+        ...prev,
+        [learningMode]: {
+          ...prev[learningMode],
+          handsPlayed: prev[learningMode].handsPlayed + resolution.handsPlayedDelta,
+          wins: prev[learningMode].wins + resolution.winsDelta,
+          losses: prev[learningMode].losses + resolution.lossesDelta,
+          correctMoves: prev[learningMode].correctMoves + (resolution.correctMovesDelta || 0),
+          totalMoves: prev[learningMode].totalMoves + (resolution.totalMovesDelta || 0),
+        },
+      }))
+
+      if (resolution.correctMovesDelta) {
+        setCorrectMoves((prev) => prev + resolution.correctMovesDelta)
+      }
+      if (resolution.totalMovesDelta) {
+        setTotalMoves((prev) => prev + resolution.totalMovesDelta)
+      }
+      if (resolution.xpGain > 0) {
+        addExperience(resolution.xpGain)
       }
 
-      console.log("[v0] Dealer hits (H17 rule), hand:", currentDealerHand, "value:", calculateHandValue(currentDealerHand))
-      setTimeout(() => {
-        currentDeck = ensureDeckHasCards(currentDeck)
-        const [newHand, newDeck] = dealCard(currentDealerHand, currentDeck)
-        currentDealerHand = newHand
-        currentDeck = newDeck
-        patchState({ dealerHand: newHand, deck: newDeck })
-        dealerPlay()
-      }, 400)
-    }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("rank:refresh"))
+      }
+    },
+    [addExperience, learningMode, openModeSelector],
+  )
 
-    dealerPlay()
-  }
-
-  const finishSplitHand = (firstHandCards: CardType[], secondHandCards: CardType[], finalDealerHand: CardType[]) => {
-    const resolution = resolveSplitHands({
-      firstHand: firstHandCards,
-      secondHand: secondHandCards,
-      dealerHand: finalDealerHand,
-      betPerHand: activeBet,
-      level,
-    })
-
-    applyResolution(resolution)
-  }
-
-  const finishHand = (finalPlayerHand: CardType[], finalDealerHand: CardType[]) => {
-    const safePlayerHand = Array.isArray(finalPlayerHand) && finalPlayerHand.length > 0 ? finalPlayerHand : playerHand
-    const safeDealerHand = Array.isArray(finalDealerHand) && finalDealerHand.length > 0 ? finalDealerHand : dealerHand
-
-    const resolution = resolveSingleHand({
-      playerHand: safePlayerHand,
-      dealerHand: safeDealerHand,
-      baseBet: initialBet,
-      isDoubled: isDoubledRef.current,
-      level,
-    })
-
-    applyResolution(resolution)
-  }
+  const {
+    startHand: startEngineHand,
+    hit: engineHit,
+    stand: engineStand,
+    doubleDown: engineDoubleDown,
+    split: engineSplit,
+    canSplit,
+  } = useGameEngineController({
+    state: engine,
+    patchState,
+    level,
+    onRoundResolved: handleRoundResolution,
+  })
 
   const doubleDown = () => {
     checkPlayerAction("double")
 
-    if (balance === null || balance < activeBet) return // Check if balance is loaded and sufficient
+    if (balance === null || balance < activeBet) return
 
-    patchState({ isDoubled: true })
-    isDoubledRef.current = true // Update ref synchronously
     const additionalBet = activeBet
     setBalance((prev) => {
-      const newBalance = (prev !== null ? prev - additionalBet : -additionalBet)
-      // Sync challenge progress after double down if there's an active challenge
+      const newBalance = prev !== null ? prev - additionalBet : -additionalBet
       if (activeChallenge) {
         void syncChallengeProgress(newBalance, pendingChallengeXp)
       }
       return newBalance
     })
-    const newActiveBet = activeBet * 2
-    patchState({ activeBet: newActiveBet })
 
-    const deckCopy = ensureDeckHasCards([...deck])
-    const [newHand, newDeck] = dealCard(playerHand, deckCopy)
-    const patchPayload: any = { playerHand: newHand, deck: newDeck }
-    if (isSplit && currentHandIndex === 1) {
-      patchPayload.splitHand = newHand
-    }
-    patchState(patchPayload)
-
-    const value = calculateHandValue(newHand)
-    if (value > 21) {
-      const totalBetAmount = initialBet * 2
-      const bustPatch: any = { dealerRevealed: true }
-      if (isSplit && currentHandIndex === 1) {
-        bustPatch.splitHand = newHand
-      }
-      patchState(bustPatch)
-      const bustResolution: SingleHandResolution = {
-        result: "loss",
-        message: "Bust! You Lose",
-        payout: 0,
-        totalBet: totalBetAmount,
-        winAmount: -totalBetAmount,
-        winsDelta: 0,
-        lossesDelta: 1,
-        totalMovesDelta: 1,
-        correctMovesDelta: 0,
-        handsPlayedDelta: 1,
-        xpGain: 0,
-      }
-      applyResolution(bustResolution)
-    } else {
-      // After doubling, automatically stand but don't call checkPlayerAction again
-      // The feedback was already set when double was called
-      if (isSplit && currentHandIndex === 0) {
-        patchState({
-          firstHandCards: newHand,
-          firstHandResult: { value: calculateHandValue(newHand), busted: false },
-          currentHandIndex: 1,
-          playerHand: splitHand,
-          message: "Playing second hand...",
-        })
-        console.log("[v0] Finished Hand 1, cards:", newHand, "value:", calculateHandValue(newHand))
-      } else {
-        const patchPayload: any = { gameState: "dealer", dealerRevealed: true }
-        if (isSplit && currentHandIndex === 1) {
-          patchPayload.splitHand = newHand
-        }
-        patchState(patchPayload)
-        console.log("[v0] Standing on Hand 2 after double, cards:", newHand, "value:", calculateHandValue(newHand))
-        // For splits, parameter is only used for logging (resolution uses splitHand from state). For non-splits, parameter is used.
-        playDealerHand(newHand)
-      }
-    }
-  }
-
-  const canSplit = (hand: CardType[]) => {
-    if (hand.length !== 2) return false
-    if (balance === null || balance < activeBet) return false // Need enough balance for second hand
-
-    const v1 = getCardValue(hand[0])
-    const v2 = getCardValue(hand[1])
-    return v1 === v2
+    engineDoubleDown()
   }
 
   const split = () => {
     if (!canSplit(playerHand)) return
     if (balance === null || balance < activeBet) return
 
-    // Store the original hand before splitting
     const originalHand = [...playerHand]
 
-    // Deduct the additional bet for the second hand
     setBalance((prev) => {
-      const newBalance = (prev !== null ? prev - activeBet : -activeBet)
-      // Sync challenge progress after split if there's an active challenge
+      const newBalance = prev !== null ? prev - activeBet : -activeBet
       if (activeChallenge) {
         void syncChallengeProgress(newBalance, pendingChallengeXp)
       }
       return newBalance
     })
-    patchState({ isSplit: true })
 
-    // Split the cards
-    const firstHand = [playerHand[0]]
-    const secondHand = [playerHand[1]]
-
-    // Deal a new card to each hand
-    const deckCopy = ensureDeckHasCards([...deck])
-    const [newFirstHand, deck1] = dealCard(firstHand, deckCopy)
-    const [newSecondHand, deck2] = dealCard(secondHand, deck1)
-
-    patchState({
-      playerHand: newFirstHand,
-      splitHand: newSecondHand,
-      deck: deck2,
-      currentHandIndex: 0,
-      message: "Playing first hand...",
-    })
-
+    engineSplit()
     checkPlayerAction("split", originalHand)
   }
 
@@ -1458,7 +1064,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     })
     setShowFeedback(false)
     setFeedbackData(null)
-    isDoubledRef.current = false // Reset ref
     setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
 
     const betToRepeat = sanitizeBet(initialBet)
@@ -1470,62 +1075,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }
 
-  const addExperience = (amount: number) => {
-    if (activeChallenge) {
-      if (amount <= 0) return
-      const boosted = Math.max(1, Math.round(amount * CHALLENGE_XP_MULTIPLIER))
-      setPendingChallengeXp((prev) => prev + boosted)
-      return
-    }
-
-    setXp((prevXp) => {
-      let currentXp = prevXp + amount
-      // Use ref to get current level (avoids stale closure issues)
-      let currentLevel = levelRef.current
-      let levelUpOccurred = false
-      let finalLevel = currentLevel
-      let finalCashBonus = 0
-      const currentLevelWinnings = levelWinnings
-
-      // Handle multiple level-ups if XP exceeds multiple thresholds
-      while (currentXp >= getXPNeeded(currentLevel)) {
-        levelUpOccurred = true
-        const xpNeeded = getXPNeeded(currentLevel)
-        currentXp -= xpNeeded
-        currentLevel += 1
-        finalLevel = currentLevel
-        
-        // Calculate cash bonus based on the level just completed (currentLevel - 1)
-        const bonus = getCashBonusWithCap(currentLevel - 1, LEVELING_CONFIG.cash_cap)
-        finalCashBonus += bonus
-        
-        // Add bonus to balance
-        setBalance((prevBalance) => {
-          if (prevBalance === null) return prevBalance
-          return prevBalance + bonus
-        })
-      }
-
-      // If level-up occurred, update level and show level-up modal
-      if (levelUpOccurred) {
-        levelRef.current = finalLevel // Update ref immediately
-        setLevel(finalLevel)
-        // Reset level winnings
-        setLevelWinnings(0)
-        
-        const accuracy = totalMoves > 0 ? Math.round((correctMoves / totalMoves) * 100) : 0
-        setLevelUpData({
-          newLevel: finalLevel,
-          levelWinnings: currentLevelWinnings,
-          cashBonus: finalCashBonus,
-          accuracy,
-        })
-        setShowLevelUp(true)
-      }
-
-      return currentXp
-    })
-  }
 
   const closeLevelUp = () => {
     setShowLevelUp(false)

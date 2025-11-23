@@ -36,6 +36,8 @@ export type EngineGameState = {
   isDoubled: boolean
   message: string
   roundLevel: number
+  firstHandBet?: number
+  firstHandDoubled?: boolean
 }
 
 export type RoundResolution = SingleHandResolution | SplitHandResolution

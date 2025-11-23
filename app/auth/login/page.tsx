@@ -8,8 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { useRouter, useSearchParams } from "next/navigation" // Add useSearchParams
+import { EmailSentCard } from "@/components/auth/email-sent-card"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useState, useMemo, useEffect } from "react"
+import Link from "next/link"
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -156,39 +158,17 @@ export default function LoginPage() {
 
   if (magicLinkSent) {
     return (
-      <div className="flex h-dvh w-full items-center justify-center overflow-hidden bg-background p-2 sm:p-4 touch-none overscroll-none">
-        <div className="w-full max-w-sm">
-          <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-            <CardHeader className="space-y-2 text-center pb-4">
-              <CardTitle className="text-2xl sm:text-3xl font-bold tracking-tight">Check Your Email</CardTitle>
-              <CardDescription className="text-sm sm:text-base text-muted-foreground">
-                We've sent you a magic link. Click it to finish signing in—no password required.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
-                <p className="text-sm text-center text-muted-foreground">
-                  Email sent to: <span className="font-medium text-foreground">{email}</span>
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  You can add a password later from the profile settings if you prefer.
-                </p>
-              </div>
-              <Button
-                onClick={() => {
-                  setMagicLinkSent(false)
-                  setEmail("")
-                }}
-                variant="outline"
-                className="w-full h-11"
-                size="lg"
-              >
-                Use a Different Email
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <EmailSentCard
+        title="Check Your Email"
+        description="We've sent you a magic link. Click it to finish signing in—no password required."
+        email={email}
+        additionalInfo="You can add a password later from the profile settings if you prefer."
+        buttonText="Use a Different Email"
+        onButtonClick={() => {
+          setMagicLinkSent(false)
+          setEmail("")
+        }}
+      />
     )
   }
 
@@ -274,6 +254,18 @@ export default function LoginPage() {
                     <p className="text-xs text-muted-foreground">
                       Prefer a traditional login? Set a password once and use it anytime.
                     </p>
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <Link
+                      href={
+                        searchParams.get("friend")
+                          ? `/auth/forgot-password?email=${encodeURIComponent(email)}&friend=${searchParams.get("friend")}`
+                          : `/auth/forgot-password?email=${encodeURIComponent(email)}`
+                      }
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Forgot Password?
+                    </Link>
                   </div>
                   <Button
                     type="submit"

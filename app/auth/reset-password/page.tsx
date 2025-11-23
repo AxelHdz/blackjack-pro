@@ -94,7 +94,6 @@ function ResetPasswordContent() {
       // Password reset successfully, redirect to home
       const redirectPath = friendId ? `/?friend=${friendId}` : "/"
       router.push(redirectPath)
-      router.refresh()
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
       setIsLoading(false)

@@ -572,7 +572,7 @@ export function useGameEngine(initial: Partial<EngineGameState> = {}) {
 export function animateDealerPlay({
   state,
   dispatch,
-  delayMs =150,
+  delayMs = 150,
 }: {
   state: EngineGameState
   dispatch: React.Dispatch<EngineAction>
@@ -590,7 +590,8 @@ export function animateDealerPlay({
     steps.push({ dealerHand: dealer, deck })
   }
 
-  const splitBet = state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet
+  const firstHandBet = state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet
+  const secondHandBet = state.initialBet
 
   if (steps.length === 0) {
     const resolution = state.isSplit
@@ -598,7 +599,8 @@ export function animateDealerPlay({
           firstHand: state.firstHandCards,
           secondHand: state.splitHand,
           dealerHand: state.dealerHand,
-          betPerHand: splitBet,
+          firstBet: firstHandBet,
+          secondBet: secondHandBet,
           level: state.roundLevel,
         })
       : resolveSingleHand({
@@ -642,7 +644,8 @@ export function animateDealerPlay({
               firstHand: state.firstHandCards,
               secondHand: state.splitHand,
               dealerHand: step.dealerHand,
-              betPerHand: splitBet,
+              firstBet: firstHandBet,
+              secondBet: secondHandBet,
               level: state.roundLevel,
             })
           : resolveSingleHand({

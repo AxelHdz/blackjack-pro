@@ -178,6 +178,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setLeaderboardScope(value)
   }, [])
 
+  const triggerLeaderboardRefresh = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("rank:refresh"))
+    }
+  }, [])
+
   const sanitizeBet = useCallback((bet: number | null | undefined) => {
     if (typeof bet !== "number") return 0
     if (!Number.isFinite(bet)) return 0
@@ -763,17 +769,15 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }, [gameState, showModeSelector, statsLoaded, lastDrillCompletedAt])
 
-  // When returning to the select play mode screen, force a fresh rank fetch via event
+  const hasEnteredSelectModeRef = useRef(false)
   useEffect(() => {
-    const prev = { current: gameState }
-  }, [gameState])
-
-  useEffect(() => {
-    const prevStateRef = { current: gameState }
-    return () => {
-      prevStateRef.current = gameState
+    if (!statsLoaded) return
+    const inSelectMode = gameState === "betting" || showModeSelector
+    if (inSelectMode && !hasEnteredSelectModeRef.current) {
+      triggerLeaderboardRefresh()
     }
-  }, [gameState])
+    hasEnteredSelectModeRef.current = inSelectMode
+  }, [gameState, showModeSelector, statsLoaded, triggerLeaderboardRefresh])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -1539,8 +1543,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }
 
   const handleDrillSuccess = (amount: number) => {
+    let resolvedBalance: number | null = null
     setBalance((prev) => {
       const newBalance = (prev !== null ? prev + amount : amount)
+      resolvedBalance = newBalance
       // Sync challenge progress after drill success if there's an active challenge
       if (activeChallenge) {
         void syncChallengeProgress(newBalance, pendingChallengeXp)
@@ -1550,6 +1556,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setDrillTier((prev) => Math.min(prev + 1, 2)) // Advance tier, max at tier 3 (index 2)
     setLastDrillCompletedAt(new Date()) // Track successful drill completion timestamp
     setShowBuybackDrill(false)
+    if (typeof window !== "undefined" && typeof resolvedBalance === "number") {
+      window.dispatchEvent(new CustomEvent("stats:update", { detail: { balance: resolvedBalance } }))
+    }
+    triggerLeaderboardRefresh()
   }
 
   const closeDrill = () => {

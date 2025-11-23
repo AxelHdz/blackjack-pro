@@ -178,8 +178,10 @@ export function LeaderboardModal({
       void loadLeaderboard(true, scopeRef.current, metricRef.current)
     }
     window.addEventListener("stats:update", handleStatsOrRank)
+    window.addEventListener("rank:refresh", handleStatsOrRank)
     return () => {
       window.removeEventListener("stats:update", handleStatsOrRank)
+      window.removeEventListener("rank:refresh", handleStatsOrRank)
     }
   }, [open])
 

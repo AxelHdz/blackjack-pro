@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
 import { getOptimalMove, type GameAction } from "@/lib/blackjack-strategy"
-import { calculateHandValue, createDeck, getHandValueInfo, type Card as CardType } from "@/lib/card-utils"
+import { calculateHandValue, createDeck, getCardValue, getHandValueInfo, type Card as CardType } from "@/lib/card-utils"
 import {
   Lightbulb,
   X,
@@ -37,7 +37,7 @@ import { type Challenge } from "@/types/challenge"
 import { fetchCached } from "@/lib/fetch-cache"
 import { useStatsPersistence } from "@/hooks/use-stats-persistence"
 import { useChallenge } from "@/contexts/challenge-context"
-import { useGameEngine, useGameEngineController, type RoundResolution } from "@/hooks/use-game-engine"
+import { animateDealerPlay, useGameEngine, type RoundResolution, type EngineGameState } from "@/hooks/use-game-engine"
 import { useChallengeLifecycle } from "@/hooks/use-challenge-lifecycle"
 
 type LearningMode = "guided" | "practice" | "expert"
@@ -78,7 +78,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const [xp, setXp] = useState(0)
   // Use a ref to track level for XP calculations to avoid stale closure issues
   const levelRef = useRef(1)
-  const { state: engine, patchState, resetRoundState } = useGameEngine()
+  const { state: engine, resolution: engineResolution, dispatch: dispatchEngine } = useGameEngine()
   const {
     deck,
     playerHand,
@@ -98,6 +98,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     isDoubled,
     message,
   } = engine
+  const updateEngine = useCallback((payload: Partial<EngineGameState>) => {
+    dispatchEngine({ type: "HYDRATE", payload })
+  }, [dispatchEngine])
+  const resetRoundState = useCallback(() => {
+    dispatchEngine({ type: "RESET_ROUND" })
+  }, [dispatchEngine])
+  const dealerAnimatingRef = useRef(false)
 
   const [learningMode, setLearningMode] = useState<LearningMode>("guided")
   const [showFeedback, setShowFeedback] = useState(false)
@@ -463,9 +470,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
         const isValidDeck = data.deck.every((card: any) => card && typeof card === "object" && card.suit && card.rank)
-        patchState({ deck: isValidDeck ? (data.deck as any) : createDeck() })
+        updateEngine({ deck: isValidDeck ? (data.deck as any) : createDeck() })
       } else {
-        patchState({ deck: createDeck() })
+        updateEngine({ deck: createDeck() })
       }
 
       setStatsLoaded(true)
@@ -473,7 +480,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       console.error("[v0] Error in loadUserStats:", err)
       setStatsLoaded(true) // Ensure loading state is updated
     }
-  }, [userId, contextActiveChallenge, setLearningMode, patchState])
+  }, [userId, contextActiveChallenge, setLearningMode, updateEngine])
 
   useEffect(() => {
     loadUserStats() // This already fetches active challenge via context
@@ -778,7 +785,9 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     setFeedbackData(null)
     setRoundResult(null)
 
-    startEngineHand(betToUse)
+    // Ensure engine is ready to deal
+    resetRoundState()
+    dispatchEngine({ type: "DEAL", bet: betToUse, level })
   }
 
   const addExperience = useCallback(
@@ -885,15 +894,15 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const hit = () => {
     checkPlayerAction("hit")
-    engineHit()
+    dispatchEngine({ type: "HIT" })
   }
 
-  const stand = (finalPlayerHand?: CardType[], isAutomatic = false) => {
-    if (!isAutomatic) {
-      checkPlayerAction("stand")
-    }
-    engineStand(finalPlayerHand)
+  const stand = () => {
+    checkPlayerAction("stand")
+    dispatchEngine({ type: "STAND" })
   }
+
+  const canSplitHand = playerHand.length === 2 && getCardValue(playerHand[0]) === getCardValue(playerHand[1])
 
   const handleRoundResolution = useCallback(
     (resolution: RoundResolution) => {
@@ -949,19 +958,23 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     [addExperience, learningMode, openModeSelector],
   )
 
-  const {
-    startHand: startEngineHand,
-    hit: engineHit,
-    stand: engineStand,
-    doubleDown: engineDoubleDown,
-    split: engineSplit,
-    canSplit,
-  } = useGameEngineController({
-    state: engine,
-    patchState,
-    level,
-    onRoundResolved: handleRoundResolution,
-  })
+  useEffect(() => {
+    if (engineResolution) {
+      handleRoundResolution(engineResolution)
+      dispatchEngine({ type: "CLEAR_RESOLUTION" })
+    }
+  }, [engineResolution, handleRoundResolution, dispatchEngine])
+
+  useEffect(() => {
+    const dealerStateActive = engine.gameState === "dealer" || engine.dealerRevealed
+    if (!dealerStateActive) {
+      dealerAnimatingRef.current = false
+      return
+    }
+    if (dealerAnimatingRef.current) return
+    dealerAnimatingRef.current = true
+    animateDealerPlay({ state: engine, dispatch: dispatchEngine, delayMs: 600 })
+  }, [engine, dispatchEngine])
 
   const doubleDown = () => {
     checkPlayerAction("double")
@@ -977,11 +990,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       return newBalance
     })
 
-    engineDoubleDown()
+    dispatchEngine({ type: "DOUBLE" })
   }
 
   const split = () => {
-    if (!canSplit(playerHand)) return
+    const canSplitHand = playerHand.length === 2 && getCardValue(playerHand[0]) === getCardValue(playerHand[1])
+    if (!canSplitHand) return
     if (balance === null || balance < activeBet) return
 
     const originalHand = [...playerHand]
@@ -994,7 +1008,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       return newBalance
     })
 
-    engineSplit()
+    dispatchEngine({ type: "SPLIT" })
     checkPlayerAction("split", originalHand)
   }
 
@@ -1028,21 +1042,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const continueToNextHand = () => {
     setRoundResult(null)
-    patchState({
-      gameState: "betting",
-      playerHand: [],
-      dealerHand: [],
-      splitHand: [],
-      firstHandResult: null,
-      firstHandCards: [],
-      showBustMessage: false,
-      viewHandIndex: 0,
-      isSplit: false,
-      currentHandIndex: 0,
-      activeBet: 0,
-      initialBet: 0,
-      isDoubled: false,
-    })
+    resetRoundState()
     setCurrentBet(0)
     setShowFeedback(false)
     setFeedbackData(null)
@@ -1050,18 +1050,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const repeatBet = () => {
     setRoundResult(null)
-    patchState({
-      playerHand: [],
-      dealerHand: [],
-      splitHand: [],
-      firstHandResult: null,
-      firstHandCards: [],
-      showBustMessage: false,
-      viewHandIndex: 0,
-      isSplit: false,
-      currentHandIndex: 0,
-      isDoubled: false,
-    })
+    resetRoundState()
     setShowFeedback(false)
     setFeedbackData(null)
     setShowModeSelector(false) // Ensure mode selector is hidden so action buttons are visible
@@ -1115,12 +1104,12 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     if (isLeftSwipe && viewHandIndex === 0) {
       // Use engine state directly to avoid stale closure variables
-      patchState({ viewHandIndex: 1, playerHand: engine.splitHand })
+      updateEngine({ viewHandIndex: 1, playerHand: engine.splitHand })
     }
 
     if (isRightSwipe && viewHandIndex === 1) {
       // Use engine state directly to avoid stale closure variables
-      patchState({ viewHandIndex: 0, playerHand: engine.firstHandCards })
+      updateEngine({ viewHandIndex: 0, playerHand: engine.firstHandCards })
     }
   }
 
@@ -1128,7 +1117,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     if (!isSplit || gameState !== "finished") return
     // Use engine state directly to avoid stale closure variables
     const handToShow = handIndex === 0 ? engine.firstHandCards : engine.splitHand
-    patchState({ viewHandIndex: handIndex, playerHand: handToShow })
+    updateEngine({ viewHandIndex: handIndex, playerHand: handToShow })
   }
 
   const getDisplayStats = () => {
@@ -1632,7 +1621,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           ) : null}
         </div>
 
-        {(gameState === "playing" || gameState === "dealer") && activeBet > 0 && (
+        {gameState === "playing" && activeBet > 0 && (
           <div className="absolute top-2 left-2 sm:top-4 sm:left-4 text-sm text-white bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
             Bet:{" "}
             <span className="font-semibold text-foreground">
@@ -1641,7 +1630,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           </div>
         )}
 
-        {activeChallenge && (gameState === "playing" || gameState === "dealer") && challengeTimeRemaining !== null && (
+        {activeChallenge && gameState === "playing" && challengeTimeRemaining !== null && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/60 border border-border text-yellow-300 font-semibold text-sm sm:text-base">
             <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
             <span>{formatTimer(challengeTimeRemaining)}</span>
@@ -1649,7 +1638,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         )}
 
         {/* Card Counter */}
-        {(gameState === "playing" || gameState === "dealer" || gameState === "finished") && (
+        {(gameState === "playing" || gameState === "finished") && (
           <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-3 sm:gap-4 bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
             {/* Two overlapped card outline icons */}
             <div className="relative w-3 h-4 sm:w-3.5 sm:h-4.5">
@@ -1924,10 +1913,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       {(gameState === "playing" || gameState === "dealer") && !showModeSelector && (
         <div className="sticky bottom-0 bg-black z-10 px-2 sm:px-3 py-2 sm:py-3 flex justify-center gap-1.5 sm:gap-2 flex-shrink-0 border-t border-border">
-          {canSplit(playerHand) && playerHand.length === 2 && !isSplit && (
+          {canSplitHand && !isSplit && (
             <Button
               onClick={split}
-              disabled={isDealing || gameState === "dealer" || balance === null || balance < activeBet}
+              disabled={isDealing || balance === null || balance < activeBet || gameState === "dealer"}
               variant={learningMode === "guided" && optimalMove === "split" ? "default" : "outline"}
               size="lg"
               className="flex-1 h-12 sm:h-14 text-sm sm:text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
@@ -1956,7 +1945,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           {playerHand.length === 2 && !isSplit && (
             <Button
               onClick={doubleDown}
-              disabled={isDealing || gameState === "dealer" || balance === null || balance < activeBet}
+              disabled={isDealing || balance === null || balance < activeBet || gameState === "dealer"}
               variant={learningMode === "guided" && optimalMove === "double" ? "default" : "outline"}
               size="lg"
               className="flex-1 h-12 sm:h-14 text-sm sm:text-base transition-all duration-200 ease-in hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"

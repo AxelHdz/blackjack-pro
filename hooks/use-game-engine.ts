@@ -292,18 +292,19 @@ function handleHit(container: EngineContainer): EngineContainer {
       return { state: nextState, resolution: null }
     }
 
-    if (state.isSplit && state.currentHandIndex === 1) {
-      const { dealerHand: finalDealer, deck: finalDeck } = playDealerToEnd(state.dealerHand, newDeck)
-      const resolution = resolveSplitHands({
-        firstHand: state.firstHandCards,
-        secondHand: newHand,
-        dealerHand: finalDealer,
-        betPerHand: state.activeBet,
-        level: state.roundLevel,
-      })
-      return {
-        state: {
-          ...nextState,
+      if (state.isSplit && state.currentHandIndex === 1) {
+        const { dealerHand: finalDealer, deck: finalDeck } = playDealerToEnd(state.dealerHand, newDeck)
+        const resolution = resolveSplitHands({
+          firstHand: state.firstHandCards,
+          secondHand: newHand,
+          dealerHand: finalDealer,
+          firstBet: state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet,
+          secondBet: state.initialBet,
+          level: state.roundLevel,
+        })
+        return {
+          state: {
+            ...nextState,
           deck: finalDeck,
           dealerHand: finalDealer,
           dealerRevealed: true,

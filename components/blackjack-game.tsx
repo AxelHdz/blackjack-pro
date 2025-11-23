@@ -473,6 +473,31 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       setWins(data.wins ?? 0)
       setLosses(data.losses ?? 0)
       
+      // Load mode-specific stats from database
+      setModeStats({
+        guided: {
+          handsPlayed: data.learning_hands_played ?? 0,
+          correctMoves: data.learning_correct_moves ?? 0,
+          totalMoves: data.learning_total_moves ?? 0,
+          wins: data.learning_wins ?? 0,
+          losses: data.learning_losses ?? 0,
+        },
+        practice: {
+          handsPlayed: data.practice_hands_played ?? 0,
+          correctMoves: data.practice_correct_moves ?? 0,
+          totalMoves: data.practice_total_moves ?? 0,
+          wins: data.practice_wins ?? 0,
+          losses: data.practice_losses ?? 0,
+        },
+        expert: {
+          handsPlayed: data.expert_hands_played ?? 0,
+          correctMoves: data.expert_correct_moves ?? 0,
+          totalMoves: data.expert_total_moves ?? 0,
+          wins: data.expert_wins ?? 0,
+          losses: data.expert_losses ?? 0,
+        },
+      })
+      
       const loadedLastDrillCompletedAt = data.last_drill_completed_at         ? new Date(data.last_drill_completed_at)         : null
       setLastDrillCompletedAt(loadedLastDrillCompletedAt)
       
@@ -1016,7 +1041,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     const deckCopy = ensureDeckHasCards([...deck])
     const [newHand, newDeck] = dealCard(playerHand, deckCopy)
-    patchState({ playerHand: newHand, deck: newDeck })
+    const patchPayload: any = { playerHand: newHand, deck: newDeck }
+    if (isSplit && currentHandIndex === 1) {
+      patchPayload.splitHand = newHand // Keep split hand in sync while playing second hand
+    }
+    patchState(patchPayload)
 
     const value = calculateHandValue(newHand)
     if (value > 21) {
@@ -1036,6 +1065,27 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             message: "Playing second hand...",
           })
         }, 600)
+      } else if (isSplit && currentHandIndex === 1) {
+        const firstHandBusted = firstHandResult?.busted ?? false
+        const splitBustPatch: any = { dealerRevealed: true, splitHand: newHand }
+
+        if (firstHandBusted) {
+          // Both hands busted—settle immediately
+          patchState(splitBustPatch)
+          const resolution = resolveSplitHands({
+            firstHand: firstHandCards,
+            secondHand: newHand,
+            dealerHand,
+            betPerHand: activeBet,
+            level,
+          })
+          applyResolution(resolution)
+        } else {
+          // First hand is still live—play out dealer hand for correct resolution
+          // Pass newHand (busted second hand) as secondHandOverride since state update may not be applied yet
+          patchState({ ...splitBustPatch, gameState: "dealer" })
+          playDealerHand(firstHandCards, newHand)
+        }
       } else {
         patchState({ dealerRevealed: true })
         const bustResolution: SingleHandResolution = {
@@ -1074,9 +1124,15 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       })
       console.log("[v0] Finished Hand 1, cards:", handToUse, "value:", calculateHandValue(handToUse))
     } else {
-      patchState({ gameState: "dealer", dealerRevealed: true })
       const handToUse = finalPlayerHand || playerHand || []
+      const patchPayload: any = { gameState: "dealer", dealerRevealed: true }
+      if (isSplit && currentHandIndex === 1) {
+        // Persist final second hand for post-round viewing and for playDealerHand to use
+        patchPayload.splitHand = handToUse
+      }
+      patchState(patchPayload)
       console.log("[v0] Standing on Hand 2, cards:", handToUse, "value:", calculateHandValue(handToUse))
+      // Note: playDealerHand parameter is ignored for splits; it uses splitHand from state
       playDealerHand(handToUse)
     }
   }
@@ -1115,6 +1171,8 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         handsPlayed: prev[learningMode].handsPlayed + resolution.handsPlayedDelta,
         wins: prev[learningMode].wins + resolution.winsDelta,
         losses: prev[learningMode].losses + resolution.lossesDelta,
+        correctMoves: prev[learningMode].correctMoves + (resolution.correctMovesDelta || 0),
+        totalMoves: prev[learningMode].totalMoves + (resolution.totalMovesDelta || 0),
       },
     }))
 
@@ -1133,7 +1191,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     }
   }
 
-  const playDealerHand = (finalPlayerHand: CardType[]) => {
+  const playDealerHand = (finalPlayerHand: CardType[], secondHandOverride?: CardType[]) => {
     let currentDealerHand = [...dealerHand]
     let currentDeck = ensureDeckHasCards([...deck])
 
@@ -1159,7 +1217,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           "action: STAND",
         )
         if (isSplit) {
-          finishSplitHand(firstHandCards, playerHand, currentDealerHand)
+          // For split hands:
+          // - First hand: use engine.firstHandCards (set when first hand was completed, stable)
+          // - Second hand: use secondHandOverride if provided (for bust scenarios where state isn't updated yet),
+          //   otherwise prefer finalPlayerHand when it's the second hand (standing/doubling on hand 2),
+          //   or fall back to engine.splitHand when finalPlayerHand is the first hand
+          const secondHand = secondHandOverride || (finalPlayerHand === engine.firstHandCards ? engine.splitHand : finalPlayerHand)
+          finishSplitHand(engine.firstHandCards, secondHand, currentDealerHand)
         } else {
           finishHand(finalPlayerHand, currentDealerHand)
         }
@@ -1228,12 +1292,20 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     const deckCopy = ensureDeckHasCards([...deck])
     const [newHand, newDeck] = dealCard(playerHand, deckCopy)
-    patchState({ playerHand: newHand, deck: newDeck })
+    const patchPayload: any = { playerHand: newHand, deck: newDeck }
+    if (isSplit && currentHandIndex === 1) {
+      patchPayload.splitHand = newHand
+    }
+    patchState(patchPayload)
 
     const value = calculateHandValue(newHand)
     if (value > 21) {
       const totalBetAmount = initialBet * 2
-      patchState({ dealerRevealed: true })
+      const bustPatch: any = { dealerRevealed: true }
+      if (isSplit && currentHandIndex === 1) {
+        bustPatch.splitHand = newHand
+      }
+      patchState(bustPatch)
       const bustResolution: SingleHandResolution = {
         result: "loss",
         message: "Bust! You Lose",
@@ -1261,8 +1333,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         })
         console.log("[v0] Finished Hand 1, cards:", newHand, "value:", calculateHandValue(newHand))
       } else {
-        patchState({ gameState: "dealer", dealerRevealed: true })
+        const patchPayload: any = { gameState: "dealer", dealerRevealed: true }
+        if (isSplit && currentHandIndex === 1) {
+          patchPayload.splitHand = newHand
+        }
+        patchState(patchPayload)
         console.log("[v0] Standing on Hand 2 after double, cards:", newHand, "value:", calculateHandValue(newHand))
+        // For splits, parameter is only used for logging (resolution uses splitHand from state). For non-splits, parameter is used.
         playDealerHand(newHand)
       }
     }
@@ -1488,22 +1565,21 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     const isRightSwipe = distance < -minSwipeDistance
 
     if (isLeftSwipe && viewHandIndex === 0) {
-      patchState({ viewHandIndex: 1, playerHand: splitHand })
+      // Use engine state directly to avoid stale closure variables
+      patchState({ viewHandIndex: 1, playerHand: engine.splitHand })
     }
 
     if (isRightSwipe && viewHandIndex === 1) {
-      patchState({ viewHandIndex: 0, playerHand: firstHandCards })
+      // Use engine state directly to avoid stale closure variables
+      patchState({ viewHandIndex: 0, playerHand: engine.firstHandCards })
     }
   }
 
   const switchToHand = (handIndex: number) => {
     if (!isSplit || gameState !== "finished") return
-    patchState({ viewHandIndex: handIndex })
-    if (handIndex === 0) {
-      patchState({ playerHand: firstHandCards })
-    } else {
-      patchState({ playerHand: splitHand })
-    }
+    // Use engine state directly to avoid stale closure variables
+    const handToShow = handIndex === 0 ? engine.firstHandCards : engine.splitHand
+    patchState({ viewHandIndex: handIndex, playerHand: handToShow })
   }
 
   const getDisplayStats = () => {

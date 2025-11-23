@@ -153,23 +153,23 @@ export async function POST(request: Request) {
     }
 
     if (modeStats) {
-      updates.learning_hands_played = Math.floor(modeStats.guided?.handsPlayed ?? 0)
-      updates.learning_correct_moves = Math.floor(modeStats.guided?.correctMoves ?? 0)
-      updates.learning_total_moves = Math.floor(modeStats.guided?.totalMoves ?? 0)
-      updates.learning_wins = Math.floor(modeStats.guided?.wins ?? 0)
-      updates.learning_losses = Math.floor(modeStats.guided?.losses ?? 0)
+      const applyMode = (prefix: string, mode?: Record<string, number | null | undefined>) => {
+        if (!mode) return
+        const setIfNumber = (field: string, value: number | null | undefined) => {
+          if (typeof value === "number" && Number.isFinite(value)) {
+            updates[field] = Math.floor(value)
+          }
+        }
+        setIfNumber(`${prefix}_hands_played`, mode.handsPlayed)
+        setIfNumber(`${prefix}_correct_moves`, mode.correctMoves)
+        setIfNumber(`${prefix}_total_moves`, mode.totalMoves)
+        setIfNumber(`${prefix}_wins`, mode.wins)
+        setIfNumber(`${prefix}_losses`, mode.losses)
+      }
 
-      updates.practice_hands_played = Math.floor(modeStats.practice?.handsPlayed ?? 0)
-      updates.practice_correct_moves = Math.floor(modeStats.practice?.correctMoves ?? 0)
-      updates.practice_total_moves = Math.floor(modeStats.practice?.totalMoves ?? 0)
-      updates.practice_wins = Math.floor(modeStats.practice?.wins ?? 0)
-      updates.practice_losses = Math.floor(modeStats.practice?.losses ?? 0)
-
-      updates.expert_hands_played = Math.floor(modeStats.expert?.handsPlayed ?? 0)
-      updates.expert_correct_moves = Math.floor(modeStats.expert?.correctMoves ?? 0)
-      updates.expert_total_moves = Math.floor(modeStats.expert?.totalMoves ?? 0)
-      updates.expert_wins = Math.floor(modeStats.expert?.wins ?? 0)
-      updates.expert_losses = Math.floor(modeStats.expert?.losses ?? 0)
+      applyMode("learning", modeStats.guided)
+      applyMode("practice", modeStats.practice)
+      applyMode("expert", modeStats.expert)
     }
 
     if (deck && Array.isArray(deck) && deck.length > 0) {

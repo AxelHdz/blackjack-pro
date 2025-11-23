@@ -92,6 +92,33 @@ function playDealerToEnd(dealerHand: CardType[], deck: CardType[]) {
 }
 
 function resolveWithDealer(state: EngineGameState, isDoubled: boolean): { nextState: EngineGameState; resolution: RoundResolution } {
+  const playerValue = calculateHandValue(state.playerHand)
+  if (playerValue > 21) {
+    const totalBet = isDoubled ? state.initialBet * 2 : state.initialBet
+    const resolution: SingleHandResolution = {
+      result: "loss",
+      message: "Bust! You Lose",
+      payout: 0,
+      totalBet,
+      winAmount: -totalBet,
+      winsDelta: 0,
+      lossesDelta: 1,
+      totalMovesDelta: 1,
+      correctMovesDelta: 0,
+      handsPlayedDelta: 1,
+      xpGain: 0,
+    }
+    return {
+      nextState: {
+        ...state,
+        dealerRevealed: true,
+        gameState: "finished",
+        message: resolution.message,
+      },
+      resolution,
+    }
+  }
+
   const { dealerHand: finalDealerHand, deck: finalDeck } = playDealerToEnd(state.dealerHand, state.deck)
   let resolution: RoundResolution
 
@@ -328,6 +355,47 @@ function handleStand(container: EngineContainer): EngineContainer {
   const { state } = container
   if (state.gameState !== "playing") return container
 
+  const playerValue = calculateHandValue(state.playerHand)
+  if (playerValue > 21) {
+    if (state.isSplit && state.currentHandIndex === 1) {
+      const resolution = resolveSplitHands({
+        firstHand: state.firstHandCards,
+        secondHand: state.playerHand,
+        dealerHand: state.dealerHand,
+        betPerHand: state.initialBet,
+        level: state.roundLevel,
+      })
+      return {
+        state: {
+          ...state,
+          dealerRevealed: true,
+          gameState: "finished",
+          message: resolution.message,
+        },
+        resolution,
+      }
+    } else {
+      const totalBet = state.isDoubled ? state.initialBet * 2 : state.initialBet
+      const resolution: SingleHandResolution = {
+        result: "loss",
+        message: "Bust! You Lose",
+        payout: 0,
+        totalBet,
+        winAmount: -totalBet,
+        winsDelta: 0,
+        lossesDelta: 1,
+        totalMovesDelta: 1,
+        correctMovesDelta: 0,
+        handsPlayedDelta: 1,
+        xpGain: 0,
+      }
+      return {
+        state: { ...state, dealerRevealed: true, gameState: "finished", message: resolution.message },
+        resolution,
+      }
+    }
+  }
+
   if (state.isSplit && state.currentHandIndex === 0) {
     const value = calculateHandValue(state.playerHand)
     const nextState: EngineGameState = {
@@ -347,6 +415,8 @@ function handleStand(container: EngineContainer): EngineContainer {
 function handleDouble(container: EngineContainer): EngineContainer {
   const { state } = container
   if (state.gameState !== "playing") return container
+  // Splits currently do not model per-hand double payouts; block double on second split hand to avoid incorrect payouts
+  if (state.isSplit && state.currentHandIndex === 1) return container
 
   const deckCopy = ensureDeckHasCards([...state.deck])
   const [newHand, newDeck] = dealCard(state.playerHand, deckCopy)
@@ -360,13 +430,47 @@ function handleDouble(container: EngineContainer): EngineContainer {
     isDoubled: true,
   }
 
+  if (state.isSplit && state.currentHandIndex === 0) {
+    if (value > 21) {
+      const nextState: EngineGameState = {
+        ...doubledState,
+        firstHandCards: newHand,
+        firstHandResult: { value, busted: true },
+        currentHandIndex: 1,
+        playerHand: state.splitHand,
+        message: "Playing second hand...",
+        // Capture per-hand wager for correct split resolution
+        firstHandBet: doubledState.activeBet,
+        firstHandDoubled: true,
+        activeBet: state.initialBet,
+        isDoubled: false,
+      }
+      return { state: nextState, resolution: null }
+    }
+
+    const firstValue = calculateHandValue(newHand)
+    const nextState: EngineGameState = {
+      ...doubledState,
+      firstHandCards: newHand,
+      firstHandResult: { value: firstValue, busted: false },
+      currentHandIndex: 1,
+      playerHand: state.splitHand,
+      message: "Playing second hand...",
+      firstHandBet: doubledState.activeBet,
+      firstHandDoubled: true,
+      activeBet: state.initialBet, // reset for second hand
+      isDoubled: false,
+    }
+    return { state: nextState, resolution: null }
+  }
+
   if (value > 21) {
     const resolution: SingleHandResolution = {
       result: "loss",
       message: "Bust! You Lose",
       payout: 0,
-      totalBet: state.activeBet * 2,
-      winAmount: -(state.activeBet * 2),
+      totalBet: state.activeBet,
+      winAmount: -state.activeBet,
       winsDelta: 0,
       lossesDelta: 1,
       totalMovesDelta: 1,
@@ -378,19 +482,6 @@ function handleDouble(container: EngineContainer): EngineContainer {
       state: { ...doubledState, dealerRevealed: true, gameState: "finished", message: resolution.message },
       resolution,
     }
-  }
-
-  if (state.isSplit && state.currentHandIndex === 0) {
-    const firstValue = calculateHandValue(newHand)
-    const nextState: EngineGameState = {
-      ...doubledState,
-      firstHandCards: newHand,
-      firstHandResult: { value: firstValue, busted: false },
-      currentHandIndex: 1,
-      playerHand: state.splitHand,
-      message: "Playing second hand...",
-    }
-    return { state: nextState, resolution: null }
   }
 
   return { state: { ...doubledState, dealerRevealed: true, gameState: "dealer" }, resolution: null }
@@ -497,13 +588,15 @@ export function animateDealerPlay({
     steps.push({ dealerHand: dealer, deck })
   }
 
+  const splitBet = state.firstHandDoubled ? state.firstHandBet : state.initialBet
+
   if (steps.length === 0) {
     const resolution = state.isSplit
       ? resolveSplitHands({
           firstHand: state.firstHandCards,
           secondHand: state.splitHand,
           dealerHand: state.dealerHand,
-          betPerHand: state.activeBet,
+          betPerHand: splitBet,
           level: state.roundLevel,
         })
       : resolveSingleHand({
@@ -517,7 +610,13 @@ export function animateDealerPlay({
     dispatch({
       type: "SET_RESOLUTION",
       resolution,
-      statePatch: { dealerHand: state.dealerHand, deck: state.deck },
+      statePatch: {
+        dealerHand: state.dealerHand,
+        deck: state.deck,
+        // Default to showing first hand after split resolution
+        playerHand: state.isSplit ? state.firstHandCards : state.playerHand,
+        viewHandIndex: state.isSplit ? 0 : state.viewHandIndex,
+      },
     })
     return
   }
@@ -541,7 +640,7 @@ export function animateDealerPlay({
               firstHand: state.firstHandCards,
               secondHand: state.splitHand,
               dealerHand: step.dealerHand,
-              betPerHand: state.activeBet,
+              betPerHand: splitBet,
               level: state.roundLevel,
             })
           : resolveSingleHand({
@@ -555,7 +654,12 @@ export function animateDealerPlay({
         dispatch({
           type: "SET_RESOLUTION",
           resolution,
-          statePatch: { dealerHand: step.dealerHand, deck: step.deck },
+          statePatch: {
+            dealerHand: step.dealerHand,
+            deck: step.deck,
+            playerHand: state.isSplit ? state.firstHandCards : state.playerHand,
+            viewHandIndex: state.isSplit ? 0 : state.viewHandIndex,
+          },
         })
       }
     }, delayMs * (idx + 1))

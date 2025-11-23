@@ -966,8 +966,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   }, [engineResolution, handleRoundResolution, dispatchEngine])
 
   useEffect(() => {
-    const dealerStateActive = engine.gameState === "dealer" || engine.dealerRevealed
-    if (!dealerStateActive) {
+    if (engine.gameState !== "dealer") {
       dealerAnimatingRef.current = false
       return
     }
@@ -1621,7 +1620,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           ) : null}
         </div>
 
-        {gameState === "playing" && activeBet > 0 && (
+        {(gameState === "playing" || gameState === "dealer" || gameState === "finished") && activeBet > 0 && (
           <div className="absolute top-2 left-2 sm:top-4 sm:left-4 text-sm text-white bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
             Bet:{" "}
             <span className="font-semibold text-foreground">
@@ -1630,7 +1629,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           </div>
         )}
 
-        {activeChallenge && gameState === "playing" && challengeTimeRemaining !== null && (
+        {activeChallenge && (gameState === "playing" || gameState === "dealer" || gameState === "finished") && challengeTimeRemaining !== null && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2 sm:top-4 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-black/60 border border-border text-yellow-300 font-semibold text-sm sm:text-base">
             <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
             <span>{formatTimer(challengeTimeRemaining)}</span>
@@ -1638,7 +1637,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         )}
 
         {/* Card Counter */}
-        {(gameState === "playing" || gameState === "finished") && (
+        {(gameState === "playing" || gameState === "dealer" || gameState === "finished") && (
           <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-3 sm:gap-4 bg-black/50 backdrop-blur-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-border">
             {/* Two overlapped card outline icons */}
             <div className="relative w-3 h-4 sm:w-3.5 sm:h-4.5">

@@ -77,4 +77,62 @@ describe("useGameEngine actions", () => {
     expect(result.current.state.gameState).toBe("finished")
     expect(result.current.resolution).toBeTruthy()
   })
+
+  it("treats player bust as loss even if dealer has lower total", () => {
+    // Player: 3,6,4,K (23) vs dealer 20
+    const deck = [card("Q"), card("K"), card("K"), card("4"), card("6"), card("3")]
+    const { result } = createEngine(deck)
+
+    act(() => {
+      result.current.dispatch({ type: "DEAL", bet: 25, level: 1 })
+    })
+    act(() => {
+      result.current.dispatch({ type: "HIT" }) // draws 4
+    })
+    act(() => {
+      result.current.dispatch({ type: "HIT" }) // draws K -> bust
+    })
+
+    expect(result.current.state.gameState).toBe("finished")
+    expect(result.current.resolution?.result).toBe("loss")
+    expect(result.current.resolution?.winAmount).toBe(-25)
+  })
+
+  it("standing on a bust hand resolves as loss", () => {
+    // Player: 5,8,10 (23) vs dealer 20
+    const deck = [card("10"), card("5"), card("10"), card("8"), card("5"), card("J")]
+    const { result } = createEngine(deck)
+
+    act(() => {
+      result.current.dispatch({ type: "DEAL", bet: 50, level: 1 })
+    })
+    act(() => {
+      result.current.dispatch({ type: "HIT" }) // draws 8, total 23
+    })
+    act(() => {
+      result.current.dispatch({ type: "STAND" })
+    })
+
+    expect(result.current.state.gameState).toBe("finished")
+    expect(result.current.resolution?.result).toBe("loss")
+    expect(result.current.resolution?.winAmount).toBe(-50)
+  })
+
+  it("double on first split hand busts only that hand then plays second", () => {
+    // d1(6), d2(10), p1(8), p2(8), double draws K -> 18 (not bust), proceed to hand 2
+    const deck = [card("5"), card("10"), card("K"), card("8"), card("8"), card("10"), card("6")]
+    const { result } = createEngine(deck)
+
+    act(() => {
+      result.current.dispatch({ type: "DEAL", bet: 10, level: 1 })
+    })
+    act(() => {
+      result.current.dispatch({ type: "SPLIT" })
+    })
+    act(() => {
+      result.current.dispatch({ type: "DOUBLE" }) // first hand double
+    })
+    expect(result.current.state.currentHandIndex).toBe(1)
+    expect(result.current.state.gameState).toBe("playing")
+  })
 })

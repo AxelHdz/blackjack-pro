@@ -1,5 +1,10 @@
-import { useReducer, useCallback, useRef } from "react"
-import { calculateHandValue, createDeck, getCardValue, type Card as CardType } from "@/lib/card-utils"
+import { useReducer } from "react"
+import {
+  calculateHandValue,
+  createDeck,
+  getCardValue,
+  type Card as CardType,
+} from "@/lib/card-utils"
 import {
   dealCard,
   dealerShouldHitH17,
@@ -9,8 +14,8 @@ import {
   type SingleHandResolution,
   type SplitHandResolution,
 } from "@/lib/game-engine"
-import { settle } from "@/lib/settlement"
 import { getXPPerWinWithBet } from "@/lib/leveling-config"
+import { settle } from "@/lib/settlement"
 
 export type EngineGameState = {
   deck: CardType[]
@@ -30,16 +35,28 @@ export type EngineGameState = {
   viewHandIndex: number
   isDoubled: boolean
   message: string
+  roundLevel: number
+  firstHandBet?: number
+  firstHandDoubled?: boolean
 }
 
-type PatchPayload = Partial<EngineGameState>
-
-type EngineAction =
-  | { type: "PATCH"; payload: PatchPayload }
-  | { type: "RESET_ROUND" }
-  | { type: "RESET_ALL" }
-
 export type RoundResolution = SingleHandResolution | SplitHandResolution
+
+type EngineContainer = {
+  state: EngineGameState
+  resolution: RoundResolution | null
+}
+
+export type EngineAction =
+  | { type: "DEAL"; bet: number; level: number }
+  | { type: "HIT" }
+  | { type: "STAND" }
+  | { type: "DOUBLE" }
+  | { type: "SPLIT" }
+  | { type: "HYDRATE"; payload: Partial<EngineGameState> }
+  | { type: "SET_RESOLUTION"; resolution: RoundResolution; statePatch?: Partial<EngineGameState> }
+  | { type: "CLEAR_RESOLUTION" }
+  | { type: "RESET_ROUND" }
 
 const initialEngineState: EngineGameState = {
   deck: createDeck(),
@@ -59,388 +76,317 @@ const initialEngineState: EngineGameState = {
   viewHandIndex: 0,
   isDoubled: false,
   message: "",
+  roundLevel: 1,
 }
 
-function engineReducer(state: EngineGameState, action: EngineAction): EngineGameState {
-  switch (action.type) {
-    case "PATCH":
-      return { ...state, ...action.payload }
-    case "RESET_ROUND":
-      return {
+function playDealerToEnd(dealerHand: CardType[], deck: CardType[]) {
+  let currentDealer = [...dealerHand]
+  let currentDeck = [...deck]
+
+  while (dealerShouldHitH17(currentDealer)) {
+    currentDeck = ensureDeckHasCards(currentDeck)
+    const [newHand, newDeck] = dealCard(currentDealer, currentDeck)
+    currentDealer = newHand
+    currentDeck = newDeck
+  }
+
+  return { dealerHand: currentDealer, deck: currentDeck }
+}
+
+function resolveWithDealer(state: EngineGameState, isDoubled: boolean): { nextState: EngineGameState; resolution: RoundResolution } {
+  const playerValue = calculateHandValue(state.playerHand)
+  if (playerValue > 21) {
+    const totalBet = isDoubled ? state.initialBet * 2 : state.initialBet
+    const resolution: SingleHandResolution = {
+      result: "loss",
+      message: "Bust! You Lose",
+      payout: 0,
+      totalBet,
+      winAmount: -totalBet,
+      winsDelta: 0,
+      lossesDelta: 1,
+      totalMovesDelta: 1,
+      correctMovesDelta: 0,
+      handsPlayedDelta: 1,
+      xpGain: 0,
+    }
+    return {
+      nextState: {
         ...state,
-        playerHand: [],
-        dealerHand: [],
-        splitHand: [],
-        firstHandResult: null,
-        firstHandCards: [],
-        activeBet: 0,
-        initialBet: 0,
-        isSplit: false,
-        currentHandIndex: 0,
-        dealerRevealed: false,
-        isDealing: false,
-        showBustMessage: false,
-        viewHandIndex: 0,
-        isDoubled: false,
-        gameState: "betting",
-        message: "",
-      }
-    case "RESET_ALL":
-      return { ...initialEngineState, deck: createDeck() }
-    default:
-      return state
+        dealerRevealed: true,
+        gameState: "finished",
+        message: resolution.message,
+      },
+      resolution,
+    }
   }
-}
 
-export function useGameEngine(initial: Partial<EngineGameState> = {}) {
-  const [state, dispatch] = useReducer(engineReducer, { ...initialEngineState, ...initial })
+  const { dealerHand: finalDealerHand, deck: finalDeck } = playDealerToEnd(state.dealerHand, state.deck)
+  let resolution: RoundResolution
 
-  const patchState = useCallback((payload: PatchPayload) => dispatch({ type: "PATCH", payload }), [])
-  const resetRoundState = useCallback(() => dispatch({ type: "RESET_ROUND" }), [])
-  const resetAll = useCallback(() => dispatch({ type: "RESET_ALL" }), [])
-
-  return {
-    state,
-    patchState,
-    resetRoundState,
-    resetAll,
+  if (state.isSplit) {
+    resolution = resolveSplitHands({
+      firstHand: state.firstHandCards,
+      secondHand: state.splitHand,
+      dealerHand: finalDealerHand,
+      firstBet: state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet,
+      secondBet: state.initialBet,
+      level: state.roundLevel,
+    })
+  } else {
+    resolution = resolveSingleHand({
+      playerHand: state.playerHand,
+      dealerHand: finalDealerHand,
+      baseBet: state.initialBet,
+      isDoubled,
+      level: state.roundLevel,
+    })
   }
+
+  const nextState: EngineGameState = {
+    ...state,
+    deck: finalDeck,
+    dealerHand: finalDealerHand,
+    dealerRevealed: true,
+    gameState: "finished",
+    message: resolution.message,
+  }
+
+  return { nextState, resolution }
 }
 
-type EngineControllerOptions = {
-  state: EngineGameState
-  patchState: (payload: PatchPayload) => void
-  level: number
-  onRoundResolved: (resolution: RoundResolution) => void
+function handleDeal(state: EngineGameState, bet: number, level: number): EngineContainer {
+  if (state.gameState !== "betting" || bet <= 0) {
+    return { state, resolution: null }
+  }
+
+  let deckCopy = ensureDeckHasCards([...state.deck])
+
+  const [dealerHand1, deck1] = dealCard([], deckCopy)
+  const [dealerHand2, deck2] = dealCard(dealerHand1, deck1)
+  const [playerHand1, deck3] = dealCard([], deck2)
+  const [playerHand2, deck4] = dealCard(playerHand1, deck3)
+
+  const newState: EngineGameState = {
+    ...state,
+    deck: deck4,
+    dealerHand: dealerHand2,
+    playerHand: playerHand2,
+    activeBet: bet,
+    initialBet: bet,
+    isSplit: false,
+    splitHand: [],
+    firstHandCards: [],
+    firstHandResult: null,
+    currentHandIndex: 0,
+    dealerRevealed: false,
+    isDealing: false,
+    showBustMessage: false,
+    viewHandIndex: 0,
+    isDoubled: false,
+    message: "",
+    gameState: "playing",
+    roundLevel: level,
+  }
+
+  const dealerValue = calculateHandValue(dealerHand2)
+  const playerValue = calculateHandValue(playerHand2)
+  const dealerHasBlackjack = dealerValue === 21 && dealerHand2.length === 2
+  const playerHasBlackjack = playerValue === 21 && playerHand2.length === 2
+
+  if (dealerHasBlackjack && playerHasBlackjack) {
+    const payout = settle({ result: "push", baseBet: bet, isDoubled: false, isBlackjack: true })
+    const resolution: SingleHandResolution = {
+      result: "push",
+      message: "Push! Both Have Blackjack",
+      payout,
+      totalBet: bet,
+      winAmount: 0,
+      winsDelta: 0,
+      lossesDelta: 0,
+      totalMovesDelta: 0,
+      correctMovesDelta: 0,
+      handsPlayedDelta: 1,
+      xpGain: 0,
+    }
+    return {
+      state: { ...newState, dealerRevealed: true, gameState: "finished", message: resolution.message },
+      resolution,
+    }
+  }
+
+  if (dealerHasBlackjack) {
+    const resolution: SingleHandResolution = {
+      result: "loss",
+      message: "Dealer Blackjack! You Lose",
+      payout: 0,
+      totalBet: bet,
+      winAmount: -bet,
+      winsDelta: 0,
+      lossesDelta: 1,
+      totalMovesDelta: 0,
+      correctMovesDelta: 0,
+      handsPlayedDelta: 1,
+      xpGain: 0,
+    }
+    return {
+      state: { ...newState, dealerRevealed: true, gameState: "finished", message: resolution.message },
+      resolution,
+    }
+  }
+
+  if (playerHasBlackjack) {
+    const payout = settle({ result: "win", baseBet: bet, isDoubled: false, isBlackjack: true })
+    const totalBet = bet
+    const winAmount = payout - totalBet
+    const resolution: SingleHandResolution = {
+      result: "win",
+      message: "Blackjack! You Win 3:2",
+      payout,
+      totalBet,
+      winAmount,
+      winsDelta: 1,
+      lossesDelta: 0,
+      totalMovesDelta: 1,
+      correctMovesDelta: 1,
+      handsPlayedDelta: 1,
+      xpGain: getXPPerWinWithBet(level, totalBet),
+    }
+    return {
+      state: { ...newState, dealerRevealed: true, gameState: "finished", message: resolution.message },
+      resolution,
+    }
+  }
+
+  return { state: newState, resolution: null }
 }
 
-/**
- * Domain actions for the blackjack engine. Purely manages cards/flow and emits
- * round resolutions; callers own money/stats side-effects.
- */
-export function useGameEngineController({
-  state,
-  patchState,
-  level,
-  onRoundResolved,
-}: EngineControllerOptions) {
-  const isDoubledRef = useRef(false)
+function handleHit(container: EngineContainer): EngineContainer {
+  const { state } = container
+  if (state.gameState !== "playing") return container
 
-  const applyResolution = useCallback(
-    (resolution: RoundResolution, extraPatch: PatchPayload = {}) => {
-      patchState({ message: resolution.message, gameState: "finished", dealerRevealed: true, ...extraPatch })
-      onRoundResolved(resolution)
-    },
-    [onRoundResolved, patchState],
-  )
+  const isSecondHand = state.isSplit && state.currentHandIndex === 1
+  const targetHand = isSecondHand ? state.splitHand : state.playerHand
+  const deckCopy = ensureDeckHasCards([...state.deck])
+  const [newHand, newDeck] = dealCard(targetHand, deckCopy)
 
-  const startHand = useCallback(
-    (betAmount: number) => {
-      patchState({
-        gameState: "playing",
-        isDealing: true,
-        activeBet: betAmount,
-        initialBet: betAmount,
-        isSplit: false,
-        splitHand: [],
-        currentHandIndex: 0,
-        firstHandResult: null,
-        firstHandCards: [],
-        showBustMessage: false,
-        viewHandIndex: 0,
-        isDoubled: false,
-        dealerRevealed: false,
-        message: "",
-      })
-      isDoubledRef.current = false
+  let nextState: EngineGameState = {
+    ...state,
+    deck: newDeck,
+    playerHand: newHand,
+    splitHand: isSecondHand ? newHand : state.splitHand,
+  }
 
-      let deckCopy = [...state.deck]
-      if (deckCopy.length === 0) {
-        deckCopy = createDeck()
+  const value = calculateHandValue(newHand)
+  if (value > 21) {
+    if (state.isSplit && state.currentHandIndex === 0) {
+      nextState = {
+        ...nextState,
+        firstHandResult: { value, busted: true },
+        firstHandCards: newHand,
+        showBustMessage: true,
+        message: "Hand 1 Busts!",
+        currentHandIndex: 1,
+        playerHand: state.splitHand,
       }
+      return { state: nextState, resolution: null }
+    }
 
-      setTimeout(() => {
-        const [newDealerHand1, deck1] = dealCard([], deckCopy)
-        const [newDealerHand2, deck2] = dealCard(newDealerHand1, deck1)
-        const [newPlayerHand1, deck3] = dealCard([], deck2)
-        const [newPlayerHand2, deck4] = dealCard(newPlayerHand1, deck3)
-
-        patchState({
-          dealerHand: newDealerHand2,
-          playerHand: newPlayerHand2,
-          deck: deck4,
-          dealerRevealed: false,
-          isDealing: false,
-          message: "",
+      if (state.isSplit && state.currentHandIndex === 1) {
+        const { dealerHand: finalDealer, deck: finalDeck } = playDealerToEnd(state.dealerHand, newDeck)
+        const resolution = resolveSplitHands({
+          firstHand: state.firstHandCards,
+          secondHand: newHand,
+          dealerHand: finalDealer,
+          firstBet: state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet,
+          secondBet: state.initialBet,
+          level: state.roundLevel,
         })
-
-        const dealerUpcard = newDealerHand2[0]
-        const dealerUpcardValue = getCardValue(dealerUpcard)
-
-        if (dealerUpcardValue === 11 || dealerUpcardValue === 10) {
-          const dealerValue = calculateHandValue(newDealerHand2)
-          const playerValue = calculateHandValue(newPlayerHand2)
-
-          if (dealerValue === 21 && newDealerHand2.length === 2) {
-            patchState({ dealerRevealed: true })
-
-            if (playerValue === 21 && newPlayerHand2.length === 2) {
-              const payout = settle({ result: "push", baseBet: betAmount, isDoubled: false, isBlackjack: true })
-              const blackjackPush: SingleHandResolution = {
-                result: "push",
-                message: "Push! Both Have Blackjack",
-                payout,
-                totalBet: betAmount,
-                winAmount: 0,
-                winsDelta: 0,
-                lossesDelta: 0,
-                totalMovesDelta: 0,
-                correctMovesDelta: 0,
-                handsPlayedDelta: 1,
-                xpGain: 0,
-              }
-              applyResolution(blackjackPush)
-            } else {
-              const blackjackLoss: SingleHandResolution = {
-                result: "loss",
-                message: "Dealer Blackjack! You Lose",
-                payout: 0,
-                totalBet: betAmount,
-                winAmount: -betAmount,
-                winsDelta: 0,
-                lossesDelta: 1,
-                totalMovesDelta: 0,
-                correctMovesDelta: 0,
-                handsPlayedDelta: 1,
-                xpGain: 0,
-              }
-              applyResolution(blackjackLoss)
-            }
-            return
-          }
-        }
-
-        const playerValue = calculateHandValue(newPlayerHand2)
-        if (playerValue === 21 && newPlayerHand2.length === 2) {
-          const payout = settle({ result: "win", baseBet: betAmount, isDoubled: false, isBlackjack: true })
-          const profit = payout - betAmount
-          const blackjackWin: SingleHandResolution = {
-            result: "win",
-            message: "Blackjack! You Win 3:2",
-            payout,
-            totalBet: betAmount,
-            winAmount: profit,
-            winsDelta: 1,
-            lossesDelta: 0,
-            totalMovesDelta: 1,
-            correctMovesDelta: 1,
-            handsPlayedDelta: 1,
-            xpGain: getXPPerWinWithBet(level, betAmount),
-          }
-          applyResolution(blackjackWin)
-        }
-      }, 100)
-    },
-    [applyResolution, level, patchState, state.deck],
-  )
-
-  const finishSplitHand = useCallback(
-    (firstHandCards: CardType[], secondHandCards: CardType[], finalDealerHand: CardType[]) => {
-      const resolution = resolveSplitHands({
-        firstHand: firstHandCards,
-        secondHand: secondHandCards,
-        dealerHand: finalDealerHand,
-        betPerHand: state.activeBet,
-        level,
-      })
-      applyResolution(resolution)
-    },
-    [applyResolution, level, state.activeBet],
-  )
-
-  const finishHand = useCallback(
-    (finalPlayerHand: CardType[], finalDealerHand: CardType[]) => {
-      const resolution = resolveSingleHand({
-        playerHand: finalPlayerHand,
-        dealerHand: finalDealerHand,
-        baseBet: state.initialBet,
-        isDoubled: isDoubledRef.current,
-        level,
-      })
-      applyResolution(resolution)
-    },
-    [applyResolution, level, state.initialBet],
-  )
-
-  const playDealerHand = useCallback(
-    (finalPlayerHand: CardType[], secondHandOverride?: CardType[]) => {
-      let currentDealerHand = [...state.dealerHand]
-      let currentDeck = ensureDeckHasCards([...state.deck])
-
-      const dealerPlay = () => {
-        const shouldHit = dealerShouldHitH17(currentDealerHand)
-
-        if (!shouldHit) {
-          const finalDealer = [...currentDealerHand]
-          if (state.isSplit) {
-            const secondHand =
-              secondHandOverride ||
-              (finalPlayerHand === state.firstHandCards ? state.splitHand : finalPlayerHand)
-            finishSplitHand(state.firstHandCards, secondHand, finalDealer)
-          } else {
-            finishHand(finalPlayerHand, finalDealer)
-          }
-          return
-        }
-
-        setTimeout(() => {
-          currentDeck = ensureDeckHasCards(currentDeck)
-          const [newHand, newDeck] = dealCard(currentDealerHand, currentDeck)
-          currentDealerHand = newHand
-          currentDeck = newDeck
-          patchState({ dealerHand: newHand, deck: newDeck })
-          dealerPlay()
-        }, 400)
+        return {
+          state: {
+            ...nextState,
+          deck: finalDeck,
+          dealerHand: finalDealer,
+          dealerRevealed: true,
+          gameState: "finished",
+          message: resolution.message,
+        },
+        resolution,
       }
+    }
 
-      dealerPlay()
-    },
-    [finishHand, finishSplitHand, patchState, state.deck, state.dealerHand, state.firstHandCards, state.isSplit, state.splitHand],
-  )
+    const resolution: SingleHandResolution = {
+      result: "loss",
+      message: "Bust! You Lose",
+      payout: 0,
+      totalBet: state.activeBet,
+      winAmount: -state.activeBet,
+      winsDelta: 0,
+      lossesDelta: 1,
+      totalMovesDelta: 1,
+      correctMovesDelta: 0,
+      handsPlayedDelta: 1,
+      xpGain: 0,
+    }
+    return {
+      state: { ...nextState, dealerRevealed: true, gameState: "finished", message: resolution.message },
+      resolution,
+    }
+  }
 
-  const stand = useCallback(
-    (finalPlayerHand?: CardType[]) => {
-      if (state.isSplit && state.currentHandIndex === 0) {
-        const handToUse = finalPlayerHand || state.playerHand
-        patchState({
-          firstHandCards: handToUse,
-          firstHandResult: { value: calculateHandValue(handToUse), busted: false },
+  if (value === 21) {
+    if (state.isSplit && state.currentHandIndex === 0) {
+      const firstValue = calculateHandValue(newHand)
+      return {
+        state: {
+          ...nextState,
+          firstHandCards: newHand,
+          firstHandResult: { value: firstValue, busted: false },
           currentHandIndex: 1,
           playerHand: state.splitHand,
           message: "Playing second hand...",
-        })
-      } else {
-        const handToUse = finalPlayerHand || state.playerHand || []
-        const patchPayload: PatchPayload = { gameState: "dealer", dealerRevealed: true }
-        if (state.isSplit && state.currentHandIndex === 1) {
-          patchPayload.splitHand = handToUse
-        }
-        patchState(patchPayload)
-        playDealerHand(handToUse)
+        },
+        resolution: null,
       }
-    },
-    [patchState, playDealerHand, state.currentHandIndex, state.isSplit, state.playerHand, state.splitHand],
-  )
+    }
+    return { state: { ...nextState, dealerRevealed: true, gameState: "dealer" }, resolution: null }
+  }
 
-  const hit = useCallback(() => {
-    const deckCopy = ensureDeckHasCards([...state.deck])
-    const [newHand, newDeck] = dealCard(state.playerHand, deckCopy)
-    const patchPayload: PatchPayload = { playerHand: newHand, deck: newDeck }
+  return { state: nextState, resolution: null }
+}
+
+function handleStand(container: EngineContainer): EngineContainer {
+  const { state } = container
+  if (state.gameState !== "playing") return container
+
+  const playerValue = calculateHandValue(state.playerHand)
+  if (playerValue > 21) {
     if (state.isSplit && state.currentHandIndex === 1) {
-      patchPayload.splitHand = newHand
-    }
-    patchState(patchPayload)
-
-    const value = calculateHandValue(newHand)
-    if (value > 21) {
-      if (state.isSplit && state.currentHandIndex === 0) {
-        patchState({
-          firstHandResult: { value, busted: true },
-          firstHandCards: newHand,
-          showBustMessage: true,
-          message: "Hand 1 Busts!",
-        })
-
-        setTimeout(() => {
-          patchState({
-            showBustMessage: false,
-            currentHandIndex: 1,
-            playerHand: state.splitHand,
-            message: "Playing second hand...",
-          })
-        }, 600)
-      } else if (state.isSplit && state.currentHandIndex === 1) {
-        const firstHandBusted = state.firstHandResult?.busted ?? false
-        const splitBustPatch: PatchPayload = { dealerRevealed: true, splitHand: newHand }
-
-        if (firstHandBusted) {
-          patchState(splitBustPatch)
-          const resolution = resolveSplitHands({
-            firstHand: state.firstHandCards,
-            secondHand: newHand,
-            dealerHand: state.dealerHand,
-            betPerHand: state.activeBet,
-            level,
-          })
-          applyResolution(resolution)
-        } else {
-          patchState({ ...splitBustPatch, gameState: "dealer" })
-          playDealerHand(state.firstHandCards, newHand)
-        }
-      } else {
-        const bustResolution: SingleHandResolution = {
-          result: "loss",
-          message: "Bust! You Lose",
-          payout: 0,
-          totalBet: state.activeBet,
-          winAmount: -state.activeBet,
-          winsDelta: 0,
-          lossesDelta: 1,
-          totalMovesDelta: 1,
-          correctMovesDelta: 0,
-          handsPlayedDelta: 1,
-          xpGain: 0,
-        }
-        applyResolution(bustResolution, { dealerRevealed: true })
+      const resolution = resolveSplitHands({
+        firstHand: state.firstHandCards,
+        secondHand: state.playerHand,
+        dealerHand: state.dealerHand,
+        firstBet: state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet,
+        secondBet: state.initialBet,
+        level: state.roundLevel,
+      })
+      return {
+        state: {
+          ...state,
+          dealerRevealed: true,
+          gameState: "finished",
+          message: resolution.message,
+        },
+        resolution,
       }
-    } else if (value === 21) {
-      stand(newHand)
-    }
-  }, [
-    applyResolution,
-    patchState,
-    playDealerHand,
-    stand,
-    state.activeBet,
-    state.currentHandIndex,
-    state.dealerHand,
-    state.deck,
-    state.firstHandCards,
-    state.firstHandResult?.busted,
-    state.isSplit,
-    state.playerHand,
-    state.splitHand,
-    level,
-  ])
-
-  const doubleDown = useCallback(() => {
-    patchState({ isDoubled: true })
-    isDoubledRef.current = true
-    const newActiveBet = state.activeBet * 2
-    patchState({ activeBet: newActiveBet })
-
-    const deckCopy = ensureDeckHasCards([...state.deck])
-    const [newHand, newDeck] = dealCard(state.playerHand, deckCopy)
-    const patchPayload: PatchPayload = { playerHand: newHand, deck: newDeck }
-    if (state.isSplit && state.currentHandIndex === 1) {
-      patchPayload.splitHand = newHand
-    }
-    patchState(patchPayload)
-
-    const value = calculateHandValue(newHand)
-    if (value > 21) {
-      const totalBetAmount = state.initialBet * 2
-      const bustPatch: PatchPayload = { dealerRevealed: true }
-      if (state.isSplit && state.currentHandIndex === 1) {
-        bustPatch.splitHand = newHand
-      }
-      patchState(bustPatch)
-      const bustResolution: SingleHandResolution = {
+    } else {
+      const totalBet = state.isDoubled ? state.initialBet * 2 : state.initialBet
+      const resolution: SingleHandResolution = {
         result: "loss",
         message: "Bust! You Lose",
         payout: 0,
-        totalBet: totalBetAmount,
-        winAmount: -totalBetAmount,
+        totalBet,
+        winAmount: -totalBet,
         winsDelta: 0,
         lossesDelta: 1,
         totalMovesDelta: 1,
@@ -448,78 +394,282 @@ export function useGameEngineController({
         handsPlayedDelta: 1,
         xpGain: 0,
       }
-      applyResolution(bustResolution)
-    } else {
-      if (state.isSplit && state.currentHandIndex === 0) {
-        patchState({
-          firstHandCards: newHand,
-          firstHandResult: { value: calculateHandValue(newHand), busted: false },
-          currentHandIndex: 1,
-          playerHand: state.splitHand,
-          message: "Playing second hand...",
-        })
-      } else {
-        const patchPayload: PatchPayload = { gameState: "dealer", dealerRevealed: true }
-        if (state.isSplit && state.currentHandIndex === 1) {
-          patchPayload.splitHand = newHand
-        }
-        patchState(patchPayload)
-        playDealerHand(newHand)
+      return {
+        state: { ...state, dealerRevealed: true, gameState: "finished", message: resolution.message },
+        resolution,
       }
     }
-  }, [
-    applyResolution,
-    patchState,
-    playDealerHand,
-    state.activeBet,
-    state.currentHandIndex,
-    state.deck,
-    state.initialBet,
-    state.isSplit,
-    state.playerHand,
-    state.splitHand,
-  ])
+  }
 
-  const canSplit = useCallback(
-    (hand: CardType[]) => {
-      if (hand.length !== 2) return false
-      const v1 = getCardValue(hand[0])
-      const v2 = getCardValue(hand[1])
-      return v1 === v2
-    },
-    [],
-  )
+  if (state.isSplit && state.currentHandIndex === 0) {
+    const value = calculateHandValue(state.playerHand)
+    const nextState: EngineGameState = {
+      ...state,
+      firstHandCards: state.playerHand,
+      firstHandResult: { value, busted: false },
+      currentHandIndex: 1,
+      playerHand: state.splitHand,
+      message: "Playing second hand...",
+    }
+    return { state: nextState, resolution: null }
+  }
 
-  const split = useCallback(() => {
-    if (!canSplit(state.playerHand)) return
+  return { state: { ...state, dealerRevealed: true, gameState: "dealer" }, resolution: null }
+}
 
-    const originalHand = [...state.playerHand]
+function handleDouble(container: EngineContainer): EngineContainer {
+  const { state } = container
+  if (state.gameState !== "playing") return container
+  // Splits currently do not model per-hand double payouts; block double on second split hand to avoid incorrect payouts
+  if (state.isSplit && state.currentHandIndex === 1) return container
 
-    patchState({ isSplit: true })
+  const deckCopy = ensureDeckHasCards([...state.deck])
+  const [newHand, newDeck] = dealCard(state.playerHand, deckCopy)
+  const value = calculateHandValue(newHand)
 
-    const firstHand = [state.playerHand[0]]
-    const secondHand = [state.playerHand[1]]
+  const doubledState: EngineGameState = {
+    ...state,
+    playerHand: newHand,
+    deck: newDeck,
+    activeBet: state.activeBet * 2,
+    isDoubled: true,
+  }
 
-    const deckCopy = ensureDeckHasCards([...state.deck])
-    const [newFirstHand, deck1] = dealCard(firstHand, deckCopy)
-    const [newSecondHand, deck2] = dealCard(secondHand, deck1)
+  if (state.isSplit && state.currentHandIndex === 0) {
+    if (value > 21) {
+      const nextState: EngineGameState = {
+        ...doubledState,
+        firstHandCards: newHand,
+        firstHandResult: { value, busted: true },
+        currentHandIndex: 1,
+        playerHand: state.splitHand,
+        message: "Playing second hand...",
+        // Capture per-hand wager for correct split resolution
+        firstHandBet: doubledState.activeBet,
+        firstHandDoubled: true,
+        activeBet: state.initialBet,
+        isDoubled: false,
+      }
+      return { state: nextState, resolution: null }
+    }
 
-    patchState({
-      playerHand: newFirstHand,
-      splitHand: newSecondHand,
-      deck: deck2,
-      currentHandIndex: 0,
-      message: "Playing first hand...",
-    })
-  }, [canSplit, onRoundResolved, patchState, state.activeBet, state.deck, state.playerHand])
+    const firstValue = calculateHandValue(newHand)
+    const nextState: EngineGameState = {
+      ...doubledState,
+      firstHandCards: newHand,
+      firstHandResult: { value: firstValue, busted: false },
+      currentHandIndex: 1,
+      playerHand: state.splitHand,
+      message: "Playing second hand...",
+      firstHandBet: doubledState.activeBet,
+      firstHandDoubled: true,
+      activeBet: state.initialBet, // reset for second hand
+      isDoubled: false,
+    }
+    return { state: nextState, resolution: null }
+  }
+
+  if (value > 21) {
+    const resolution: SingleHandResolution = {
+      result: "loss",
+      message: "Bust! You Lose",
+      payout: 0,
+      totalBet: state.activeBet,
+      winAmount: -state.activeBet,
+      winsDelta: 0,
+      lossesDelta: 1,
+      totalMovesDelta: 1,
+      correctMovesDelta: 0,
+      handsPlayedDelta: 1,
+      xpGain: 0,
+    }
+    return {
+      state: { ...doubledState, dealerRevealed: true, gameState: "finished", message: resolution.message },
+      resolution,
+    }
+  }
+
+  return { state: { ...doubledState, dealerRevealed: true, gameState: "dealer" }, resolution: null }
+}
+
+function handleSplit(container: EngineContainer): EngineContainer {
+  const { state } = container
+  if (state.gameState !== "playing") return container
+  if (state.playerHand.length !== 2) return container
+
+  const v1 = getCardValue(state.playerHand[0])
+  const v2 = getCardValue(state.playerHand[1])
+  if (v1 !== v2) return container
+
+  const firstHand = [state.playerHand[0]]
+  const secondHand = [state.playerHand[1]]
+
+  const deckCopy = ensureDeckHasCards([...state.deck])
+  const [newFirstHand, deck1] = dealCard(firstHand, deckCopy)
+  const [newSecondHand, deck2] = dealCard(secondHand, deck1)
+
+  const nextState: EngineGameState = {
+    ...state,
+    deck: deck2,
+    playerHand: newFirstHand,
+    splitHand: newSecondHand,
+    isSplit: true,
+    currentHandIndex: 0,
+    firstHandCards: [],
+    firstHandResult: null,
+    message: "Playing first hand...",
+  }
+
+  return { state: nextState, resolution: null }
+}
+
+function engineReducer(container: EngineContainer, action: EngineAction): EngineContainer {
+  switch (action.type) {
+    case "HYDRATE":
+      return { state: { ...container.state, ...action.payload }, resolution: null }
+    case "SET_RESOLUTION":
+      return {
+        state: {
+          ...container.state,
+          ...action.statePatch,
+          dealerRevealed: true,
+          gameState: "finished",
+          message: action.resolution.message,
+        },
+        resolution: action.resolution,
+      }
+    case "CLEAR_RESOLUTION":
+      return { ...container, resolution: null }
+    case "DEAL":
+      return handleDeal(container.state, action.bet, action.level)
+    case "HIT":
+      return handleHit(container)
+    case "STAND":
+      return handleStand(container)
+    case "DOUBLE":
+      return handleDouble(container)
+    case "SPLIT":
+      return handleSplit(container)
+    case "RESET_ROUND":
+      return { state: { ...initialEngineState, deck: ensureDeckHasCards(container.state.deck) }, resolution: null }
+    default:
+      return container
+  }
+}
+
+export function useGameEngine(initial: Partial<EngineGameState> = {}) {
+  const initialContainer: EngineContainer = {
+    state: { ...initialEngineState, ...initial },
+    resolution: null,
+  }
+
+  const [container, dispatch] = useReducer(engineReducer, initialContainer)
 
   return {
-    startHand,
-    hit,
-    stand,
-    doubleDown,
-    split,
-    canSplit,
-    isDoubledRef,
+    state: container.state,
+    resolution: container.resolution,
+    dispatch,
   }
+}
+
+export function animateDealerPlay({
+  state,
+  dispatch,
+  delayMs = 150,
+}: {
+  state: EngineGameState
+  dispatch: React.Dispatch<EngineAction>
+  delayMs?: number
+}) {
+  const steps: Array<{ dealerHand: CardType[]; deck: CardType[] }> = []
+  let dealer = [...state.dealerHand]
+  let deck = [...state.deck]
+
+  while (dealerShouldHitH17(dealer)) {
+    deck = ensureDeckHasCards(deck)
+    const [newHand, newDeck] = dealCard(dealer, deck)
+    dealer = newHand
+    deck = newDeck
+    steps.push({ dealerHand: dealer, deck })
+  }
+
+  const firstHandBet = state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet
+  const secondHandBet = state.initialBet
+
+  if (steps.length === 0) {
+    const resolution = state.isSplit
+      ? resolveSplitHands({
+          firstHand: state.firstHandCards,
+          secondHand: state.splitHand,
+          dealerHand: state.dealerHand,
+          firstBet: firstHandBet,
+          secondBet: secondHandBet,
+          level: state.roundLevel,
+        })
+      : resolveSingleHand({
+          playerHand: state.playerHand,
+          dealerHand: state.dealerHand,
+          baseBet: state.initialBet,
+          isDoubled: state.isDoubled,
+          level: state.roundLevel,
+        })
+
+    dispatch({
+      type: "SET_RESOLUTION",
+      resolution,
+      statePatch: {
+        dealerHand: state.dealerHand,
+        deck: state.deck,
+        // Default to showing first hand after split resolution
+        playerHand: state.isSplit ? state.firstHandCards : state.playerHand,
+        viewHandIndex: state.isSplit ? 0 : state.viewHandIndex,
+      },
+    })
+    return
+  }
+
+  steps.forEach((step, idx) => {
+    setTimeout(() => {
+      const isLast = idx === steps.length - 1
+      dispatch({
+        type: "HYDRATE",
+        payload: {
+          dealerHand: step.dealerHand,
+          deck: step.deck,
+          dealerRevealed: true,
+          gameState: "dealer",
+        },
+      })
+
+      if (isLast) {
+        const resolution = state.isSplit
+          ? resolveSplitHands({
+              firstHand: state.firstHandCards,
+              secondHand: state.splitHand,
+              dealerHand: step.dealerHand,
+              firstBet: firstHandBet,
+              secondBet: secondHandBet,
+              level: state.roundLevel,
+            })
+          : resolveSingleHand({
+              playerHand: state.playerHand,
+              dealerHand: step.dealerHand,
+              baseBet: state.initialBet,
+              isDoubled: state.isDoubled,
+              level: state.roundLevel,
+            })
+
+        dispatch({
+          type: "SET_RESOLUTION",
+          resolution,
+          statePatch: {
+            dealerHand: step.dealerHand,
+            deck: step.deck,
+            playerHand: state.isSplit ? state.firstHandCards : state.playerHand,
+            viewHandIndex: state.isSplit ? 0 : state.viewHandIndex,
+          },
+        })
+      }
+    }, delayMs * (idx + 1))
+  })
 }

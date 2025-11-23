@@ -99,7 +99,8 @@ describe("resolveSplitHands", () => {
       firstHand: [card("K"), card("8"), card("5")], // bust
       secondHand: [card("10"), card("9")], // 19
       dealerHand: [card("10"), card("8")], // 18
-      betPerHand: 10,
+      firstBet: 10,
+      secondBet: 10,
       level: 1,
     })
 

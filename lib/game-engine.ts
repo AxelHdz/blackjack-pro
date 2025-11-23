@@ -28,7 +28,8 @@ export type SplitHandResolutionInput = {
   firstHand: Card[]
   secondHand: Card[]
   dealerHand: Card[]
-  betPerHand: number
+  firstBet: number
+  secondBet: number
   level: number
 }
 
@@ -118,7 +119,8 @@ export function resolveSplitHands({
   firstHand,
   secondHand,
   dealerHand,
-  betPerHand,
+  firstBet,
+  secondBet,
   level,
 }: SplitHandResolutionInput): SplitHandResolution {
   const dealerValue = calculateHandValue(dealerHand)
@@ -131,8 +133,10 @@ export function resolveSplitHands({
   let winsDelta = 0
   let lossesDelta = 0
   let totalMovesDelta = 2
+  const betPerHand = (handIndex: number) => (handIndex === 0 ? firstBet : secondBet)
 
-  const evaluateHand = (label: string, playerValue: number) => {
+  const evaluateHand = (label: string, playerValue: number, handIndex: number) => {
+    const wager = betPerHand(handIndex)
     if (playerValue > 21) {
       results.push(`${label}: Lose`)
       handOutcomes.push("loss")
@@ -144,7 +148,7 @@ export function resolveSplitHands({
       results.push(`${label}: Win`)
       handOutcomes.push("win")
       winsDelta += 1
-      payout += betPerHand * 2
+      payout += wager * 2
       return
     }
 
@@ -152,7 +156,7 @@ export function resolveSplitHands({
       results.push(`${label}: Win`)
       handOutcomes.push("win")
       winsDelta += 1
-      payout += betPerHand * 2
+      payout += wager * 2
       return
     }
 
@@ -165,17 +169,19 @@ export function resolveSplitHands({
 
     results.push(`${label}: Push`)
     handOutcomes.push("push")
-    payout += betPerHand
+    payout += wager
     totalMovesDelta -= 1 // Don't count pushes in move totals
   }
 
-  evaluateHand("Hand 1", firstValue)
-  evaluateHand("Hand 2", secondValue)
+  evaluateHand("Hand 1", firstValue, 0)
+  evaluateHand("Hand 2", secondValue, 1)
 
-  const totalBet = betPerHand * 2
+  const totalBet = firstBet + secondBet
   const winAmount = payout - totalBet
   const correctMovesDelta = winsDelta
-  const xpGain = winsDelta > 0 ? getXPPerWinWithBet(level, betPerHand) * winsDelta : 0
+  const xpFromFirst = handOutcomes[0] === "win" ? getXPPerWinWithBet(level, firstBet) : 0
+  const xpFromSecond = handOutcomes[1] === "win" ? getXPPerWinWithBet(level, secondBet) : 0
+  const xpGain = xpFromFirst + xpFromSecond
 
   return {
     message: results.join(" | "),

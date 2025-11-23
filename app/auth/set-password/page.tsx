@@ -45,7 +45,7 @@ function SetPasswordContent() {
           // Not authenticated, redirect to login
           const errorMessage = "You must be signed in to set a password. Please use the confirmation link from your email."
           const redirectPath = friendId
-            ? `/auth/login?error=${encodeURIComponent(errorMessage)}&friend=${friendId}`
+            ? `/auth/login?error=${encodeURIComponent(errorMessage)}&friend=${encodeURIComponent(friendId)}`
             : `/auth/login?error=${encodeURIComponent(errorMessage)}`
           setIsAuthenticated(false)
           router.push(redirectPath)
@@ -92,7 +92,7 @@ function SetPasswordContent() {
       if (updateError) throw updateError
 
       // Password set successfully, redirect to home
-      const redirectPath = friendId ? `/?friend=${friendId}` : "/"
+      const redirectPath = friendId ? `/?friend=${encodeURIComponent(friendId)}` : "/"
       router.push(redirectPath)
       router.refresh()
     } catch (error: unknown) {

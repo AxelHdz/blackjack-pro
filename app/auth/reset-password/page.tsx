@@ -45,7 +45,7 @@ function ResetPasswordContent() {
           // Not authenticated, redirect to login
           const errorMessage = "This password reset link is invalid or has expired. Please request a new one."
           const redirectPath = friendId
-            ? `/auth/login?error=${encodeURIComponent(errorMessage)}&friend=${friendId}`
+            ? `/auth/login?error=${encodeURIComponent(errorMessage)}&friend=${encodeURIComponent(friendId)}`
             : `/auth/login?error=${encodeURIComponent(errorMessage)}`
           setIsAuthenticated(false)
           router.push(redirectPath)
@@ -92,7 +92,7 @@ function ResetPasswordContent() {
       if (updateError) throw updateError
 
       // Password reset successfully, redirect to home
-      const redirectPath = friendId ? `/?friend=${friendId}` : "/"
+      const redirectPath = friendId ? `/?friend=${encodeURIComponent(friendId)}` : "/"
       router.push(redirectPath)
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")

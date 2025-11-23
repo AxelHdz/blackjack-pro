@@ -35,7 +35,7 @@ export default function ForgotPasswordPage() {
 
     try {
       const redirectTo = friendId
-        ? `${window.location.origin}/auth/callback?type=recovery&friend=${friendId}`
+        ? `${window.location.origin}/auth/callback?type=recovery&friend=${encodeURIComponent(friendId)}`
         : `${window.location.origin}/auth/callback?type=recovery`
 
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
         additionalInfo="The link will expire in 1 hour for security reasons."
         buttonText="Back to Login"
         onButtonClick={() => {
-          const redirectPath = friendId ? `/auth/login?friend=${friendId}` : "/auth/login"
+          const redirectPath = friendId ? `/auth/login?friend=${encodeURIComponent(friendId)}` : "/auth/login"
           router.push(redirectPath)
         }}
       />
@@ -115,7 +115,7 @@ export default function ForgotPasswordPage() {
               <p className="text-sm text-muted-foreground">
                 Remember your password?{" "}
                 <Link
-                  href={friendId ? `/auth/login?friend=${friendId}` : "/auth/login"}
+                  href={friendId ? `/auth/login?friend=${encodeURIComponent(friendId)}` : "/auth/login"}
                   className="text-primary hover:underline font-medium"
                 >
                   Sign in

@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     console.error("Auth callback error:", error, errorDescription)
     const friendlyMessage = getErrorMessage(error, errorDescription)
     const redirectPath = friendId 
-      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${friendId}` 
+      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${encodeURIComponent(friendId)}` 
       : `/auth/login?error=${encodeURIComponent(friendlyMessage)}`
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
   if (!code) {
     const friendlyMessage = "This magic link is invalid or has expired. Please request a new one."
     const redirectPath = friendId
-      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${friendId}`
+      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${encodeURIComponent(friendId)}`
       : `/auth/login?error=${encodeURIComponent(friendlyMessage)}`
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
     console.error("Session exchange error:", exchangeError)
     const friendlyMessage = getErrorMessage(exchangeError.message, null)
     const redirectPath = friendId 
-      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${friendId}` 
+      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${encodeURIComponent(friendId)}` 
       : `/auth/login?error=${encodeURIComponent(friendlyMessage)}`
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     console.error("Session exchange succeeded but no session was returned")
     const friendlyMessage = "Failed to create session. Please try again."
     const redirectPath = friendId 
-      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${friendId}` 
+      ? `/auth/login?error=${encodeURIComponent(friendlyMessage)}&friend=${encodeURIComponent(friendId)}` 
       : `/auth/login?error=${encodeURIComponent(friendlyMessage)}`
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
@@ -80,7 +80,7 @@ export async function GET(request: Request) {
   // Check if this is a password recovery flow
   if (recoveryType === "recovery") {
     const redirectPath = friendId
-      ? `/auth/reset-password?friend=${friendId}`
+      ? `/auth/reset-password?friend=${encodeURIComponent(friendId)}`
       : "/auth/reset-password"
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
@@ -88,12 +88,12 @@ export async function GET(request: Request) {
   // Check if user wants to set password
   if (setPassword === "true") {
     const redirectPath = friendId
-      ? `/auth/set-password?friend=${friendId}`
+      ? `/auth/set-password?friend=${encodeURIComponent(friendId)}`
       : "/auth/set-password"
     return NextResponse.redirect(`${origin}${redirectPath}`)
   }
 
   // Normal redirect to home - user is now logged in
-  const redirectPath = friendId ? `/?friend=${friendId}` : "/"
+  const redirectPath = friendId ? `/?friend=${encodeURIComponent(friendId)}` : "/"
   return NextResponse.redirect(`${origin}${redirectPath}`)
 }

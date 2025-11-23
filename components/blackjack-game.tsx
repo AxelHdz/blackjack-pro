@@ -39,7 +39,7 @@ import {
   Swords,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { BuybackDrillModal } from "@/components/buyback-drill-modal"
 import { FeedbackModal } from "@/components/feedback-modal"
@@ -78,6 +78,7 @@ interface BlackjackGameProps {
 
 export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = useMemo(() => createClient(), [])
   const { toast } = useToast()
 
@@ -1622,6 +1623,13 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         description: "Failed to process friend connection",
         variant: "destructive",
       })
+    } finally {
+      // Remove friend parameter from URL after processing
+      const currentParams = new URLSearchParams(searchParams.toString())
+      currentParams.delete("friend")
+      const pathname = window.location.pathname
+      const newUrl = currentParams.toString() ? `${pathname}?${currentParams.toString()}` : pathname
+      router.replace(newUrl)
     }
   }
 

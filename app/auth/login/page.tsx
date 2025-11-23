@@ -74,7 +74,7 @@ export default function LoginPage() {
               // User exists but doesn't have a password - send magic link to set password
               const friendId = searchParams.get("friend")
               const redirectTo = friendId
-                ? `${window.location.origin}/auth/callback?setPassword=true&friend=${friendId}`
+                ? `${window.location.origin}/auth/callback?setPassword=true&friend=${encodeURIComponent(friendId)}`
                 : `${window.location.origin}/auth/callback?setPassword=true`
 
               const { error: magicLinkError } = await supabase.auth.signInWithOtp({
@@ -108,7 +108,7 @@ export default function LoginPage() {
       }
 
       const friendId = searchParams.get("friend")
-      const redirectPath = friendId ? `/?friend=${friendId}` : "/"
+      const redirectPath = friendId ? `/?friend=${encodeURIComponent(friendId)}` : "/"
       router.push(redirectPath)
       router.refresh()
     } catch (error: unknown) {
@@ -125,7 +125,7 @@ export default function LoginPage() {
     try {
       const friendId = searchParams.get("friend")
       const redirectTo = friendId
-        ? `${window.location.origin}/auth/callback?friend=${friendId}`
+        ? `${window.location.origin}/auth/callback?friend=${encodeURIComponent(friendId)}`
         : `${window.location.origin}/auth/callback`
 
       const { error: magicLinkError } = await supabase.auth.signInWithOtp({
@@ -259,7 +259,7 @@ export default function LoginPage() {
                     <Link
                       href={
                         searchParams.get("friend")
-                          ? `/auth/forgot-password?email=${encodeURIComponent(email)}&friend=${searchParams.get("friend")}`
+                          ? `/auth/forgot-password?email=${encodeURIComponent(email)}&friend=${encodeURIComponent(searchParams.get("friend")!)}`
                           : `/auth/forgot-password?email=${encodeURIComponent(email)}`
                       }
                       className="text-xs text-primary hover:underline"

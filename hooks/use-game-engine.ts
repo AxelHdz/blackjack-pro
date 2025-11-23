@@ -304,6 +304,20 @@ function handleHit(container: EngineContainer): EngineContainer {
   }
 
   if (value === 21) {
+    if (state.isSplit && state.currentHandIndex === 0) {
+      const firstValue = calculateHandValue(newHand)
+      return {
+        state: {
+          ...nextState,
+          firstHandCards: newHand,
+          firstHandResult: { value: firstValue, busted: false },
+          currentHandIndex: 1,
+          playerHand: state.splitHand,
+          message: "Playing second hand...",
+        },
+        resolution: null,
+      }
+    }
     return { state: { ...nextState, dealerRevealed: true, gameState: "dealer" }, resolution: null }
   }
 
@@ -364,6 +378,19 @@ function handleDouble(container: EngineContainer): EngineContainer {
       state: { ...doubledState, dealerRevealed: true, gameState: "finished", message: resolution.message },
       resolution,
     }
+  }
+
+  if (state.isSplit && state.currentHandIndex === 0) {
+    const firstValue = calculateHandValue(newHand)
+    const nextState: EngineGameState = {
+      ...doubledState,
+      firstHandCards: newHand,
+      firstHandResult: { value: firstValue, busted: false },
+      currentHandIndex: 1,
+      playerHand: state.splitHand,
+      message: "Playing second hand...",
+    }
+    return { state: nextState, resolution: null }
   }
 
   return { state: { ...doubledState, dealerRevealed: true, gameState: "dealer" }, resolution: null }

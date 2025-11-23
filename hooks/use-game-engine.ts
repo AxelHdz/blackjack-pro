@@ -366,7 +366,8 @@ function handleStand(container: EngineContainer): EngineContainer {
         firstHand: state.firstHandCards,
         secondHand: state.playerHand,
         dealerHand: state.dealerHand,
-        betPerHand: state.initialBet,
+        firstBet: state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet,
+        secondBet: state.initialBet,
         level: state.roundLevel,
       })
       return {

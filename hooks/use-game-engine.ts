@@ -129,7 +129,8 @@ function resolveWithDealer(state: EngineGameState, isDoubled: boolean): { nextSt
       firstHand: state.firstHandCards,
       secondHand: state.splitHand,
       dealerHand: finalDealerHand,
-      betPerHand: state.activeBet,
+      firstBet: state.firstHandDoubled ? state.firstHandBet ?? state.initialBet : state.initialBet,
+      secondBet: state.initialBet,
       level: state.roundLevel,
     })
   } else {

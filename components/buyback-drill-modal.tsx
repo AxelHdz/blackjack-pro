@@ -7,7 +7,7 @@ import { PlayingCard } from "@/components/playing-card"
 import { getOptimalMove, type GameAction } from "@/lib/blackjack-strategy"
 import { calculateHandValue, createDeck, getHandValueInfo, type Card } from "@/lib/card-utils"
 import { X, Check, AlertCircle, Clock } from "lucide-react"
-import { DRILL_CONFIG, getReward, getStreakRequired } from "@/lib/drill-config"
+import { getReward, getStreakRequired } from "@/lib/drill-config"
 import { resolveFeedback, type FeedbackContext } from "@/lib/drill-feedback"
 
 interface BuybackDrillModalProps {
@@ -40,7 +40,6 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
   const [drillComplete, setDrillComplete] = useState(false)
   const [drillFailed, setDrillFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [answerStartTime, setAnswerStartTime] = useState<number>(0)
   const [notCountedReason, setNotCountedReason] = useState("")
   const [timeRemaining, setTimeRemaining] = useState(60)
 
@@ -75,7 +74,6 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
     setSelectedAction(null)
     setShowFeedback(false)
     setIsLoading(false)
-    setAnswerStartTime(Date.now())
   }
 
   useEffect(() => {
@@ -100,10 +98,8 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
   }, [drillComplete, drillFailed, isLoading])
 
   const handleActionSelect = (action: GameAction) => {
-    const answerTime = Date.now() - answerStartTime
     const optimal = getOptimalMove(playerHand, dealerHand[0])
     const correct = action === optimal
-    const isFastTap = answerTime < DRILL_CONFIG.fast_tap_ms
 
     setSelectedAction(action)
     setIsCorrect(correct)
@@ -136,8 +132,6 @@ export function BuybackDrillModal({ onClose, onSuccess, userId, currentTier }: B
         },
       ])
       reason = "Incorrect move"
-    } else if (isFastTap) {
-      reason = "Too fast—no instant taps"
     } else {
       counted = true
       setStreakCount((prev) => prev + 1)

@@ -77,7 +77,10 @@ export function resolveSingleHand({
   let result: "win" | "loss" | "push"
   let message: string
 
-  if (dealerValue > 21) {
+  if (playerValue > 21) {
+    result = "loss"
+    message = "Bust! You Lose"
+  } else if (dealerValue > 21) {
     result = "win"
     message = "Dealer Busts! You Win"
   } else if (playerValue > dealerValue) {

@@ -75,6 +75,20 @@ describe("resolveSingleHand", () => {
     expect(res.xpGain).toBe(0)
   })
 
+  it("treats player bust as loss even if dealer also busts", () => {
+    const res = resolveSingleHand({
+      playerHand: [card("Q"), card("4"), card("8")], // 22
+      dealerHand: [card("K"), card("8"), card("6")], // 24
+      baseBet: 10,
+      isDoubled: false,
+      level: 1,
+    })
+
+    expect(res.result).toBe("loss")
+    expect(res.message).toBe("Bust! You Lose")
+    expect(res.winAmount).toBe(-10)
+  })
+
   it("resolves a doubled loss", () => {
     const res = resolveSingleHand({
       playerHand: [card("8"), card("8")],

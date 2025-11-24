@@ -98,6 +98,24 @@ describe("useGameEngine actions", () => {
     expect(result.current.resolution?.winAmount).toBe(-25)
   })
 
+  it("does not draw dealer cards after a player bust, only reveals the hole card", () => {
+    // Pop order: d1(6), d2(K), p1(Q), p2(4), hit(8 -> bust)
+    const deck = [card("8"), card("4"), card("Q"), card("K"), card("6")]
+    const { result } = createEngine(deck)
+
+    act(() => {
+      result.current.dispatch({ type: "DEAL", bet: 10, level: 1 })
+    })
+    act(() => {
+      result.current.dispatch({ type: "HIT" }) // draws 8 -> bust at 22
+    })
+
+    expect(result.current.state.gameState).toBe("finished")
+    expect(result.current.resolution?.result).toBe("loss")
+    expect(result.current.state.dealerHand).toHaveLength(2)
+    expect(result.current.state.dealerRevealed).toBe(true)
+  })
+
   it("standing on a bust hand resolves as loss", () => {
     // Player: 5,8,10 (23) vs dealer 20
     const deck = [card("10"), card("5"), card("10"), card("8"), card("5"), card("J")]

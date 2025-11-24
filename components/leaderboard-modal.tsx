@@ -118,16 +118,25 @@ export function LeaderboardModal({
       const url = `/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`
       const res = await fetch(url, { cache: "no-store" })
       const data = (await res.json().catch(() => ({}))) as { entries?: LeaderboardEntry[]; nextCursor?: string | null }
+      const apiError =
+        data && typeof data === "object" && "error" in data ? (data as any).error : "Leaderboard load failed"
 
-      if (!res.ok || !Array.isArray(data.entries)) {
+      if (!res.ok) {
         console.error("[v0] Leaderboard response error:", { status: res.status, body: data })
-        throw new Error(data && typeof data === "object" && "error" in data ? (data as any).error : "Leaderboard load failed")
+        throw new Error(apiError)
       }
 
+      if (!Array.isArray(data.entries)) {
+        console.error("[v0] Leaderboard response malformed:", { status: res.status, body: data })
+        throw new Error(apiError)
+      }
+
+      const newEntries = data.entries
+
       if (reset) {
-        setEntries(data.entries)
+        setEntries(newEntries)
       } else {
-        setEntries((prev) => [...prev, ...data.entries])
+        setEntries((prev) => [...prev, ...newEntries])
       }
 
       setNextCursor(typeof data.nextCursor === "string" ? data.nextCursor : null)

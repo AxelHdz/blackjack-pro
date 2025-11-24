@@ -144,7 +144,7 @@ export async function GET(request: Request) {
   try {
     await ensureProfileAndStats(supabase, {
       id: data.session.user.id,
-      email: data.session.user.email,
+      email: data.session.user.email ?? null,
       user_metadata: data.session.user.user_metadata || {},
     })
   } catch (createError) {

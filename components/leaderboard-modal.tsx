@@ -117,14 +117,20 @@ export function LeaderboardModal({
       const cursor = reset ? null : nextCursor
       const url = `/api/leaderboard?scope=${scopeToUse}&metric=${metricToUse}${cursor ? `&cursor=${cursor}` : ""}`
       const res = await fetch(url, { cache: "no-store" })
-      const data = (await res.json()) as { entries: LeaderboardEntry[]; nextCursor: string | null }
+      const data = (await res.json().catch(() => ({}))) as { entries?: LeaderboardEntry[]; nextCursor?: string | null }
+
+      if (!res.ok || !Array.isArray(data.entries)) {
+        console.error("[v0] Leaderboard response error:", { status: res.status, body: data })
+        throw new Error(data && typeof data === "object" && "error" in data ? (data as any).error : "Leaderboard load failed")
+      }
 
       if (reset) {
         setEntries(data.entries)
       } else {
         setEntries((prev) => [...prev, ...data.entries])
       }
-      setNextCursor(data.nextCursor)
+
+      setNextCursor(typeof data.nextCursor === "string" ? data.nextCursor : null)
     } catch (error) {
       console.error("[v0] Failed to load leaderboard:", error)
       toast({

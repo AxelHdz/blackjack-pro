@@ -16,7 +16,34 @@ export async function GET(request: NextRequest) {
   const scope = searchParams.get("scope") || "global"
   const metric = searchParams.get("metric") || "balance"
 
+  const validScopes = ["global", "friends"] as const
+  const validMetrics = ["balance", "level"] as const
+
+  if (!validScopes.includes(scope as (typeof validScopes)[number])) {
+    return NextResponse.json({ error: "Invalid scope" }, { status: 400 })
+  }
+
+  if (!validMetrics.includes(metric as (typeof validMetrics)[number])) {
+    return NextResponse.json({ error: "Invalid metric" }, { status: 400 })
+  }
+
   try {
+    // Verify stats exist so we can differentiate "no stats" from server errors
+    const { data: stats, error: statsError } = await supabase
+      .from("game_stats")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    if (statsError) {
+      console.error("[v0] Failed to fetch stats for rank calculation:", statsError)
+      return NextResponse.json({ error: "Failed to load stats" }, { status: 500 })
+    }
+
+    if (!stats) {
+      return NextResponse.json({ error: "Stats not found" }, { status: 404 })
+    }
+
     // Get friend IDs if friends scope
     let friendIds: string[] | null = null
     if (scope === "friends") {
@@ -43,9 +70,14 @@ export async function GET(request: NextRequest) {
       p_friend_ids: friendIds || [],
     })
 
-    if (rankError || rankData === null) {
+    if (rankError) {
       console.error("[v0] Rank calculation error:", rankError)
-      return NextResponse.json({ rank: null })
+      return NextResponse.json({ error: "Failed to calculate rank" }, { status: 500 })
+    }
+
+    if (rankData === null) {
+      console.error("[v0] Rank calculation returned null for user:", user.id)
+      return NextResponse.json({ error: "Rank unavailable" }, { status: 500 })
     }
 
     const rank = rankData

@@ -1,6 +1,69 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
+function deriveDisplayName(email: string | null, userMetadata: Record<string, unknown>): string {
+  const fromMeta =
+    (userMetadata?.display_name as string | undefined) ||
+    (userMetadata?.full_name as string | undefined) ||
+    (userMetadata?.name as string | undefined) ||
+    (userMetadata?.nickname as string | undefined)
+
+  const fallback = email ? email.split("@")[0] : "Player"
+  const source = fromMeta && typeof fromMeta === "string" ? fromMeta : fallback
+  return source.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 30) || "Player"
+}
+
+async function ensureProfileAndStats(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: { id: string; email: string | null; user_metadata: Record<string, unknown> },
+) {
+  const timestamp = new Date().toISOString()
+  const displayName = deriveDisplayName(user.email, user.user_metadata || {})
+
+  // Ensure profile exists
+  const { data: existingProfile, error: profileFetchError } = await supabase
+    .from("user_profiles")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  if (!existingProfile && !profileFetchError) {
+    const { error: insertProfileError } = await supabase.from("user_profiles").insert({
+      id: user.id,
+      email: user.email,
+      display_name: displayName,
+      created_at: timestamp,
+      updated_at: timestamp,
+    })
+
+    if (insertProfileError) {
+      console.error("Failed to create profile after OAuth callback:", insertProfileError)
+    }
+  }
+
+  // Ensure stats exist
+  const { data: existingStats, error: statsFetchError } = await supabase
+    .from("game_stats")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (!existingStats && !statsFetchError) {
+    const { error: insertStatsError } = await supabase.from("game_stats").insert({
+      user_id: user.id,
+      total_money: 500,
+      level: 1,
+      experience: 0,
+      created_at: timestamp,
+      updated_at: timestamp,
+    })
+
+    if (insertStatsError) {
+      console.error("Failed to create game stats after OAuth callback:", insertStatsError)
+    }
+  }
+}
+
 // Map error codes to user-friendly messages
 function getErrorMessage(error: string, errorDescription: string | null): string {
   const errorLower = error.toLowerCase()
@@ -76,6 +139,17 @@ export async function GET(request: Request) {
 
   // Session is now stored in cookies via the server client's setAll callback
   // The user is automatically logged in at this point
+
+  // Ensure profile and stats exist for users coming from OAuth/magic links
+  try {
+    await ensureProfileAndStats(supabase, {
+      id: data.session.user.id,
+      email: data.session.user.email,
+      user_metadata: data.session.user.user_metadata || {},
+    })
+  } catch (createError) {
+    console.error("Failed to ensure profile/stats after callback:", createError)
+  }
 
   // Check if this is a password recovery flow
   if (recoveryType === "recovery") {

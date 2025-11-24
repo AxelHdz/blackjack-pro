@@ -35,6 +35,13 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
       const url = `/api/me/rank?scope=${scope}&metric=${metric}`
       const res = await fetch(url, { cache: "no-store" })
       const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        console.error("[v0] Rank request failed:", { status: res.status, body: data })
+        setRank(null)
+        return
+      }
+
       setRank(typeof data.rank === "number" ? data.rank : null)
     } catch (error) {
       console.error("[v0] Failed to fetch rank:", error)

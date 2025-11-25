@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const { data: challenge, error } = await fetchChallengeById(supabase, challengeId)
 
     if (error || !challenge) {
-      console.error("[v0] Challenge fetch error:", error)
+      console.error("Challenge fetch error:", error)
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
 
@@ -34,14 +34,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .in("id", [challenge.challenger_id, challenge.challenged_id])
 
     if (profilesError) {
-      console.error("[v0] User profiles fetch error:", profilesError)
+      console.error("User profiles fetch error:", profilesError)
     }
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
     return NextResponse.json(formatChallengeResponse(challenge as ChallengeRecord, profilesMap))
   } catch (err) {
-    console.error("[v0] Challenge fetch error:", err)
+    console.error("Challenge fetch error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { data: challenge, error: fetchError } = await fetchChallengeById(supabase, challengeId)
 
     if (fetchError || !challenge) {
-      console.error("[v0] Challenge fetch error:", fetchError)
+      console.error("Challenge fetch error:", fetchError)
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
 
@@ -99,7 +99,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .single()
 
       if (challengerStatsError || !challengerStats || challengedStatsError || !challengedStats) {
-        console.error("[v0] Failed to fetch stats:", challengerStatsError || challengedStatsError)
+        console.error("Failed to fetch stats:", challengerStatsError || challengedStatsError)
         return NextResponse.json({ error: "Failed to fetch balances" }, { status: 500 })
       }
 
@@ -114,7 +114,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .eq("user_id", challenge.challenged_id)
 
       if (challengedDebitError) {
-        console.error("[v0] Failed to reserve challenged wager:", challengedDebitError)
+        console.error("Failed to reserve challenged wager:", challengedDebitError)
         return NextResponse.json({ error: "Failed to reserve opponent wager" }, { status: 500 })
       }
 
@@ -144,7 +144,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .single()
 
       if (updateError) {
-        console.error("[v0] Failed to accept challenge:", updateError)
+        console.error("Failed to accept challenge:", updateError)
         await supabase
           .from("game_stats")
           .update({ total_money: challengedBalanceStart })
@@ -181,7 +181,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .single()
 
       if (challengerStatsError || !challengerStats) {
-        console.error("[v0] Failed to fetch challenger stats:", challengerStatsError)
+        console.error("Failed to fetch challenger stats:", challengerStatsError)
         return NextResponse.json({ error: "Failed to fetch challenger balance" }, { status: 500 })
       }
 
@@ -192,7 +192,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .single()
 
       if (challengedStatsError || !challengedStats) {
-        console.error("[v0] Failed to fetch challenged stats:", challengedStatsError)
+        console.error("Failed to fetch challenged stats:", challengedStatsError)
         return NextResponse.json({ error: "Failed to fetch challenged balance" }, { status: 500 })
       }
 
@@ -213,7 +213,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           .eq("user_id", challenge.challenger_id)
 
         if (balanceUpdateError) {
-          console.error("[v0] Failed to update challenger balance:", balanceUpdateError)
+          console.error("Failed to update challenger balance:", balanceUpdateError)
           return NextResponse.json({ error: "Failed to update wager" }, { status: 500 })
         }
       }
@@ -223,7 +223,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .update({
           wager_amount: wagerAmount,
           duration_minutes: durationMinutes,
-          status: "pending", // Reset to pending for challenger to accept
+          status: "pending",
           updated_at: new Date().toISOString(),
         })
         .eq("id", challengeId)
@@ -231,7 +231,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .single()
 
       if (updateError) {
-        console.error("[v0] Failed to counter-offer:", updateError)
+        console.error("Failed to counter-offer:", updateError)
         if (wagerDifference !== 0) {
           await supabase
             .from("game_stats")
@@ -246,7 +246,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Invalid action" }, { status: 400 })
     }
   } catch (err) {
-    console.error("[v0] Challenge update error:", err)
+    console.error("Challenge update error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -259,66 +259,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     data: { user },
     error: authError,
   } = await supabase.auth.getUser()
-  
-  console.log("[v0] DELETE - Auth check:", {
-    hasUser: !!user,
-    userId: user?.id,
-    authError: authError?.message,
-    challengeId,
-  })
-  
+
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    console.log("[v0] DELETE challenge - params.id:", challengeId, "user.id:", user.id)
-    
-    const { data: sessionCheck } = await supabase.auth.getSession()
-    console.log("[v0] Session check:", {
-      hasSession: !!sessionCheck?.session,
-      sessionUserId: sessionCheck?.session?.user?.id,
-    })
-    
     const result = await fetchChallengeById(supabase, challengeId)
     const { data: challenge, error: fetchError } = result
-    
-    console.log("[v0] Fetch result:", {
-      hasData: !!challenge,
-      hasError: !!fetchError,
-      error: fetchError,
-      challengeId: challenge?.id,
-    })
 
     if (fetchError) {
-      console.error("[v0] Challenge fetch error:", {
-        error: fetchError,
-        challengeId: challengeId,
-        userId: user.id,
-        errorCode: fetchError?.code,
-        errorMessage: fetchError?.message,
-        errorDetails: fetchError?.details,
-        errorHint: fetchError?.hint,
-      })
+      console.error("Challenge fetch error:", fetchError)
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
-    
+
     if (!challenge) {
-      console.error("[v0] Challenge not found (likely RLS blocked):", {
-        challengeId: challengeId,
-        userId: user.id,
-      })
-      
       return NextResponse.json({ error: "Challenge not found or access denied" }, { status: 404 })
     }
-    
-    console.log("[v0] Challenge found:", {
-      id: challenge.id,
-      challenger_id: challenge.challenger_id,
-      challenged_id: challenge.challenged_id,
-      status: challenge.status,
-      userIsChallenger: challenge.challenger_id === user.id,
-    })
 
     // Only challenger can cancel, and only if pending
     if (challenge.challenger_id !== user.id) {
@@ -337,7 +294,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .single()
 
     if (statsError || !challengerStats) {
-      console.error("[v0] Failed to fetch challenger stats:", statsError)
+      console.error("Failed to fetch challenger stats:", statsError)
       return NextResponse.json({ error: "Failed to fetch balance" }, { status: 500 })
     }
 
@@ -349,7 +306,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .eq("user_id", user.id)
 
     if (refundError) {
-      console.error("[v0] Failed to refund wager:", refundError)
+      console.error("Failed to refund wager:", refundError)
       return NextResponse.json({ error: "Failed to refund wager" }, { status: 500 })
     }
 
@@ -367,11 +324,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .single()
 
     if (cancelError || !cancelledChallenge) {
-      console.error("[v0] Failed to cancel challenge:", cancelError)
-      await supabase
-        .from("game_stats")
-        .update({ total_money: challengerStats.total_money })
-        .eq("user_id", user.id)
+      console.error("Failed to cancel challenge:", cancelError)
+      await supabase.from("game_stats").update({ total_money: challengerStats.total_money }).eq("user_id", user.id)
       return NextResponse.json({ error: "Failed to cancel challenge" }, { status: 500 })
     }
 
@@ -386,7 +340,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       challenge: formatChallengeResponse(cancelledChallenge as ChallengeRecord, profilesMap),
     })
   } catch (err) {
-    console.error("[v0] Challenge cancellation error:", err)
+    console.error("Challenge cancellation error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

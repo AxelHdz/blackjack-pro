@@ -85,18 +85,20 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
 
   // Generate feedback specific to the player's actual move
   // If the player's move doesn't match the optimal move, tailor the feedback
-  let finalTip = strategyTip
+  const finalTip = strategyTip
   let finalWhy = strategyFeedback
 
-  // Check if feedback mentions the player's actual move incorrectly
-  const playerMoveLower = ctx.playerMove
-  const feedbackMentionsPlayerMove = moveKeywords[playerMoveLower].some((keyword) => feedbackLower.includes(keyword))
-  
-  // If the player's move doesn't match optimal AND the feedback mentions the player's move (wrong context),
-  // OR if the feedback doesn't address why the player's move was wrong, generate specific feedback
+  // If the player's move doesn't match optimal, generate specific feedback
   if (ctx.playerMove !== ctx.optimalMove) {
     // Always generate player-specific feedback when moves don't match
-    finalWhy = generatePlayerMoveFeedback(ctx.playerMove, ctx.optimalMove, strategyFeedback, playerValue, isSoft, isPair)
+    finalWhy = generatePlayerMoveFeedback(
+      ctx.playerMove,
+      ctx.optimalMove,
+      strategyFeedback,
+      playerValue,
+      isSoft,
+      isPair,
+    )
   }
 
   return {
@@ -116,18 +118,19 @@ function generatePlayerMoveFeedback(
   optimalFeedback: string,
   playerValue: number,
   isSoft: boolean,
-  isPair: boolean
+  isPair: boolean,
 ): string {
   // If the optimal feedback already explains why the player's move is wrong, use it
   // Otherwise, generate a specific explanation
-  
+
   const moveExplanations: Record<GameAction, Partial<Record<GameAction, string>>> = {
     hit: {
-      stand: playerValue >= 17 && playerValue <= 20
-        ? `Hitting on ${playerValue}${isSoft ? " (soft)" : ""} is too risky. ${playerValue} is already a strong hand that beats most dealer outcomes. Taking another card significantly increases your bust risk (you can only improve to 21, but risk busting on any card 2 or higher) without enough benefit.`
-        : `Hitting on ${playerValue}${isSoft ? " (soft)" : ""} is too risky here. ${playerValue} is strong enough to beat the dealer's likely outcomes. Taking another card increases your bust risk without enough benefit.`,
+      stand:
+        playerValue >= 17 && playerValue <= 20
+          ? `Hitting on ${playerValue}${isSoft ? " (soft)" : ""} is too risky. ${playerValue} is already a strong hand that beats most dealer outcomes. Taking another card significantly increases your bust risk (you can only improve to 21, but risk busting on any card 2 or higher) without enough benefit.`
+          : `Hitting on ${playerValue}${isSoft ? " (soft)" : ""} is too risky here. ${playerValue} is strong enough to beat the dealer's likely outcomes. Taking another card increases your bust risk without enough benefit.`,
       double: `Hitting here wastes the opportunity to double down. Doubling maximizes your win when you have an advantage, while hitting only bets the original amount.`,
-      split: isPair 
+      split: isPair
         ? `Hitting on a pair wastes the chance to split. Splitting creates two hands, each with better winning potential than hitting the pair together.`
         : `Hitting isn't optimal here. The optimal move would give you better expected value.`,
     },
@@ -154,7 +157,7 @@ function generatePlayerMoveFeedback(
         : `Splitting isn't available here (not a pair). You should stand instead.`,
       double: isPair
         ? `Splitting this pair isn't optimal. ${optimalFeedback.includes("split") ? "" : "You should double instead to maximize your advantage."}`
-        : `Splitting isn't available here (not a pair). You should double instead.`,
+        : `Splitting isn't optimal here. The optimal move would give you better expected value.`,
     },
   }
 

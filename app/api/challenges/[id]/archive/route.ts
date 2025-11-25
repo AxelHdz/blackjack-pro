@@ -18,7 +18,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const resolvedParams = await params
 
-    // Fetch challenge with service client to avoid RLS issues while still checking membership below.
     const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
@@ -26,11 +25,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (fetchError || !challenge) {
-      console.error("[v0] Challenge archive fetch error:", fetchError, "for ID:", resolvedParams.id)
+      console.error("Challenge archive fetch error:", fetchError)
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
 
-    // Check if user is a participant
     const isChallenger = challenge.challenger_id === user.id
     const isChallenged = challenge.challenged_id === user.id
 
@@ -38,10 +36,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    // Determine which archive field to update
     const updateField = isChallenger ? "challenger_archive_status" : "challenged_archive_status"
 
-    // Archive the challenge for this user
     const { data: updatedChallenge, error: updateError } = await admin
       .from("challenges")
       .update({
@@ -53,7 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (updateError || !updatedChallenge) {
-      console.error("[v0] Challenge archive update error:", updateError)
+      console.error("Challenge archive update error:", updateError)
       return NextResponse.json({ error: "Failed to archive challenge" }, { status: 500 })
     }
 
@@ -68,7 +64,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       challenge: formatChallengeResponse(updatedChallenge as ChallengeRecord, profilesMap),
     })
   } catch (err) {
-    console.error("[v0] Challenge archive route error:", err)
+    console.error("Challenge archive route error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

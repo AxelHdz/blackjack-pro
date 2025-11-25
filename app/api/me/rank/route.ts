@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (statsError) {
-      console.error("[v0] Failed to fetch stats for rank calculation:", statsError)
+      console.error("Failed to fetch stats for rank calculation:", statsError)
       return NextResponse.json({ error: "Failed to load stats" }, { status: 500 })
     }
 
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
         .eq("user_id", user.id)
 
       if (friendsError) {
-        console.error("[v0] Failed to fetch friends for rank calculation:", friendsError)
+        console.error("Failed to fetch friends for rank calculation:", friendsError)
         return NextResponse.json({ error: "Failed to fetch friends data" }, { status: 500 })
       }
 
@@ -62,7 +62,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Use optimized database function to calculate rank
-    // This leverages composite indexes for better performance at scale
     const { data: rankData, error: rankError } = await supabase.rpc("calculate_user_rank", {
       p_user_id: user.id,
       p_scope: scope,
@@ -71,12 +70,12 @@ export async function GET(request: NextRequest) {
     })
 
     if (rankError) {
-      console.error("[v0] Rank calculation error:", rankError)
+      console.error("Rank calculation error:", rankError)
       return NextResponse.json({ error: "Failed to calculate rank" }, { status: 500 })
     }
 
     if (rankData === null) {
-      console.error("[v0] Rank calculation returned null for user:", user.id)
+      console.error("Rank calculation returned null for user:", user.id)
       return NextResponse.json({ error: "Rank unavailable" }, { status: 500 })
     }
 
@@ -91,7 +90,7 @@ export async function GET(request: NextRequest) {
       },
     )
   } catch (err) {
-    console.error("[v0] Rank calculation error:", err)
+    console.error("Rank calculation error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

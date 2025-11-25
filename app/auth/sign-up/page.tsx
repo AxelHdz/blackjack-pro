@@ -65,7 +65,7 @@ export default function SignUpPage() {
         })
 
         if (profileError) {
-          console.error("[v0] Error creating profile:", profileError)
+          console.error("Error creating profile:", profileError)
         }
 
         const { error: statsError } = await supabase.from("game_stats").insert({
@@ -78,47 +78,11 @@ export default function SignUpPage() {
         })
 
         if (statsError) {
-          console.error("[v0] Error creating game stats:", statsError)
+          console.error("Error creating game stats:", statsError)
         }
       }
 
       setSuccess(true)
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
-      setIsLoading(false)
-    }
-  }
-
-  const handleGoogleSignUp = async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) throw error
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred")
-      setIsLoading(false)
-    }
-  }
-
-  const handleAppleSignUp = async () => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "apple",
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-        },
-      })
-      if (error) throw error
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred")
       setIsLoading(false)

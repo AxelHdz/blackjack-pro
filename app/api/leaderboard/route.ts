@@ -19,8 +19,6 @@ export async function GET(request: NextRequest) {
   const limit = 50
 
   try {
-    console.log("[v0] Leaderboard query - scope:", scope, "metric:", metric)
-
     let query = supabase.from("game_stats").select(`
         user_id,
         total_money,
@@ -35,19 +33,13 @@ export async function GET(request: NextRequest) {
         .select("friend_user_id")
         .eq("user_id", user.id)
 
-      console.log("[v0] Friends data:", friendsData)
-      console.log("[v0] Friends error:", friendsError)
+      if (friendsError) {
+        console.error("Friends fetch error:", friendsError)
+      }
 
       const friendIds = friendsData?.map((f) => f.friend_user_id) || []
       // Include user's own ID to see themselves in friends view
       friendIds.push(user.id)
-
-      console.log("[v0] Friend IDs to filter:", friendIds)
-
-      if (friendIds.length === 1) {
-        // Only the user themselves, no friends
-        console.log("[v0] No friends found, returning only user")
-      }
 
       query = query.in("user_id", friendIds)
     }
@@ -72,7 +64,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error("[v0] Leaderboard query error:", error)
+      console.error("Leaderboard query error:", error)
       return NextResponse.json({ error: "Failed to fetch leaderboard" }, { status: 500 })
     }
 
@@ -98,7 +90,7 @@ export async function GET(request: NextRequest) {
       },
     )
   } catch (err) {
-    console.error("[v0] Leaderboard error:", err)
+    console.error("Leaderboard error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

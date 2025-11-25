@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Swords, Clock, DollarSign, Trophy, Flag } from "lucide-react"
-import { type Challenge } from "@/types/challenge"
+import type { Challenge } from "@/types/challenge"
 
 type ChallengeModalMode = "create" | "accept" | "counter" | "view" | "results"
 
@@ -450,9 +450,6 @@ export function ChallengeModal({
       })
       onChallengeEnded?.()
       onOpenChange(false)
-
-      onChallengeUpdated?.()
-      onOpenChange(false)
     } catch (error) {
       console.error("[v0] Failed to forfeit challenge:", error)
       toast({ title: "Error", description: "Failed to forfeit challenge", variant: "destructive" })
@@ -640,15 +637,11 @@ export function ChallengeModal({
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-muted-foreground">{c.challengerName}</p>
-            <p className={`font-semibold ${challengerHighlight}`}>
-              {formatCredits(c.challengerCreditBalance)} credits
-            </p>
+            <p className={`font-semibold ${challengerHighlight}`}>{formatCredits(c.challengerCreditBalance)} credits</p>
           </div>
           <div className="text-right">
             <p className="text-muted-foreground">{c.challengedName}</p>
-            <p className={`font-semibold ${challengedHighlight}`}>
-              {formatCredits(c.challengedCreditBalance)} credits
-            </p>
+            <p className={`font-semibold ${challengedHighlight}`}>{formatCredits(c.challengedCreditBalance)} credits</p>
           </div>
         </div>
       </div>
@@ -816,7 +809,7 @@ export function ChallengeModal({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs"
+                      className="h-7 text-xs bg-transparent"
                       onClick={() => {
                         const maxWager = Math.min(userBalance, challengedUserBalance)
                         setWagerAmount(maxWager.toString())
@@ -842,8 +835,7 @@ export function ChallengeModal({
                     className="flex-1"
                     onClick={() => setDurationMinutes(5)}
                   >
-                    <Clock className="h-4 w-4 mr-2" />
-                    5 min
+                    <Clock className="h-4 w-4 mr-2" />5 min
                   </Button>
                   <Button
                     type="button"
@@ -868,12 +860,8 @@ export function ChallengeModal({
 
         <div className="flex flex-wrap gap-2">
           <Button
-            variant={(isCompletedView || isCancelledView) ? "default" : "outline"}
-            onClick={
-              (isCompletedView || isCancelledView)
-                ? handleEndChallenge
-                : () => onOpenChange(false)
-            }
+            variant={isCompletedView || isCancelledView ? "default" : "outline"}
+            onClick={isCompletedView || isCancelledView ? handleEndChallenge : () => onOpenChange(false)}
             className="flex-1"
             disabled={loading}
           >
@@ -911,13 +899,7 @@ export function ChallengeModal({
           )}
 
           {isActiveChallenge && (
-            <Button
-              type="button"
-              variant="destructive"
-              className="flex-1"
-              onClick={handleForfeit}
-              disabled={loading}
-            >
+            <Button type="button" variant="destructive" className="flex-1" onClick={handleForfeit} disabled={loading}>
               <Flag className="mr-2 h-4 w-4" />
               Forfeit (Concede)
             </Button>

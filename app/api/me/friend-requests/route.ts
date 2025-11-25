@@ -22,7 +22,7 @@ export async function GET() {
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("[v0] Friend requests fetch error:", error)
+      console.error("Friend requests fetch error:", error)
       return NextResponse.json({ error: "Failed to fetch friend requests" }, { status: 500 })
     }
 
@@ -38,7 +38,7 @@ export async function GET() {
       .in("id", userIds)
 
     if (profilesError) {
-      console.error("[v0] User profiles fetch error:", profilesError)
+      console.error("User profiles fetch error:", profilesError)
     }
 
     const profilesMap = new Map(profilesData?.map((profile) => [profile.id, profile]) || [])
@@ -49,7 +49,7 @@ export async function GET() {
       .in("user_id", userIds)
 
     if (statsError) {
-      console.error("[v0] Game stats fetch error:", statsError)
+      console.error("Game stats fetch error:", statsError)
     }
 
     const statsMap = new Map(statsData?.map((stat) => [stat.user_id, stat]) || [])
@@ -69,7 +69,7 @@ export async function GET() {
 
     return NextResponse.json({ requests })
   } catch (err) {
-    console.error("[v0] Friend requests error:", err)
+    console.error("Friend requests error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (updateError || !requestData) {
-      console.error("[v0] Friend request update error:", updateError)
+      console.error("Friend request update error:", updateError)
       return NextResponse.json({ error: "Failed to update request" }, { status: 500 })
     }
 
@@ -116,16 +116,14 @@ export async function POST(request: NextRequest) {
       })
 
       if (friendshipError) {
-        console.error("[v0] Friend add error:", friendshipError)
+        console.error("Friend add error:", friendshipError)
         return NextResponse.json({ error: "Failed to add friend" }, { status: 500 })
       }
     }
 
-    console.log("[v0] friend_request_responded", { userId: user.id, requestId, action })
-
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error("[v0] Friend request response error:", err)
+    console.error("Friend request response error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

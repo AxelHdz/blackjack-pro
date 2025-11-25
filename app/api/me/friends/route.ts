@@ -21,7 +21,7 @@ export async function GET() {
     const { data, error } = await supabase.from("friends").select("friend_user_id").eq("user_id", user.id)
 
     if (error) {
-      console.error("[v0] Friends fetch error:", error)
+      console.error("Friends fetch error:", error)
       return NextResponse.json({ error: "Failed to fetch friends" }, { status: 500 })
     }
 
@@ -35,7 +35,7 @@ export async function GET() {
       },
     )
   } catch (err) {
-    console.error("[v0] Friends error:", err)
+    console.error("Friends error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       .select("id, status")
       .eq("from_user_id", user.id)
       .eq("to_user_id", friendUserId)
-      .eq("status", "pending") // Only check for pending requests
+      .eq("status", "pending")
       .maybeSingle()
 
     if (existingRequest) {
@@ -96,24 +96,22 @@ export async function POST(request: NextRequest) {
       .eq("to_user_id", friendUserId)
       .neq("status", "pending")
 
-    // Create friend request - allow it even if user doesn't exist yet
+    // Create friend request
     const { error: insertError } = await supabase
       .from("friend_requests")
       .insert({ from_user_id: user.id, to_user_id: friendUserId, status: "pending" })
 
     if (insertError) {
-      console.error("[v0] Friend request error:", insertError)
+      console.error("Friend request error:", insertError)
       if (insertError.code === "23503") {
         return NextResponse.json({ error: "User not found" }, { status: 404 })
       }
       return NextResponse.json({ error: "Failed to send friend request" }, { status: 500 })
     }
 
-    console.log("[v0] friend_request_sent", { userId: user.id, friendUserId })
-
     return NextResponse.json({ ok: true, message: "Friend request sent" })
   } catch (err) {
-    console.error("[v0] Send friend request error:", err)
+    console.error("Send friend request error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

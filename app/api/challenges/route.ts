@@ -15,14 +15,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const searchParams = request.nextUrl.searchParams
-    const statusFilter = searchParams.get("status") // 'pending' | 'active' | 'pending,active' | null (all)
+    const statusFilter = searchParams.get("status")
 
-    // Only return challenges the user participates in AND has not archived
-    // Optimized with composite indexes:
-    // - idx_challenges_challenger_status_created: for challenger queries
-    // - idx_challenges_challenged_status_created: for challenged queries
-    // - idx_challenges_challenger_not_archived: partial index for non-archived challenger queries
-    // - idx_challenges_challenged_not_archived: partial index for non-archived challenged queries
     let query = supabase
       .from("challenges")
       .select("*")
@@ -33,7 +27,6 @@ export async function GET(request: NextRequest) {
 
     if (statusFilter) {
       if (statusFilter.includes(",")) {
-        // Multiple statuses
         const statuses = statusFilter
           .split(",")
           .map((value) => value.trim())
@@ -51,7 +44,7 @@ export async function GET(request: NextRequest) {
     const { data: challenges, error } = await query
 
     if (error) {
-      console.error("[v0] Challenges fetch error:", error)
+      console.error("Challenges fetch error:", error)
       return NextResponse.json({ error: "Failed to fetch challenges" }, { status: 500 })
     }
 
@@ -67,7 +60,7 @@ export async function GET(request: NextRequest) {
       .in("id", Array.from(userIds))
 
     if (profilesError) {
-      console.error("[v0] User profiles fetch error:", profilesError)
+      console.error("User profiles fetch error:", profilesError)
     }
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
@@ -77,7 +70,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ challenges: formattedChallenges })
   } catch (err) {
-    console.error("[v0] Challenges error:", err)
+    console.error("Challenges error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -113,7 +106,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Wager amount must be positive" }, { status: 400 })
     }
 
-    // Check if challenger has sufficient balance
     const { data: challengerStats, error: statsError } = await supabase
       .from("game_stats")
       .select("total_money")
@@ -121,7 +113,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (statsError || !challengerStats) {
-      console.error("[v0] Failed to fetch challenger stats:", statsError)
+      console.error("Failed to fetch challenger stats:", statsError)
       return NextResponse.json({ error: "Failed to fetch balance" }, { status: 500 })
     }
 
@@ -129,7 +121,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Insufficient balance" }, { status: 400 })
     }
 
-    // Check if challenged user has sufficient balance
     const { data: challengedStats, error: challengedStatsError } = await supabase
       .from("game_stats")
       .select("total_money")
@@ -137,18 +128,19 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (challengedStatsError || !challengedStats) {
-      console.error("[v0] Failed to fetch challenged user stats:", challengedStatsError)
+      console.error("Failed to fetch challenged user stats:", challengedStatsError)
       return NextResponse.json({ error: "Failed to fetch challenged user balance" }, { status: 500 })
     }
 
     if (challengedStats.total_money < wagerAmount) {
-      return NextResponse.json({ 
-        error: `Wager cannot exceed challenged user's balance of $${challengedStats.total_money.toLocaleString()}` 
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: `Wager cannot exceed challenged user's balance of $${challengedStats.total_money.toLocaleString()}`,
+        },
+        { status: 400 },
+      )
     }
 
-    // Check if challenger already has an active/pending challenge
-    // Optimized with composite indexes: idx_challenges_challenger_status_created, idx_challenges_challenged_status_created
     const { data: existingChallenge, error: existingError } = await supabase
       .from("challenges")
       .select("id")
@@ -157,7 +149,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (existingError) {
-      console.error("[v0] Error checking existing challenges:", existingError)
+      console.error("Error checking existing challenges:", existingError)
       return NextResponse.json({ error: "Failed to check existing challenges" }, { status: 500 })
     }
 
@@ -165,8 +157,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "You already have an active or pending challenge" }, { status: 400 })
     }
 
-    // Check if challenged user already has an active/pending challenge
-    // Optimized with composite indexes: idx_challenges_challenger_status_created, idx_challenges_challenged_status_created
     const { data: challengedExisting, error: challengedExistingError } = await supabase
       .from("challenges")
       .select("id")
@@ -175,26 +165,27 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (challengedExistingError) {
-      console.error("[v0] Error checking challenged user's existing challenges:", challengedExistingError)
+      console.error("Error checking challenged user's existing challenges:", challengedExistingError)
       return NextResponse.json({ error: "Failed to check challenged user's challenges" }, { status: 500 })
     }
 
     if (challengedExisting) {
-      return NextResponse.json({ error: "The challenged user already has an active or pending challenge" }, { status: 400 })
+      return NextResponse.json(
+        { error: "The challenged user already has an active or pending challenge" },
+        { status: 400 },
+      )
     }
 
-    // Deduct wager from challenger balance
     const { error: updateBalanceError } = await supabase
       .from("game_stats")
       .update({ total_money: challengerStats.total_money - wagerAmount })
       .eq("user_id", user.id)
 
     if (updateBalanceError) {
-      console.error("[v0] Failed to deduct wager:", updateBalanceError)
+      console.error("Failed to deduct wager:", updateBalanceError)
       return NextResponse.json({ error: "Failed to deduct wager" }, { status: 500 })
     }
 
-    // Create challenge
     const { data: challenge, error: challengeError } = await supabase
       .from("challenges")
       .insert({
@@ -208,40 +199,29 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (challengeError) {
-      console.error("[v0] Failed to create challenge:", challengeError)
-      // Rollback balance deduction
-      await supabase
-        .from("game_stats")
-        .update({ total_money: challengerStats.total_money })
-        .eq("user_id", user.id)
+      console.error("Failed to create challenge:", challengeError)
+      await supabase.from("game_stats").update({ total_money: challengerStats.total_money }).eq("user_id", user.id)
       return NextResponse.json({ error: "Failed to create challenge" }, { status: 500 })
     }
 
-    // Fetch user profiles for formatted response
     const { data: profiles, error: profilesError } = await supabase
       .from("user_profiles")
       .select("id, display_name")
       .in("id", [challenge.challenger_id, challenge.challenged_id])
 
     if (profilesError) {
-      console.error("[v0] User profiles fetch error (non-blocking):", profilesError)
+      console.error("User profiles fetch error:", profilesError)
     }
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
     const formattedChallenge = formatChallengeResponse(challenge as ChallengeRecord, profilesMap)
-    
-    console.log("[v0] Challenge created successfully:", {
-      challengeId: formattedChallenge.id,
-      challengerId: formattedChallenge.challengerId,
-      challengedId: formattedChallenge.challengedId,
-    })
 
     return NextResponse.json({
       challenge: formattedChallenge,
     })
   } catch (err) {
-    console.error("[v0] Challenge creation error:", err)
+    console.error("Challenge creation error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

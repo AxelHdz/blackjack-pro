@@ -81,11 +81,11 @@ Supabase provides the following template variables that can be used in the templ
 
 Supabase uses Go Templates, so you can conditionally render content:
 
-```html
+\`\`\`html
 {{ if .Token }}
   <p>Your verification code: {{ .Token }}</p>
 {{ end }}
-```
+\`\`\`
 
 ## Email Client Compatibility
 
@@ -137,4 +137,3 @@ The templates are optimized for email clients:
 - [Supabase Email Templates Documentation](https://supabase.com/docs/guides/auth/auth-email-templates)
 - [Supabase Auth Hooks](https://supabase.com/docs/guides/auth/auth-hooks)
 - [Go Template Documentation](https://pkg.go.dev/text/template)
-

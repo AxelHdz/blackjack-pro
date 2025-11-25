@@ -1,14 +1,8 @@
 {
   "compilerOptions": {
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": false,
     "target": "ES6",
-    // Third-party packages (React 19 canary, Next 16, Radix) currently ship type definitions
-    // that are noisy under full library checking. Keep app code strict while skipping lib checks.
     "skipLibCheck": true,
     "strict": true,
     "noImplicitAny": true,
@@ -27,9 +21,7 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     }
   },
   "include": [
@@ -42,7 +34,5 @@
     "hooks/**/*.tsx",
     "lib/**/*.ts"
   ],
-  "exclude": [
-    "node_modules"
-  ]
+  "exclude": ["node_modules"]
 }

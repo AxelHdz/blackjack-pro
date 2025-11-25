@@ -121,7 +121,7 @@ The Challenge feature allows users to compete against each other in timed blackj
 
 ### Challenges Table
 
-```sql
+\`\`\`sql
 CREATE TABLE challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   challenger_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -148,7 +148,7 @@ CREATE TABLE challenges (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-```
+\`\`\`
 
 **Challenge credit fields**
 - `challenger_balance_paused` / `challenged_balance_paused`: snapshots of each user's real balance while challenge credits are active
@@ -179,7 +179,7 @@ Fetches challenges for the current user.
 - `status` (optional): Filter by status ('pending', 'active', 'pending,active', or null for all)
 
 **Response:**
-```json
+\`\`\`json
 {
   "challenges": [
     {
@@ -202,20 +202,20 @@ Fetches challenges for the current user.
     }
   ]
 }
-```
+\`\`\`
 
 ### POST `/api/challenges`
 
 Creates a new challenge.
 
 **Request Body:**
-```json
+\`\`\`json
 {
   "challengedId": "uuid",
   "wagerAmount": 1000,
   "durationMinutes": 5
 }
-```
+\`\`\`
 
 **Validation:**
 - Challenger must have sufficient balance
@@ -224,21 +224,21 @@ Creates a new challenge.
 - No existing active/pending challenges for either user
 
 **Response:**
-```json
+\`\`\`json
 {
   "challenge": {
     "id": "uuid",
     ...
   }
 }
-```
+\`\`\`
 
 ### GET `/api/challenges/[id]`
 
 Fetches a specific challenge by ID.
 
 **Response:**
-```json
+\`\`\`json
 {
   "id": "uuid",
   "challengerId": "uuid",
@@ -250,44 +250,44 @@ Fetches a specific challenge by ID.
   "awaitingUserId": "uuid",
   ...
 }
-```
+\`\`\`
 
 ### PUT `/api/challenges/[id]`
 
 Updates a challenge (accept or counter-offer).
 
 **Request Body (Accept):**
-```json
+\`\`\`json
 {
   "action": "accept"
 }
-```
+\`\`\`
 
 **Request Body (Counter-Offer):**
-```json
+\`\`\`json
 {
   "action": "counter-offer",
   "wagerAmount": 1500,
   "durationMinutes": 10
 }
-```
+\`\`\`
 
 **Response:**
-```json
+\`\`\`json
 {
   "challenge": {
     "id": "uuid",
     ...
   }
 }
-```
+\`\`\`
 
 ### DELETE `/api/challenges/[id]`
 
 Cancels a pending challenge, refunds the wager to the challenger, and persists the row with `status: "cancelled"` so the UI can continue to show the outcome.
 
 **Response:**
-```json
+\`\`\`json
 {
   "challenge": {
     "id": "uuid",
@@ -295,14 +295,14 @@ Cancels a pending challenge, refunds the wager to the challenger, and persists t
     ...
   }
 }
-```
+\`\`\`
 
 ### POST `/api/challenges/[id]/complete`
 
 Completes a challenge (called automatically when timer expires).
 
 **Response:**
-```json
+\`\`\`json
 {
   "challenge": {
     "id": "uuid",
@@ -311,14 +311,14 @@ Completes a challenge (called automatically when timer expires).
     ...
   }
 }
-```
+\`\`\`
 
 ### GET `/api/challenges/active`
 
 Fetches the current user's active challenge (if any).
 
 **Response:**
-```json
+\`\`\`json
 {
   "challenge": {
     "id": "uuid",
@@ -326,7 +326,7 @@ Fetches the current user's active challenge (if any).
     ...
   }
 }
-```
+\`\`\`
 
 ## Components
 
@@ -444,11 +444,11 @@ When a challenge completes:
 
 ### Challenge Status Flow
 
-```
+\`\`\`
 pending → active → completed
    ↓
 cancelled (if challenger cancels before acceptance)
-```
+\`\`\`
 
 ## Error Handling
 
@@ -479,18 +479,18 @@ Potential improvements for the challenge feature:
 Updates the caller's challenge credits and/or the accumulated double XP buffer while a challenge is active.
 
 **Request Body:**
-```json
+\`\`\`json
 {
   "creditBalance": 472,
   "xpDelta": 24
 }
-```
+\`\`\`
 
 - `creditBalance` (optional): absolute gold credit balance from the client
 - `xpDelta` (optional): incremental XP (already doubled) earned since the last sync
 
 **Response:**
-```json
+\`\`\`json
 {
   "challenge": {
     "id": "uuid",
@@ -501,4 +501,4 @@ Updates the caller's challenge credits and/or the accumulated double XP buffer w
     ...
   }
 }
-```
+\`\`\`

@@ -111,4 +111,3 @@ COMMENT ON FUNCTION public.calculate_user_rank IS
    Leverages composite indexes for optimal performance at scale.';
 
 COMMIT;
-

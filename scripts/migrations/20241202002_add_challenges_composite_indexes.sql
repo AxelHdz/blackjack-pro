@@ -49,4 +49,3 @@ CREATE INDEX IF NOT EXISTS idx_challenges_challenged_not_archived
   WHERE challenged_archive_status IS FALSE OR challenged_archive_status IS NULL;
 
 COMMIT;
-

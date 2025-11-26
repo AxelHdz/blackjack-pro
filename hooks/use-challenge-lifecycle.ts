@@ -112,7 +112,7 @@ export function useChallengeLifecycle({
       await refreshActiveChallenge()
       // Context will update via event system, sync will happen via useEffect above
     } catch (error) {
-      console.error("[v0] Failed to refresh active challenge:", error)
+      console.error("Failed to refresh active challenge:", error)
     }
   }, [refreshActiveChallenge])
 

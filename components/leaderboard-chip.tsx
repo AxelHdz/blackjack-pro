@@ -37,14 +37,14 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
       const data = await res.json().catch(() => ({}))
 
       if (!res.ok) {
-        console.error("[v0] Rank request failed:", { status: res.status, body: data })
+        console.error("Rank request failed:", { status: res.status, body: data })
         setRank(null)
         return
       }
 
       setRank(typeof data.rank === "number" ? data.rank : null)
     } catch (error) {
-      console.error("[v0] Failed to fetch rank:", error)
+      console.error("Failed to fetch rank:", error)
       setRank(null)
     } finally {
       setLoading(false)
@@ -102,7 +102,7 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
       // No challenge found
       setChallenge(null)
     } catch (error) {
-      console.error("[v0] Failed to fetch challenge:", error)
+      console.error("Failed to fetch challenge:", error)
       setChallenge(null)
     }
   }, [userId])
@@ -114,7 +114,7 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
         setUserBalance(data.stats.total_money)
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch user balance:", error)
+      console.error("Failed to fetch user balance:", error)
     }
   }, [])
 

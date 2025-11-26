@@ -74,7 +74,6 @@ export function LeaderboardModal({
   useEffect(() => {
     if (!open) return
 
-    console.log("[v0] leaderboard_opened", { scope, metric })
     const savedScope =
       typeof window !== "undefined" ? (localStorage.getItem("leaderboard_scope") as "global" | "friends" | null) : null
     const savedMetric =
@@ -122,12 +121,12 @@ export function LeaderboardModal({
         data && typeof data === "object" && "error" in data ? (data as any).error : "Leaderboard load failed"
 
       if (!res.ok) {
-        console.error("[v0] Leaderboard response error:", { status: res.status, body: data })
+        console.error("Leaderboard response error:", { status: res.status, body: data })
         throw new Error(apiError)
       }
 
       if (!Array.isArray(data.entries)) {
-        console.error("[v0] Leaderboard response malformed:", { status: res.status, body: data })
+        console.error("Leaderboard response malformed:", { status: res.status, body: data })
         throw new Error(apiError)
       }
 
@@ -141,7 +140,7 @@ export function LeaderboardModal({
 
       setNextCursor(typeof data.nextCursor === "string" ? data.nextCursor : null)
     } catch (error) {
-      console.error("[v0] Failed to load leaderboard:", error)
+      console.error("Failed to load leaderboard:", error)
       toast({
         title: "Error",
         description: "Failed to load leaderboard",
@@ -157,7 +156,7 @@ export function LeaderboardModal({
       const data = await fetchCached<{ friends?: string[] }>("/api/me/friends")
       setFriends(data.friends || [])
     } catch (error) {
-      console.error("[v0] Failed to load friends:", error)
+      console.error("Failed to load friends:", error)
     }
   }
 
@@ -166,7 +165,7 @@ export function LeaderboardModal({
       const data = await fetchCached<{ requests?: FriendRequest[] }>("/api/me/friend-requests")
       setFriendRequests(data.requests || [])
     } catch (error) {
-      console.error("[v0] Failed to load friend requests:", error)
+      console.error("Failed to load friend requests:", error)
     }
   }
 
@@ -183,7 +182,7 @@ export function LeaderboardModal({
         setUserBalance(data.stats.total_money)
       }
     } catch (error) {
-      console.error("[v0] Failed to load user profile:", error)
+      console.error("Failed to load user profile:", error)
     }
   }
 
@@ -210,7 +209,7 @@ export function LeaderboardModal({
         setBlockingChallenge(null)
       }
     } catch (error) {
-      console.error("[v0] Failed to load challenge state:", error)
+      console.error("Failed to load challenge state:", error)
       setBlockingChallenge(null)
     }
   }
@@ -259,7 +258,7 @@ export function LeaderboardModal({
         loadLeaderboard(true)
       }
     } catch (error) {
-      console.error("[v0] Failed to respond to request:", error)
+      console.error("Failed to respond to request:", error)
       toast({
         title: "Error",
         description: "Failed to respond to request",
@@ -296,7 +295,7 @@ export function LeaderboardModal({
 
       setTimeout(() => setCopiedUserId(false), 2000)
     } catch (error) {
-      console.error("[v0] Failed to copy friend link:", error)
+      console.error("Failed to copy friend link:", error)
       toast({
         title: "Error",
         description: "Failed to copy friend link",
@@ -307,7 +306,6 @@ export function LeaderboardModal({
 
   const handleMetricChange = (value: string) => {
     if (value && (value === "balance" || value === "level")) {
-      console.log("[v0] leaderboard_metric_changed", { from: metric, to: value })
       onMetricChange(value)
       if (typeof window !== "undefined") {
         localStorage.setItem("leaderboard_metric", value)
@@ -318,7 +316,6 @@ export function LeaderboardModal({
 
   const handleScopeChange = (value: string) => {
     const nextScope = value as "global" | "friends"
-    console.log("[v0] leaderboard_scope_changed", { from: scope, to: nextScope })
     onScopeChange(nextScope)
     if (typeof window !== "undefined") {
       localStorage.setItem("leaderboard_scope", nextScope)

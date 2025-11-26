@@ -1,4 +1,22 @@
 import { useEffect, useCallback, useRef } from "react"
+import type { Card } from "@/lib/card-utils"
+import type { Challenge } from "@/types/challenge"
+
+type LearningMode = "guided" | "practice" | "expert"
+
+type ModeStats = {
+  handsPlayed: number
+  correctMoves: number
+  totalMoves: number
+  wins: number
+  losses: number
+}
+
+type RoundResult = {
+  message: string
+  winAmount: number
+  newBalance: number
+} | null
 
 type SaveDeps = {
   balance: number | null
@@ -13,15 +31,14 @@ type SaveDeps = {
   losses: number
   drillTier: number
   lastDrillCompletedAt: Date | null
-  modeStats: any
-  learningMode: string
-  deck: any
-  userId: string
-  activeChallenge: any
+  modeStats: Record<LearningMode, ModeStats>
+  learningMode: LearningMode
+  deck: Card[]
 }
 
 type SaveUserStatsArgs = SaveDeps & {
-  activeChallenge: any
+  userId: string
+  activeChallenge: Challenge | null
 }
 
 async function persistStats({
@@ -82,8 +99,8 @@ export function useStatsPersistence({
   deps,
 }: {
   userId: string
-  activeChallenge: any
-  roundResult: any
+  activeChallenge: Challenge | null
+  roundResult: RoundResult
   statsLoaded: boolean
   deps: SaveDeps
 }) {
@@ -155,7 +172,7 @@ export function useStatsPersistence({
           coolingRef.current = false
         }, 500)
       } catch (err) {
-        console.error("[v0] Error saving stats:", err)
+        console.error("Error saving stats:", err)
       } finally {
         inFlightRef.current = false
       }

@@ -385,10 +385,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           }
         }
       } catch (error) {
-        console.error("[v0] Failed to sync challenge progress:", error)
+        console.error("Failed to sync challenge progress:", error)
       }
     },
-    [activeChallenge, lastSyncedChallengeCredit, syncActiveChallengeState],
+    [activeChallenge, lastSyncedChallengeCredit, setPendingChallengeXp, syncActiveChallengeState],
   )
 
   // Challenge fetching is now handled by ChallengeContext
@@ -398,7 +398,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   // Load user stats - wrapped in useCallback to use in useEffect dependencies
   const loadUserStats = useCallback(async () => {
     try {
-      console.log("[v0] Loading stats for user via API:", userId)
       const response = await fetch("/api/me/stats")
       const result = await response.json()
       if (!response.ok || !result?.stats) {
@@ -477,7 +476,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
       setStatsLoaded(true)
     } catch (err) {
-      console.error("[v0] Error in loadUserStats:", err)
+      console.error("Error in loadUserStats:", err)
       setStatsLoaded(true) // Ensure loading state is updated
     }
   }, [userId, contextActiveChallenge, setLearningMode, updateEngine])
@@ -543,7 +542,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                 completedChallenge = challengeData as Challenge
               }
             } catch (fetchErr) {
-              console.error("[v0] Failed to fetch completed challenge details:", fetchErr)
+              console.error("Failed to fetch completed challenge details:", fetchErr)
             }
 
             if (!completedChallenge) {
@@ -575,7 +574,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
             void loadUserStats() // This already fetches active challenge
           }
         } catch (error) {
-          console.error("[v0] Failed to complete challenge:", error)
+          console.error("Failed to complete challenge:", error)
         }
         // Stop polling after completion
         if (pollInterval) clearInterval(pollInterval)
@@ -633,7 +632,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       if (pollInterval) clearInterval(pollInterval)
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [activeChallenge, userId, toast, balance, pendingChallengeXp, syncChallengeProgress, applyChallengeContext, loadUserStats])
+  }, [activeChallenge, userId, toast, balance, pendingChallengeXp, syncChallengeProgress, applyChallengeContextWrapped, loadUserStats])
 
   // Ensure challenge credits persist immediately after each round result
   useEffect(() => {
@@ -719,8 +718,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       modeStats,
       learningMode,
       deck,
-      userId,
-      activeChallenge,
     },
   })
 
@@ -1181,8 +1178,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const handleFriendReferral = async (referrerId: string) => {
     try {
-      console.log("[v0] Processing friend referral from:", referrerId)
-
       const response = await fetch("/api/me/friends/auto-add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1192,8 +1187,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       const data = await response.json()
 
       if (response.ok && data.success) {
-        console.log("[v0] Friend referral processed successfully")
-        
         // Fetch friend's username to display in toast
         try {
           const { data: profileData, error: profileError } = await supabase
@@ -1210,7 +1203,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           })
         } catch (profileError) {
           // If we can't fetch the username, show generic message
-          console.error("[v0] Failed to fetch friend's profile:", profileError)
+          console.error("Failed to fetch friend's profile:", profileError)
           toast({
             title: "Friend Added!",
             description: "You've successfully connected with your friend!",
@@ -1240,7 +1233,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         })
       }
     } catch (error) {
-      console.error("[v0] Failed to process friend referral:", error)
+      console.error("Failed to process friend referral:", error)
       toast({
         title: "Error",
         description: "Failed to process friend connection",

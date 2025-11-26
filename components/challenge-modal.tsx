@@ -112,10 +112,6 @@ export function ChallengeModal({
   const [modalCountdown, setModalCountdown] = useState<number | null>(null)
 
   useEffect(() => {
-    setLiveChallenge(challenge ?? null)
-  }, [challenge])
-
-  useEffect(() => {
     if (!open) {
       return
     }
@@ -252,7 +248,7 @@ export function ChallengeModal({
       onChallengeCreated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to create challenge:", error)
+      console.error("Failed to create challenge:", error)
       toast({ title: "Error", description: "Failed to create challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -294,7 +290,7 @@ export function ChallengeModal({
       onChallengeUpdated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to accept challenge:", error)
+      console.error("Failed to accept challenge:", error)
       toast({ title: "Error", description: "Failed to accept challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -342,7 +338,7 @@ export function ChallengeModal({
       onChallengeUpdated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to counter-offer:", error)
+      console.error("Failed to counter-offer:", error)
       toast({ title: "Error", description: "Failed to send counter-offer", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -373,7 +369,7 @@ export function ChallengeModal({
       onChallengeUpdated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to cancel challenge:", error)
+      console.error("Failed to cancel challenge:", error)
       toast({ title: "Error", description: "Failed to cancel challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -383,14 +379,11 @@ export function ChallengeModal({
   const handleEndChallenge = async () => {
     if (!currentChallenge?.id) return
 
-    console.log("[v0] Archiving challenge with ID:", currentChallenge.id, "status:", currentChallenge.status)
-
     // Check if user has already archived this challenge
     const isChallenger = currentChallenge.challengerId === userId
     const userAlreadyArchived = isChallenger ? currentChallenge.challengerArchived : currentChallenge.challengedArchived
 
     if (userAlreadyArchived) {
-      console.log("[v0] Challenge already archived by user, just closing modal")
       onChallengeEnded?.()
       onOpenChange(false)
       return
@@ -398,27 +391,22 @@ export function ChallengeModal({
 
     setLoading(true)
     try {
-      console.log("[v0] Making fetch request to:", `/api/challenges/${currentChallenge.id}/archive`)
-
       const response = await fetch(`/api/challenges/${currentChallenge.id}/archive`, {
         method: "POST",
       })
 
-      console.log("[v0] Archive response status:", response.status, "ok:", response.ok)
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        console.error("[v0] Archive response error data:", errorData)
+        console.error("Archive response error data:", errorData)
         throw new Error(errorData.error || "Failed to archive challenge")
       }
 
       const responseData = await response.json().catch(() => ({}))
-      console.log("[v0] Archive response success data:", responseData)
 
       onChallengeEnded?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to archive challenge:", error)
+      console.error("Failed to archive challenge:", error)
       toast({
         title: "Error",
         description: "Failed to archive challenge. Please try again.",
@@ -451,7 +439,7 @@ export function ChallengeModal({
       onChallengeEnded?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to forfeit challenge:", error)
+      console.error("Failed to forfeit challenge:", error)
       toast({ title: "Error", description: "Failed to forfeit challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -476,10 +464,6 @@ export function ChallengeModal({
       return "Archive"
     }
 
-    // Debug: log challenge status if it exists but isn't completed
-    if (challenge && challenge.status !== "completed") {
-      console.log("[ChallengeModal] Challenge status:", challenge.status, "derivedMode:", derivedMode)
-    }
     return "Close"
   }
 

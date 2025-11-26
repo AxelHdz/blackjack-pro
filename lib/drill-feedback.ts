@@ -71,7 +71,6 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
   // Use detailed feedback if EITHER tip or feedback matches (not both)
   // This ensures we show detailed explanations even if one message doesn't contain keywords
   if (!tipMatchesOptimal && !feedbackMatchesOptimal) {
-    console.log(`[v0] Feedback mismatch detected for ${messageKey}. Using fallback.`)
     return {
       tip: `Optimal: ${ctx.optimalMove.toUpperCase()}.`,
       why: "Under current table rules, this choice has higher expected value.",
@@ -79,9 +78,6 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
       selectedMessageKey: messageKey + "_fallback",
     }
   }
-
-  // Log telemetry
-  console.log(`[v0] Feedback resolved: ${messageKey}, normalized_upcard: ${normalizedUp}, template_matches: true`)
 
   // Generate feedback specific to the player's actual move
   // If the player's move doesn't match the optimal move, tailor the feedback

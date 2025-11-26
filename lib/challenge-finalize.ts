@@ -54,7 +54,7 @@ const applyChallengeXpReward = async (
     .single()
 
   if (error || !stats) {
-    console.error("[v0] Failed to load stats for XP reward:", error)
+    console.error("Failed to load stats for XP reward:", error)
     return { xpApplied: 0, levelsGained: 0, cashBonus: 0, newLevel: 0 }
   }
 
@@ -96,7 +96,7 @@ const applyChallengeXpReward = async (
   const { error: updateError } = await supabase.from("game_stats").update(updates).eq("user_id", userId)
 
   if (updateError) {
-    console.error("[v0] Failed to apply XP reward:", updateError)
+    console.error("Failed to apply XP reward:", updateError)
     return { xpApplied: 0, levelsGained: 0, cashBonus: 0, newLevel: level }
   }
 
@@ -145,7 +145,7 @@ export const finalizeChallenge = async ({
     .single()
 
   if (challengerStatsError || !challengerStats || challengedStatsError || !challengedStats) {
-    console.error("[v0] Failed to fetch stats:", challengerStatsError || challengedStatsError)
+    console.error("Failed to fetch stats:", challengerStatsError || challengedStatsError)
     return { error: "Failed to fetch balances" as const }
   }
 
@@ -167,7 +167,7 @@ export const finalizeChallenge = async ({
       .eq("user_id", challenge.challenged_id)
 
     if (challengerRefundError || challengedRefundError) {
-      console.error("[v0] Failed to refund wager:", challengerRefundError || challengedRefundError)
+      console.error("Failed to refund wager:", challengerRefundError || challengedRefundError)
       return { error: "Failed to refund wager" as const }
     }
 
@@ -180,7 +180,7 @@ export const finalizeChallenge = async ({
       .eq("user_id", challenge.challenger_id)
 
     if (transferError) {
-      console.error("[v0] Failed to pay challenger winnings:", transferError)
+      console.error("Failed to pay challenger winnings:", transferError)
       return { error: "Failed to pay winnings" as const }
     }
 
@@ -192,7 +192,7 @@ export const finalizeChallenge = async ({
       .eq("user_id", challenge.challenged_id)
 
     if (transferError) {
-      console.error("[v0] Failed to pay challenged winnings:", transferError)
+      console.error("Failed to pay challenged winnings:", transferError)
       return { error: "Failed to pay winnings" as const }
     }
 
@@ -221,7 +221,7 @@ export const finalizeChallenge = async ({
   ])
 
   if (challengerOutcomeError || challengedOutcomeError) {
-    console.error("[v0] Failed to record challenge outcomes:", challengerOutcomeError || challengedOutcomeError)
+    console.error("Failed to record challenge outcomes:", challengerOutcomeError || challengedOutcomeError)
   }
 
   const { data: updatedChallenge, error: updateError } = await supabase
@@ -243,7 +243,7 @@ export const finalizeChallenge = async ({
     .single()
 
   if (updateError || !updatedChallenge) {
-    console.error("[v0] Failed to complete challenge:", updateError)
+    console.error("Failed to complete challenge:", updateError)
     return { error: "Failed to complete challenge" as const }
   }
 

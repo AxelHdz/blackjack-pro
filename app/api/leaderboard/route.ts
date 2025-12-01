@@ -1,15 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
-
-type LeaderboardRow = {
-  user_id: string
-  total_money: number
-  level: number
-  user_profiles: {
-    display_name: string | null
-    avatar_url: string | null
-  } | null
-}
+import type { QueryData } from "@supabase/supabase-js"
 
 type LeaderboardEntry = {
   userId: string
@@ -40,12 +31,16 @@ export async function GET(request: NextRequest) {
   try {
     // Use inner join to ensure we only get entries with profiles
     // The relationship is automatically created by the foreign key: game_stats.user_id -> user_profiles.id
-    let query = supabase.from("game_stats").select(`
+    const baseQuery = supabase.from("game_stats").select(`
         user_id,
         total_money,
         level,
         user_profiles!inner(display_name, avatar_url)
       `)
+    
+    type LeaderboardRow = QueryData<typeof baseQuery>[number]
+    
+    let query = baseQuery
 
     // Apply scope filter
     if (scope === "friends") {
@@ -96,9 +91,12 @@ export async function GET(request: NextRequest) {
 
     // Transform data to include rank
     const entries: LeaderboardEntry[] =
-      data?.map((entry: LeaderboardRow, index) => {
-        // Supabase returns one-to-one relationships as a single object
-        const profile = entry.user_profiles
+      data?.map((entry, index) => {
+        // Supabase returns one-to-one relationships with !inner as a single object
+        // Handle both array and object cases for type safety
+        const profile = Array.isArray(entry.user_profiles) 
+          ? entry.user_profiles[0] 
+          : entry.user_profiles
 
         // Log if profile is missing (shouldn't happen with !inner join, but useful for debugging)
         if (!profile) {

@@ -88,8 +88,9 @@ function getPairRule(card: Card, dealerCard: string, dealerValue: number): Strat
     return {
       action: "split",
       fallback: null,
-      tip: "Always split aces—two hands starting at 11 beat a single soft 12.",
-      feedback: "Splitting aces creates two hands each starting at 11, which can each reach 18–21. This significantly increases your expected value compared to playing a single soft 12. Not splitting wastes the opportunity to make two strong hands from aces.",
+      tip: "Always split aces—two hands starting at 11 beat a single soft 12. Doubling after split aces isn't allowed.",
+      feedback:
+        "Splitting aces creates two hands each starting at 11, which can each reach 18–21. This significantly increases your expected value compared to playing a single soft 12. Not splitting wastes the opportunity to make two strong hands from aces. Under these rules you cannot double after splitting aces.",
     }
   }
 
@@ -153,13 +154,14 @@ function getPairRule(card: Card, dealerCard: string, dealerValue: number): Strat
 
   // 6,6
   if (cardValue === 6) {
-    // Split vs 3-6; vs 2 only if Double After Split (DAS) (assume Double After Split (DAS) available)
+    // Split vs 3-6; vs 2 only if Double After Split (DAS) (assume DAS available except split aces)
     if (dealerValue >= 2 && dealerValue <= 6) {
       return {
         action: "split",
         fallback: null,
-        tip: "Split 6s vs 2–6 (with Double After Split (DAS)) to avoid a weak hard 12 and create two drawing hands.",
-        feedback: "Playing hard 12 against weak dealer upcards wastes value. Splitting lets you double after split (Double After Split (DAS)) on favorable draws, significantly improving expected value compared to hitting or standing.",
+        tip: "Split 6s vs 2–6 (with Double After Split (DAS); never after split aces) to avoid a weak hard 12 and create two drawing hands.",
+        feedback:
+          "Playing hard 12 against weak dealer upcards wastes value. Splitting lets you double after split (Double After Split (DAS)) on favorable draws—except after split aces—significantly improving expected value compared to hitting or standing.",
       }
     }
     return {
@@ -191,13 +193,14 @@ function getPairRule(card: Card, dealerCard: string, dealerValue: number): Strat
 
   // 4,4
   if (cardValue === 4) {
-    // Split only if Double After Split (DAS) vs 5-6 (assume Double After Split (DAS) available); otherwise hit
+    // Split only if Double After Split (DAS) vs 5-6 (assume DAS available except split aces); otherwise hit
     if (dealerValue === 5 || dealerValue === 6) {
       return {
         action: "split",
         fallback: null,
-        tip: "Split 4s vs 5–6 (with Double After Split (DAS)) to take advantage of dealer's weak upcards.",
-        feedback: "Against dealer 5–6, splitting with Double After Split (DAS) allows you to double after favorable draws. This turns two weak 4s into potentially strong hands and significantly outperforms hitting hard 8, which is too weak to stand on.",
+        tip: "Split 4s vs 5–6 (with Double After Split (DAS); never after split aces) to take advantage of dealer's weak upcards.",
+        feedback:
+          "Against dealer 5–6, splitting with Double After Split (DAS) allows you to double after favorable draws—except after split aces. This turns two weak 4s into potentially strong hands and significantly outperforms hitting hard 8, which is too weak to stand on.",
       }
     }
     return {
@@ -210,13 +213,14 @@ function getPairRule(card: Card, dealerCard: string, dealerValue: number): Strat
 
   // 3,3
   if (cardValue === 3) {
-    // Split vs 4-7; vs 2-3 split only if Double After Split (DAS) (assume Double After Split (DAS) available)
+    // Split vs 4-7; vs 2-3 split only if Double After Split (DAS) (assume DAS available except split aces)
     if (dealerValue >= 2 && dealerValue <= 7) {
       return {
         action: "split",
         fallback: null,
-        tip: "Split 3s vs 2–7 (with Double After Split (DAS)) to create two drawing hands instead of weak hard 6.",
-        feedback: "Playing hard 6 against dealer 2–7 is weak. Splitting with Double After Split (DAS) allows you to double after favorable draws, turning two weak 3s into potentially strong hands. This significantly outperforms hitting or standing.",
+        tip: "Split 3s vs 2–7 (with Double After Split (DAS); never after split aces) to create two drawing hands instead of weak hard 6.",
+        feedback:
+          "Playing hard 6 against dealer 2–7 is weak. Splitting with Double After Split (DAS) allows you to double after favorable draws—except after split aces—turning two weak 3s into potentially strong hands. This significantly outperforms hitting or standing.",
       }
     }
     return {
@@ -229,13 +233,14 @@ function getPairRule(card: Card, dealerCard: string, dealerValue: number): Strat
 
   // 2,2
   if (cardValue === 2) {
-    // Split vs 4-7; vs 2-3 split only if Double After Split (DAS) (assume Double After Split (DAS) available)
+    // Split vs 4-7; vs 2-3 split only if Double After Split (DAS) (assume DAS available except split aces)
     if (dealerValue >= 2 && dealerValue <= 7) {
       return {
         action: "split",
         fallback: null,
-        tip: "Split 2s vs 2–7 (with Double After Split (DAS)) to create two drawing hands instead of weak hard 4.",
-        feedback: "Playing hard 4 against dealer 2–7 is very weak. Splitting with Double After Split (DAS) allows you to double after favorable draws, turning two weak 2s into potentially strong hands. This significantly outperforms hitting or standing.",
+        tip: "Split 2s vs 2–7 (with Double After Split (DAS); never after split aces) to create two drawing hands instead of weak hard 4.",
+        feedback:
+          "Playing hard 4 against dealer 2–7 is very weak. Splitting with Double After Split (DAS) allows you to double after favorable draws—except after split aces—turning two weak 2s into potentially strong hands. This significantly outperforms hitting or standing.",
       }
     }
     return {

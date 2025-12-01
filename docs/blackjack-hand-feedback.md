@@ -1,8 +1,9 @@
 # Blackjack Hand Feedback Reference (H17)
 
-Source: `lib/blackjack-strategy.ts`. Dealer hits soft 17 (H17). Double after split is available where noted (except split aces, which may not be doubled); doubles are only allowed on the first two cards, and when a double rule is hit after additional draws the following sentence is appended: `Doubling isn't available after drawing cards, so stand instead.` or `...so hit instead.` depending on the fallback action.
+Source: `lib/blackjack-strategy.ts`. Dealer hits soft 17 (H17). Double after split is available where noted (never on split aces); doubles are only allowed on the first two cards, and when a double rule is hit after additional draws the following sentence is appended: `Doubling isn't available after drawing cards, so stand instead.` or `...so hit instead.` depending on the fallback action.
 
 ## Pair hands (first two cards only)
+Note: No doubles are allowed on split aces (you still split them, but cannot double either resulting hand). Any mention of Double After Split (DAS) excludes split aces.
 | Player hand | Dealer upcard(s) | Action (fallback) | Feedback message |
 | --- | --- | --- | --- |
 | A,A | Any | Split | Splitting aces creates two hands each starting at 11, which can each reach 18–21. This significantly increases your expected value compared to playing a single soft 12. Not splitting wastes the opportunity to make two strong hands from aces. |

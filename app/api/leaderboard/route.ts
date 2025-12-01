@@ -8,7 +8,7 @@ type LeaderboardRow = {
   user_profiles: {
     display_name: string | null
     avatar_url: string | null
-  } | null
+  }[]
 }
 
 type LeaderboardEntry = {
@@ -91,8 +91,8 @@ export async function GET(request: NextRequest) {
     const entries: LeaderboardEntry[] =
       data?.map((entry: LeaderboardRow, index) => ({
         userId: entry.user_id,
-        name: entry.user_profiles?.display_name || `User ${entry.user_id.slice(-4)}`,
-        avatarUrl: entry.user_profiles?.avatar_url ?? null,
+        name: entry.user_profiles[0]?.display_name || `User ${entry.user_id.slice(-4)}`,
+        avatarUrl: entry.user_profiles[0]?.avatar_url ?? null,
         currentBalance: entry.total_money,
         level: entry.level,
         rank: (cursor ? Number.parseInt(cursor) : 0) + index + 1,

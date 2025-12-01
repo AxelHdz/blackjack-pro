@@ -468,15 +468,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }
 
       if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
-        const isValidDeck = data.deck.every(
-          (card): card is CardType =>
-            card &&
-            typeof card === "object" &&
-            "suit" in card &&
-            "rank" in card &&
-            typeof card.suit === "string" &&
-            typeof card.rank === "string",
-        )
+        const isValidDeck = data.deck.every((card: unknown): card is CardType => {
+          if (!card || typeof card !== "object") return false
+          const candidate = card as { suit?: unknown; rank?: unknown }
+          return typeof candidate.suit === "string" && typeof candidate.rank === "string"
+        })
         updateEngine({ deck: isValidDeck ? data.deck : createDeck() })
       } else {
         updateEngine({ deck: createDeck() })

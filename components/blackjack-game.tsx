@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
 import { getOptimalMove, type GameAction } from "@/lib/blackjack-strategy"
-import { calculateHandValue, createDeck, getCardValue, getHandValueInfo, type Card as CardType } from "@/lib/card-utils"
+import { calculateHandValue, createDeck, getHandValueInfo, type Card as CardType } from "@/lib/card-utils"
 import {
   Lightbulb,
   X,
@@ -39,6 +39,8 @@ import { useStatsPersistence } from "@/hooks/use-stats-persistence"
 import { useChallenge } from "@/contexts/challenge-context"
 import { animateDealerPlay, useGameEngine, type RoundResolution, type EngineGameState } from "@/hooks/use-game-engine"
 import { useChallengeLifecycle } from "@/hooks/use-challenge-lifecycle"
+import { canDouble, canSplit } from "@/lib/hand-actions"
+import { tableRules } from "@/lib/strategy-config"
 
 type LearningMode = "guided" | "practice" | "expert"
 
@@ -893,8 +895,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     dispatchEngine({ type: "STAND" })
   }
 
-  const canSplitHand =
-    activeHand.cards.length === 2 && getCardValue(activeHand.cards[0]) === getCardValue(activeHand.cards[1])
+  const canSplitHand = canSplit(activeHand.cards)
 
   const handleRoundResolution = useCallback(
     (resolution: RoundResolution) => {
@@ -968,6 +969,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
     checkPlayerAction("double")
 
     const additionalBet = currentHandBaseBet
+    if (!canDouble(activeHand, { doubleOnSplitAces: tableRules.doubleOnSplitAces })) return
     if (additionalBet <= 0 || balance === null || balance < additionalBet) return
 
     setBalance((prev) => {
@@ -1923,7 +1925,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
           >
             Hit
           </Button>
-          {activeHand.cards.length === 2 && !activeHand.doubled && !activeHand.isSplitAce && (
+          {canDouble(activeHand, { doubleOnSplitAces: tableRules.doubleOnSplitAces }) && (
             <Button
               onClick={doubleDown}
               disabled={isDealing || balance === null || balance < currentHandBaseBet || gameState === "dealer"}

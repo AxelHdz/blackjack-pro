@@ -199,3 +199,26 @@ export function resolveSplitHands({ hands, dealerHand, level }: SplitHandResolut
     xpGain,
   }
 }
+
+export function resolveHands({
+  hands,
+  dealerHand,
+  level,
+}: {
+  hands: PlayerHandState[]
+  dealerHand: Card[]
+  level: number
+}): SplitHandResolution | SingleHandResolution {
+  if (hands.length <= 1) {
+    const hand = hands[0]
+    return resolveSingleHand({
+      playerHand: hand?.cards ?? [],
+      dealerHand,
+      baseBet: hand?.bet ?? 0,
+      isDoubled: hand?.doubled ?? false,
+      level,
+    })
+  }
+
+  return resolveSplitHands({ hands, dealerHand, level })
+}

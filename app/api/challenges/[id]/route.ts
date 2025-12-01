@@ -126,7 +126,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const challengeCredits = 500
 
       const { data: updatedChallenge, error: updateError } = await supabase
-        .from<ChallengeRecord>("challenges")
+        .from("challenges")
         .update({
           status: "active",
           challenger_balance_start: challengerStats.total_money,
@@ -221,7 +221,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       const { data: updatedChallenge, error: updateError } = await supabase
-        .from<ChallengeRecord>("challenges")
+        .from("challenges")
         .update({
           wager_amount: wagerAmount,
           duration_minutes: durationMinutes,
@@ -315,7 +315,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const nowIso = new Date().toISOString()
 
     const { data: cancelledChallenge, error: cancelError } = await supabase
-      .from<ChallengeRecord>("challenges")
+      .from("challenges")
       .update({
         status: "cancelled",
         challenger_balance_end: refundedBalance,

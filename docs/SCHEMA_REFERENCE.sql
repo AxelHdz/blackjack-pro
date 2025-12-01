@@ -47,7 +47,7 @@ CREATE POLICY "Users can insert their own profile"
   ON public.user_profiles FOR INSERT
   WITH CHECK (auth.uid() = id);
 
-CREATE POLICY "Users can update their own profile"
+CREATE POLICY "Users can update own profile"
   ON public.user_profiles FOR UPDATE
   USING (auth.uid() = id);
 
@@ -56,8 +56,8 @@ CREATE POLICY "Users can update their own profile"
 -- Stores game statistics and player progress
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.game_stats (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE NOT NULL,
+  id UUID DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.user_profiles(id) ON DELETE CASCADE NOT NULL PRIMARY KEY,
   
   -- Overall stats
   total_money INTEGER DEFAULT 500,
@@ -99,6 +99,12 @@ CREATE TABLE IF NOT EXISTS public.game_stats (
   deck JSONB,
   last_drill_completed_at TIMESTAMP WITH TIME ZONE,
   
+  -- Challenge statistics
+  completed_challenges INTEGER DEFAULT 0,
+  won_challenges INTEGER DEFAULT 0,
+  lost_challenges INTEGER DEFAULT 0,
+  tied_challenges INTEGER DEFAULT 0,
+  
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -109,6 +115,10 @@ COMMENT ON COLUMN public.game_stats.last_play_mode IS 'Last selected play mode: 
 COMMENT ON COLUMN public.game_stats.level_winnings IS 'Winnings accrued since current level began. Resets to 0 on level-up.';
 COMMENT ON COLUMN public.game_stats.deck IS 'Current card deck state as JSONB array. Each card has suit and rank properties. Contains up to 312 cards (6 decks).';
 COMMENT ON COLUMN public.game_stats.last_drill_completed_at IS 'Timestamp of when the player last successfully completed a buyback drill. Used for 24-hour tier reset logic.';
+COMMENT ON COLUMN public.game_stats.completed_challenges IS 'Total number of completed challenges';
+COMMENT ON COLUMN public.game_stats.won_challenges IS 'Total number of challenge wins';
+COMMENT ON COLUMN public.game_stats.lost_challenges IS 'Total number of challenge losses';
+COMMENT ON COLUMN public.game_stats.tied_challenges IS 'Total number of challenge ties';
 
 -- Enable RLS for game_stats
 ALTER TABLE public.game_stats ENABLE ROW LEVEL SECURITY;
@@ -130,17 +140,19 @@ CREATE POLICY "Anyone can view game stats for leaderboard"
   ON game_stats FOR SELECT
   USING (true);
 
-CREATE POLICY "Users can insert their own stats"
+CREATE POLICY "Users can insert own stats"
   ON public.game_stats FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update their own stats"
+CREATE POLICY "Users can update own stats"
   ON public.game_stats FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Indexes for game_stats
 CREATE INDEX IF NOT EXISTS idx_game_stats_total_money ON game_stats(total_money DESC);
 CREATE INDEX IF NOT EXISTS idx_game_stats_level ON game_stats(level DESC);
+CREATE INDEX IF NOT EXISTS idx_game_stats_balance_ranking ON game_stats(total_money DESC, level DESC, user_id);
+CREATE INDEX IF NOT EXISTS idx_game_stats_level_ranking ON game_stats(level DESC, total_money DESC, user_id);
 
 -- ----------------------------------------------------------------------------
 -- friends
@@ -223,11 +235,27 @@ CREATE TABLE IF NOT EXISTS challenges (
   challenged_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   wager_amount INTEGER NOT NULL,
   duration_minutes INTEGER NOT NULL CHECK (duration_minutes IN (5, 10)),
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'completed', 'cancelled', 'archived')),
+  
+  -- Balance tracking
   challenger_balance_start INTEGER,
   challenged_balance_start INTEGER,
   challenger_balance_end INTEGER,
   challenged_balance_end INTEGER,
+  
+  -- Challenge credit system
+  challenger_balance_paused INTEGER,
+  challenged_balance_paused INTEGER,
+  challenger_credit_balance INTEGER,
+  challenged_credit_balance INTEGER,
+  challenger_credit_experience INTEGER DEFAULT 0,
+  challenged_credit_experience INTEGER DEFAULT 0,
+  
+  -- Archive status (per-user)
+  challenger_archive_status BOOLEAN DEFAULT FALSE,
+  challenged_archive_status BOOLEAN DEFAULT FALSE,
+  
+  -- Challenge outcome
   winner_id UUID REFERENCES auth.users(id),
   started_at TIMESTAMP WITH TIME ZONE,
   expires_at TIMESTAMP WITH TIME ZONE,
@@ -235,6 +263,16 @@ CREATE TABLE IF NOT EXISTS challenges (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Comments for challenge credit fields
+COMMENT ON COLUMN public.challenges.challenger_balance_paused IS 'Snapshot of challengers real balance while challenge credits are active';
+COMMENT ON COLUMN public.challenges.challenged_balance_paused IS 'Snapshot of challenged players real balance while challenge credits are active';
+COMMENT ON COLUMN public.challenges.challenger_credit_balance IS 'Current challenge credit balance for the challenger';
+COMMENT ON COLUMN public.challenges.challenged_credit_balance IS 'Current challenge credit balance for the challenged player';
+COMMENT ON COLUMN public.challenges.challenger_credit_experience IS 'Accumulated challenge XP (doubled) awaiting payout for the challenger';
+COMMENT ON COLUMN public.challenges.challenged_credit_experience IS 'Accumulated challenge XP (doubled) awaiting payout for the challenged player';
+COMMENT ON COLUMN public.challenges.challenger_archive_status IS 'Whether the challenger has archived this challenge from their view';
+COMMENT ON COLUMN public.challenges.challenged_archive_status IS 'Whether the challenged player has archived this challenge from their view';
 
 -- Enable RLS
 ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
@@ -248,11 +286,11 @@ CREATE POLICY "Users can create challenges where they are the challenger"
   ON challenges FOR INSERT
   WITH CHECK (auth.uid() = challenger_id);
 
-CREATE POLICY "Users can update challenges where they are challenger (pending only) or challenged (accept/counter-offer)"
+CREATE POLICY "Participants can update challenges"
   ON challenges FOR UPDATE
   USING (
-    (auth.uid() = challenger_id AND status = 'pending') OR
-    (auth.uid() = challenged_id)
+    auth.uid() = challenger_id OR
+    auth.uid() = challenged_id
   );
 
 CREATE POLICY "Users can delete challenges where they are challenger and status is pending"
@@ -263,7 +301,8 @@ CREATE POLICY "Users can delete challenges where they are challenger and status 
 CREATE INDEX IF NOT EXISTS idx_challenges_challenger_id ON challenges(challenger_id);
 CREATE INDEX IF NOT EXISTS idx_challenges_challenged_id ON challenges(challenged_id);
 CREATE INDEX IF NOT EXISTS idx_challenges_status ON challenges(status);
-CREATE INDEX IF NOT EXISTS idx_challenges_expires_at ON challenges(expires_at);
+CREATE INDEX IF NOT EXISTS idx_challenges_status_created ON challenges(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_challenges_winner_id ON challenges(winner_id);
 
 -- Partial unique indexes to ensure one active/pending challenge per user
 CREATE UNIQUE INDEX IF NOT EXISTS idx_challenges_one_active_challenger
@@ -273,6 +312,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_challenges_one_active_challenger
 CREATE UNIQUE INDEX IF NOT EXISTS idx_challenges_one_active_challenged
   ON challenges(challenged_id)
   WHERE status IN ('pending', 'active');
+
+-- Performance indexes for challenge queries
+CREATE INDEX IF NOT EXISTS idx_challenges_challenger_status_created
+  ON challenges(challenger_id, status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_challenges_challenged_status_created
+  ON challenges(challenged_id, status, created_at DESC);
+
+-- Partial indexes for non-archived challenges (optimizes active challenge queries)
+CREATE INDEX IF NOT EXISTS idx_challenges_challenger_not_archived
+  ON challenges(challenger_id, status, created_at DESC)
+  WHERE (challenger_archive_status IS FALSE OR challenger_archive_status IS NULL);
+
+CREATE INDEX IF NOT EXISTS idx_challenges_challenged_not_archived
+  ON challenges(challenged_id, status, created_at DESC)
+  WHERE (challenged_archive_status IS FALSE OR challenged_archive_status IS NULL);
 
 -- ============================================================================
 -- FUNCTIONS
@@ -286,7 +341,6 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
 AS $$
 DECLARE
   username_from_email text;
@@ -305,13 +359,7 @@ BEGIN
     username_from_email,
     NOW(),
     NOW()
-  )
-  ON CONFLICT (id) DO NOTHING;
-  
-  -- Insert default game stats
-  INSERT INTO public.game_stats (user_id)
-  VALUES (new.id)
-  ON CONFLICT DO NOTHING;
+  );
   
   RETURN NEW;
 END;
@@ -352,6 +400,172 @@ $$;
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION create_bidirectional_friendship(UUID, UUID) TO authenticated;
 
+-- ----------------------------------------------------------------------------
+-- auto_archive_user_challenges()
+-- Automatically archives previous challenges when a new challenge is created
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.auto_archive_user_challenges()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = 'public'
+AS $$
+BEGIN
+  -- Archive challenges for the challenger (NEW.challenger_id)
+  UPDATE challenges
+  SET challenger_archive_status = true,
+      updated_at = NOW()
+  WHERE challenger_id = NEW.challenger_id
+    AND status IN ('pending', 'active', 'completed')
+    AND challenger_archive_status = false
+    AND id != NEW.id;  -- Don't archive the newly created challenge
+
+  -- Archive challenges for the challenged user (NEW.challenged_id)
+  UPDATE challenges
+  SET challenged_archive_status = true,
+      updated_at = NOW()
+  WHERE challenged_id = NEW.challenged_id
+    AND status IN ('pending', 'active', 'completed')
+    AND challenged_archive_status = false
+    AND id != NEW.id;  -- Don't archive the newly created challenge
+
+  RETURN NEW;
+END;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- calculate_level_from_wins()
+-- Calculates level and XP from a given number of wins
+-- Used for leveling calculations and testing
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.calculate_level_from_wins(wins_count integer)
+RETURNS TABLE(calculated_level integer, calculated_xp integer)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  current_level INTEGER := 1;
+  current_xp INTEGER := 0;
+  win_num INTEGER;
+  xp_awarded INTEGER;
+  xp_needed INTEGER;
+  A CONSTANT NUMERIC := 120;
+  alpha CONSTANT NUMERIC := 1.6;
+  B CONSTANT NUMERIC := 10;
+  XP_PER_WIN_BASE CONSTANT INTEGER := 10;
+  XP_SCALING_FACTOR CONSTANT NUMERIC := 0.1;
+BEGIN
+  -- Award XP for each win, accounting for level scaling
+  FOR win_num IN 1..wins_count LOOP
+    -- Calculate XP per win based on current level
+    xp_awarded := FLOOR(XP_PER_WIN_BASE * (1 + current_level * XP_SCALING_FACTOR));
+    current_xp := current_xp + xp_awarded;
+    
+    -- Check for level-ups
+    WHILE current_xp >= CEIL(A * POWER(current_level, alpha) + B * current_level) LOOP
+      xp_needed := CEIL(A * POWER(current_level, alpha) + B * current_level);
+      current_xp := current_xp - xp_needed;
+      current_level := current_level + 1;
+    END LOOP;
+  END LOOP;
+  
+  RETURN QUERY SELECT current_level, current_xp;
+END;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- calculate_user_rank()
+-- Calculates a user's rank based on scope (global/friends) and metric (balance/level)
+-- Used by the leaderboard system to determine user rankings
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.calculate_user_rank(
+  p_user_id uuid,
+  p_scope text DEFAULT 'global'::text,
+  p_metric text DEFAULT 'balance'::text,
+  p_friend_ids uuid[] DEFAULT ARRAY[]::uuid[]
+)
+RETURNS integer
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+  v_rank INTEGER;
+  v_user_stats RECORD;
+BEGIN
+  -- Get user's stats (only if profile exists)
+  SELECT gs.total_money, gs.level
+  INTO v_user_stats
+  FROM public.game_stats gs
+  WHERE gs.user_id = p_user_id
+    AND EXISTS (
+      SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+    );
+  
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+  
+  -- Calculate rank based on metric, counting distinct users with profiles
+  IF p_metric = 'balance' THEN
+    IF p_scope = 'friends' AND array_length(p_friend_ids, 1) > 0 THEN
+      SELECT COUNT(DISTINCT gs.user_id) + 1
+      INTO v_rank
+      FROM public.game_stats gs
+      WHERE gs.user_id = ANY(p_friend_ids)
+        AND EXISTS (
+          SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+        )
+        AND (
+          gs.total_money > v_user_stats.total_money OR
+          (gs.total_money = v_user_stats.total_money AND gs.level > v_user_stats.level) OR
+          (gs.total_money = v_user_stats.total_money AND gs.level = v_user_stats.level AND gs.user_id < p_user_id)
+        );
+    ELSE
+      SELECT COUNT(DISTINCT gs.user_id) + 1
+      INTO v_rank
+      FROM public.game_stats gs
+      WHERE EXISTS (
+        SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+      )
+      AND (
+        gs.total_money > v_user_stats.total_money OR
+        (gs.total_money = v_user_stats.total_money AND gs.level > v_user_stats.level) OR
+        (gs.total_money = v_user_stats.total_money AND gs.level = v_user_stats.level AND gs.user_id < p_user_id)
+      );
+    END IF;
+  ELSE
+    -- Level metric
+    IF p_scope = 'friends' AND array_length(p_friend_ids, 1) > 0 THEN
+      SELECT COUNT(DISTINCT gs.user_id) + 1
+      INTO v_rank
+      FROM public.game_stats gs
+      WHERE gs.user_id = ANY(p_friend_ids)
+        AND EXISTS (
+          SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+        )
+        AND (
+          gs.level > v_user_stats.level OR
+          (gs.level = v_user_stats.level AND gs.total_money > v_user_stats.total_money) OR
+          (gs.level = v_user_stats.level AND gs.total_money = v_user_stats.total_money AND gs.user_id < p_user_id)
+        );
+    ELSE
+      SELECT COUNT(DISTINCT gs.user_id) + 1
+      INTO v_rank
+      FROM public.game_stats gs
+      WHERE EXISTS (
+        SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+      )
+      AND (
+        gs.level > v_user_stats.level OR
+        (gs.level = v_user_stats.level AND gs.total_money > v_user_stats.total_money) OR
+        (gs.level = v_user_stats.level AND gs.total_money = v_user_stats.total_money AND gs.user_id < p_user_id)
+      );
+    END IF;
+  END IF;
+  
+  RETURN v_rank;
+END;
+$$;
+
 -- ============================================================================
 -- TRIGGERS
 -- ============================================================================
@@ -366,6 +580,17 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+-- ----------------------------------------------------------------------------
+-- trigger_auto_archive_challenges
+-- Trigger that automatically archives previous challenges when a new challenge is created
+-- ----------------------------------------------------------------------------
+DROP TRIGGER IF EXISTS trigger_auto_archive_challenges ON challenges;
+
+CREATE TRIGGER trigger_auto_archive_challenges
+  AFTER INSERT ON challenges
+  FOR EACH ROW
+  EXECUTE FUNCTION auto_archive_user_challenges();
 
 -- ============================================================================
 -- GRANTS
@@ -389,9 +614,13 @@ GRANT ALL ON public.user_profiles TO authenticated;
 -- Functions:
 --   1. handle_new_user() - Auto-creates profile and stats on signup
 --   2. create_bidirectional_friendship() - Creates bidirectional friendships
+--   3. auto_archive_user_challenges() - Archives previous challenges when new one is created
+--   4. calculate_level_from_wins() - Calculates level and XP from win count
+--   5. calculate_user_rank() - Calculates user rank for leaderboard (global/friends, balance/level)
 --
 -- Triggers:
 --   1. on_auth_user_created - Triggers handle_new_user() on user signup
+--   2. trigger_auto_archive_challenges - Archives old challenges when new challenge is created
 --
 -- Key Features:
 --   - Row Level Security (RLS) enabled on all tables

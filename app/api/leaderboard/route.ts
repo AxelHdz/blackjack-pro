@@ -8,7 +8,7 @@ type LeaderboardRow = {
   user_profiles: {
     display_name: string | null
     avatar_url: string | null
-  }[]
+  } | null
 }
 
 type LeaderboardEntry = {
@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
   const limit = 50
 
   try {
+    // Use inner join to ensure we only get entries with profiles
+    // The relationship is automatically created by the foreign key: game_stats.user_id -> user_profiles.id
     let query = supabase.from("game_stats").select(`
         user_id,
         total_money,
@@ -87,16 +89,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch leaderboard" }, { status: 500 })
     }
 
+    // Debug logging to inspect the data structure
+    if (data && data.length > 0) {
+      console.log("Sample leaderboard entry:", JSON.stringify(data[0], null, 2))
+    }
+
     // Transform data to include rank
     const entries: LeaderboardEntry[] =
-      data?.map((entry: LeaderboardRow, index) => ({
-        userId: entry.user_id,
-        name: entry.user_profiles[0]?.display_name || `User ${entry.user_id.slice(-4)}`,
-        avatarUrl: entry.user_profiles[0]?.avatar_url ?? null,
-        currentBalance: entry.total_money,
-        level: entry.level,
-        rank: (cursor ? Number.parseInt(cursor) : 0) + index + 1,
-      })) || []
+      data?.map((entry: LeaderboardRow, index) => {
+        // Supabase returns one-to-one relationships as a single object
+        const profile = entry.user_profiles
+
+        // Log if profile is missing (shouldn't happen with !inner join, but useful for debugging)
+        if (!profile) {
+          console.warn(`Missing profile for user ${entry.user_id} in leaderboard query`)
+        }
+
+        return {
+          userId: entry.user_id,
+          name: profile?.display_name || `User ${entry.user_id.slice(-4)}`,
+          avatarUrl: profile?.avatar_url ?? null,
+          currentBalance: entry.total_money,
+          level: entry.level,
+          rank: (cursor ? Number.parseInt(cursor) : 0) + index + 1,
+        }
+      }) || []
 
     const nextCursor = entries.length === limit ? ((cursor ? Number.parseInt(cursor) : 0) + limit).toString() : null
 

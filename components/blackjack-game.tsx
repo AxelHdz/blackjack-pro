@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PlayingCard } from "@/components/playing-card"
 import { getOptimalMove, type GameAction } from "@/lib/blackjack-strategy"
-import { calculateHandValue, createDeck, getHandValueInfo, type Card as CardType } from "@/lib/card-utils"
+import { calculateHandValue, createDeck, getCardValue, getHandValueInfo, type Card as CardType } from "@/lib/card-utils"
 import {
   Lightbulb,
   X,

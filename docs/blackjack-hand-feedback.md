@@ -1,0 +1,59 @@
+# Blackjack Hand Feedback Reference (H17)
+
+Source: `lib/blackjack-strategy.ts`. Dealer hits soft 17 (H17). Double after split is available where noted (except split aces, which may not be doubled); doubles are only allowed on the first two cards, and when a double rule is hit after additional draws the following sentence is appended: `Doubling isn't available after drawing cards, so stand instead.` or `...so hit instead.` depending on the fallback action.
+
+## Pair hands (first two cards only)
+| Player hand | Dealer upcard(s) | Action (fallback) | Feedback message |
+| --- | --- | --- | --- |
+| A,A | Any | Split | Splitting aces creates two hands each starting at 11, which can each reach 18–21. This significantly increases your expected value compared to playing a single soft 12. Not splitting wastes the opportunity to make two strong hands from aces. |
+| 10,10 | Any | Stand | Hard 20 is one of the strongest hands in blackjack and beats most dealer outcomes. Splitting tens would turn this top-tier hand into two weaker hands starting from 10, significantly reducing your expected value. Always stand on 20. |
+| 9,9 | 7, 10, A | Stand | Against dealer 7, 10, or Ace, holding 18 is stronger than splitting. Splitting would create two hands starting from 9, which are weaker against these strong upcards. Standing preserves your advantage with 18. |
+| 9,9 | 2–6, 8–9 | Split | Against weak dealer upcards (2–6) or neutral ones (8–9), splitting 9s creates two hands that can each reach 19–21. This significantly increases your expected value compared to standing on 18, as you can win both hands. |
+| 8,8 | Any | Split | Hard 16 is the worst hard total because it's too weak to stand but likely to bust if you hit. Splitting 8s creates two hands starting from 8, each with good potential to reach 17–21. This significantly outperforms hitting or standing on 16, which loses heavily. |
+| 7,7 | 2–7 | Split | Playing hard 14 against dealer 2–7 is weak. Splitting creates two hands starting from 7, each with good potential to reach 17–21. This significantly outperforms hitting (which risks busting) or standing (which loses too often). |
+| 7,7 | 8–A | Hit | Splitting 7s against strong dealer upcards (8–A) creates two weak hands that are likely to lose. Hitting gives you a better chance to improve your total without committing to two losing positions. |
+| 6,6 | 2–6 | Split | Playing hard 12 against weak dealer upcards wastes value. Splitting lets you double after split (Double After Split (DAS)) on favorable draws, significantly improving expected value compared to hitting or standing. |
+| 6,6 | 7–A | Hit | Splitting 6s against strong dealer upcards creates two weak hands that are likely to lose. Hitting gives you a better chance to improve your total without committing to two losing hands. |
+| 5,5 | 2–9 | Double (hit) | Never split 5s. Treating 5,5 as hard 10 and doubling against dealer 2–9 maximizes expected value. Splitting would create two weak hands starting from 5, which perform much worse than doubling hard 10. |
+| 5,5 | 10, A | Hit | Against strong dealer upcards (10, Ace), treating 5,5 as hard 10 and hitting is correct. Doubling would overcommit against the dealer's strongest upcards and is negative expected value. |
+| 4,4 | 5–6 | Split | Against dealer 5–6, splitting with Double After Split (DAS) allows you to double after favorable draws. This turns two weak 4s into potentially strong hands and significantly outperforms hitting hard 8, which is too weak to stand on. |
+| 4,4 | Other | Hit | Splitting 4s against dealer upcards other than 5–6 underperforms because the dealer is either too strong or not weak enough. Hitting hard 8 gives you flexibility to improve without committing to two weak hands. |
+| 3,3 | 2–7 | Split | Playing hard 6 against dealer 2–7 is weak. Splitting with Double After Split (DAS) allows you to double after favorable draws, turning two weak 3s into potentially strong hands. This significantly outperforms hitting or standing. |
+| 3,3 | 8–A | Hit | Splitting 3s against strong dealer upcards (8–A) creates two weak hands that are likely to lose. Hitting gives you a better chance to improve your total without committing to two losing positions. |
+| 2,2 | 2–7 | Split | Playing hard 4 against dealer 2–7 is very weak. Splitting with Double After Split (DAS) allows you to double after favorable draws, turning two weak 2s into potentially strong hands. This significantly outperforms hitting or standing. |
+| 2,2 | 8–A | Hit | Splitting 2s against strong dealer upcards (8–A) creates two very weak hands that are likely to lose. Hitting gives you a better chance to improve your total without committing to two losing positions. |
+| Any other pair | Any | Hit | Hitting gives you a chance to improve your total and compete with the dealer. This increases your winning chances compared to standing on a weak hand. |
+
+## Soft hands (any length)
+| Player hand | Dealer upcard(s) | Action (fallback) | Feedback message |
+| --- | --- | --- | --- |
+| A,9 (soft 20) | Any | Stand | Soft 20 is one of the strongest hands in blackjack. Hitting would risk downgrading a made hand that wins against most dealer totals. Standing preserves your strong advantage. |
+| A,8 (soft 19) | 6 | Double (stand) | Dealer 6 is the weakest upcard and busts frequently. Doubling soft 19 against 6 significantly increases your expected value compared to standing, as you're likely to improve to 20 or 21 while the dealer is likely to bust or make a weak hand. |
+| A,8 (soft 19) | Other | Stand | Soft 19 is a strong hand that beats most dealer outcomes. Against dealer upcards other than 6, standing preserves your advantage. Hitting risks downgrading a winning hand without sufficient benefit. |
+| A,7 (soft 18) | 2–6 | Double (stand) | Against weak dealer upcards (2–6), soft 18 has excellent potential to improve to 19–21 on one card. Doubling captures this advantage and significantly increases expected value compared to standing, as the dealer is likely to bust or make a weak hand. |
+| A,7 (soft 18) | 7–8 | Stand | Against dealer 7 or 8, you're roughly even. Standing preserves your position without risking a bust. Hitting or doubling would overcommit against these neutral upcards where the dealer has a reasonable chance to make 17–21. |
+| A,7 (soft 18) | 9–A | Hit | Against strong dealer upcards (9, 10, Ace), soft 18 is behind. The dealer is likely to make 19–21, so you need to improve. Hitting gives you flexibility to reach 19–21 without overcommitting like doubling would. |
+| A,6 (soft 17) | 3–6 | Double (hit) | Against weak dealer upcards (3–6), soft 17 has many live outs to improve to 18–21 on one card. Doubling maximizes your expected value since the dealer is likely to bust or make a weak hand. This significantly outperforms hitting or standing. |
+| A,6 (soft 17) | 2, 7–A | Hit | Against dealer 2 or strong upcards (7–A), soft 17 is too weak to stand or double. Hitting gives you flexibility to improve to 18–21 without overcommitting. The dealer is likely to make a strong hand, so you need to improve your total. |
+| A,5 or A,4 (soft 16/15) | 4–6 | Double (hit) | Against weak dealer upcards (4–6), A,5 or A,4 has good potential to improve to 17–21 on one card. Dealer 4–6 busts frequently, so doubling captures this advantage and significantly increases expected value compared to hitting or standing. |
+| A,5 or A,4 (soft 16/15) | Other | Hit | Against dealer upcards other than 4–6, doubling overcommits a fragile total. Hitting gives you flexibility to improve to 17–21 without risking too much. The dealer is either too strong or not weak enough to justify doubling. |
+| A,3 or A,2 (soft 14/13) | 5–6 | Double (hit) | Against dealer 5–6 (the weakest upcards), A,3 or A,2 has potential to improve to 15–21 on one card. Dealer 5–6 busts very frequently, so doubling maximizes your expected value. These are the only upcards where doubling soft 13/14 is profitable. |
+| A,3 or A,2 (soft 14/13) | Other | Hit | Against dealer upcards other than 5–6, doubling soft 13/14 overcommits a weak total. The dealer is either too strong or not weak enough to justify doubling. Hitting gives you flexibility to improve without risking too much. |
+| Any other soft total | Any | Hit | Soft hands can't bust on one card, so hitting gives you flexibility to build a winning total without risk. Keep drawing until you reach a strong total or the situation changes. |
+
+## Hard hands (non-pair, non-soft)
+| Player total | Dealer upcard(s) | Action (fallback) | Feedback message |
+| --- | --- | --- | --- |
+| 17–21 | Any | Stand | Hard 17+ is a strong total that beats most dealer outcomes. Hitting would risk busting a winning hand with little chance of improvement. Doubling hard 18 is negative expected value because you're already ahead. Standing preserves your advantage. |
+| 15 vs 5 | 5 | Stand | Hard 15 vs dealer 5 should stand. Dealer 5 busts frequently, so standing lets the dealer bust while avoiding your own bust. Doubling would overcommit and reduce expected value. |
+| 13–16 (except 15 vs 5) | 2–6 | Stand | Against weak dealer upcards (2–6), hard 13–16 should stand. The dealer is likely to bust, so hitting would risk turning dealer busts into your own busts. Standing maximizes expected value by letting the dealer bust. |
+| 13–16 | 7–A | Hit | Against strong dealer upcards (7–A), hard 13–16 is too weak to stand. The dealer is likely to make 17–21, so standing loses too often. Hitting gives you a chance to improve to 17–21 and compete, even though you risk busting. |
+| 12 | 4–6 | Stand | Against weak dealer upcards (4–6), hard 12 should stand. The dealer is likely to bust, so hitting would risk turning dealer busts into your own bust. Standing maximizes expected value by letting the dealer bust. |
+| 12 | 2–3, 7–A | Hit | Against dealer 2–3 or strong upcards (7–A), hard 12 is too weak to stand. Standing leaves you with too many losing outcomes since the dealer is likely to make 17–21. Hitting gives you a chance to improve to 17–21, even though you risk busting. |
+| 11 | Any | Double (hit) | Hard 11 is one of the strongest doubling opportunities. Any ten-value card (10, J, Q, K) gives you 21, and you have a high chance of improving to 18–21. Even against dealer Ace, doubling hard 11 has positive expected value and earns more than a simple hit over the long run. |
+| 10 | 2–9 | Double (hit) | Hard 10 has excellent potential to improve to 18–20 on one card. Against dealer 2–9, doubling maximizes your expected value by capturing this advantage. A single draw from 10 is favored against these upcards, and doubling captures that edge better than a simple hit. |
+| 10 | 10, A | Hit | Against strong dealer upcards (10, Ace), doubling hard 10 is negative expected value. The dealer is likely to make 17–21, so doubling overcommits. Hitting preserves equity and gives you flexibility to improve without risking too much. |
+| 9 | 3–6 | Double (hit) | Against weak dealer upcards (3–6), hard 9 has good potential to improve to 19–20 on one card. Doubling maximizes your expected value since the dealer is likely to bust or make a weak hand. Hitting would leave money on the table. |
+| 9 | Other | Hit | Against dealer upcards other than 3–6, doubling hard 9 overcommits against a stronger dealer. The dealer is likely to make a competitive hand, so doubling is negative expected value. Hitting gives you flexibility to improve without risking too much. |
+| 4–8 | Any | Hit | Hard totals 8 or less are too weak to stand. Standing would give the dealer too many free wins since you can't beat most dealer outcomes. Hitting can't bust and gives you a chance to improve to 17–21, which are competitive totals. |
+| Any other hard total | Any | Hit | Hitting gives you a chance to improve your total and compete with the dealer. This increases your winning chances compared to standing on a weak hand. |

@@ -110,11 +110,11 @@ describe("resolveSingleHand", () => {
 describe("resolveSplitHands", () => {
   it("handles mixed outcomes with correct payout, deltas, and xp", () => {
     const res = resolveSplitHands({
-      firstHand: [card("K"), card("8"), card("5")], // bust
-      secondHand: [card("10"), card("9")], // 19
+      hands: [
+        { cards: [card("K"), card("8"), card("5")], bet: 10, doubled: false }, // bust
+        { cards: [card("10"), card("9")], bet: 10, doubled: false }, // 19
+      ],
       dealerHand: [card("10"), card("8")], // 18
-      firstBet: 10,
-      secondBet: 10,
       level: 1,
     })
 

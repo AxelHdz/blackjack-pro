@@ -2,12 +2,11 @@ import { calculateHandValue, createDeck, isSoftHand, type Card } from "@/lib/car
 import { settle } from "@/lib/settlement"
 import { getXPPerWinWithBet } from "@/lib/leveling-config"
 
-export type SingleHandResolutionInput = {
-  playerHand: Card[]
-  dealerHand: Card[]
-  baseBet: number
-  isDoubled: boolean
-  level: number
+export type PlayerHandState = {
+  cards: Card[]
+  bet: number // base bet for this hand
+  doubled: boolean
+  isSplitAce?: boolean
 }
 
 export type SingleHandResolution = {
@@ -25,11 +24,8 @@ export type SingleHandResolution = {
 }
 
 export type SplitHandResolutionInput = {
-  firstHand: Card[]
-  secondHand: Card[]
+  hands: PlayerHandState[]
   dealerHand: Card[]
-  firstBet: number
-  secondBet: number
   level: number
 }
 
@@ -70,7 +66,13 @@ export function resolveSingleHand({
   baseBet,
   isDoubled,
   level,
-}: SingleHandResolutionInput): SingleHandResolution {
+}: {
+  playerHand: Card[]
+  dealerHand: Card[]
+  baseBet: number
+  isDoubled: boolean
+  level: number
+}): SingleHandResolution {
   const playerValue = calculateHandValue(playerHand)
   const dealerValue = calculateHandValue(dealerHand)
 
@@ -118,32 +120,23 @@ export function resolveSingleHand({
   }
 }
 
-export function resolveSplitHands({
-  firstHand,
-  secondHand,
-  dealerHand,
-  firstBet,
-  secondBet,
-  level,
-}: SplitHandResolutionInput): SplitHandResolution {
+export function resolveSplitHands({ hands, dealerHand, level }: SplitHandResolutionInput): SplitHandResolution {
   const dealerValue = calculateHandValue(dealerHand)
-  const firstValue = calculateHandValue(firstHand)
-  const secondValue = calculateHandValue(secondHand)
 
   const handOutcomes: Array<"win" | "loss" | "push"> = []
   const results: string[] = []
   let payout = 0
   let winsDelta = 0
   let lossesDelta = 0
-  let totalMovesDelta = 2
-  const betPerHand = (handIndex: number) => (handIndex === 0 ? firstBet : secondBet)
+  let totalMovesDelta = 0
 
-  const evaluateHand = (label: string, playerValue: number, handIndex: number) => {
-    const wager = betPerHand(handIndex)
+  const evaluateHand = (label: string, playerValue: number, handIndex: number, bet: number, doubled: boolean) => {
+    const stake = doubled ? bet * 2 : bet
     if (playerValue > 21) {
       results.push(`${label}: Lose`)
       handOutcomes.push("loss")
       lossesDelta += 1
+      totalMovesDelta += 1
       return
     }
 
@@ -151,7 +144,8 @@ export function resolveSplitHands({
       results.push(`${label}: Win`)
       handOutcomes.push("win")
       winsDelta += 1
-      payout += wager * 2
+      totalMovesDelta += 1
+      payout += stake * 2
       return
     }
 
@@ -159,7 +153,8 @@ export function resolveSplitHands({
       results.push(`${label}: Win`)
       handOutcomes.push("win")
       winsDelta += 1
-      payout += wager * 2
+      totalMovesDelta += 1
+      payout += stake * 2
       return
     }
 
@@ -167,24 +162,29 @@ export function resolveSplitHands({
       results.push(`${label}: Lose`)
       handOutcomes.push("loss")
       lossesDelta += 1
+      totalMovesDelta += 1
       return
     }
 
     results.push(`${label}: Push`)
     handOutcomes.push("push")
-    payout += wager
-    totalMovesDelta -= 1 // Don't count pushes in move totals
+    payout += stake
   }
 
-  evaluateHand("Hand 1", firstValue, 0)
-  evaluateHand("Hand 2", secondValue, 1)
+  hands.forEach((hand, idx) => {
+    const playerValue = calculateHandValue(hand.cards)
+    evaluateHand(`Hand ${idx + 1}`, playerValue, idx, hand.bet, hand.doubled)
+  })
 
-  const totalBet = firstBet + secondBet
+  const totalBet = hands.reduce((sum, hand) => sum + (hand.doubled ? hand.bet * 2 : hand.bet), 0)
   const winAmount = payout - totalBet
   const correctMovesDelta = winsDelta
-  const xpFromFirst = handOutcomes[0] === "win" ? getXPPerWinWithBet(level, firstBet) : 0
-  const xpFromSecond = handOutcomes[1] === "win" ? getXPPerWinWithBet(level, secondBet) : 0
-  const xpGain = xpFromFirst + xpFromSecond
+  const xpGain = handOutcomes.reduce((xp, outcome, idx) => {
+    if (outcome !== "win") return xp
+    const hand = hands[idx]
+    const stake = hand.doubled ? hand.bet * 2 : hand.bet
+    return xp + getXPPerWinWithBet(level, stake)
+  }, 0)
 
   return {
     message: results.join(" | "),

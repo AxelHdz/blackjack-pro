@@ -7,7 +7,7 @@ const fetchChallengeById = (
   supabase: SupabaseClient,
   id: string,
 ) =>
-  supabase.from<ChallengeRecord>("challenges").select("*").eq("id", id).maybeSingle()
+  supabase.from("challenges").select("*").eq("id", id).maybeSingle()
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()

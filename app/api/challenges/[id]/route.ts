@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
 import { formatChallengeResponse, deriveAwaitingUserId, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
-import type { PostgrestSingleResponse, SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
 const fetchChallengeById = (
   supabase: SupabaseClient,
   id: string,
-): Promise<PostgrestSingleResponse<ChallengeRecord>> =>
+) =>
   supabase.from<ChallengeRecord>("challenges").select("*").eq("id", id).maybeSingle()
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -23,7 +23,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 })
     }
 
-    // Fetch challenge with service client to avoid RLS issues while still checking membership below.
     const { data: challenge, error: fetchError } = await admin
       .from("challenges")
       .select("*")
@@ -31,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (fetchError || !challenge) {
-      console.error("[v0] Challenge progress fetch error:", fetchError)
+      console.error("Challenge progress fetch error:", fetchError)
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
 
@@ -46,14 +45,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const now = Date.now()
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     }
 
     if (typeof creditBalance === "number" && Number.isFinite(creditBalance)) {
       const sanitized = Math.max(0, Math.round(creditBalance))
-      // Guard against regressions unless updated_at moves forward
       const existing = isChallenger ? challenge.challenger_credit_balance : challenge.challenged_credit_balance
       if (existing === null || sanitized >= existing) {
         if (isChallenger) {
@@ -77,7 +74,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     if (Object.keys(updates).length === 1) {
-      // Only updated_at would be sent
       return NextResponse.json({ error: "No valid progress values supplied" }, { status: 400 })
     }
 
@@ -89,7 +85,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (updateError || !updatedChallenge) {
-      console.error("[v0] Challenge progress update error:", updateError)
+      console.error("Challenge progress update error:", updateError)
       return NextResponse.json({ error: "Failed to update challenge progress" }, { status: 500 })
     }
 
@@ -104,7 +100,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       challenge: formatChallengeResponse(updatedChallenge as ChallengeRecord, profilesMap),
     })
   } catch (err) {
-    console.error("[v0] Challenge progress route error:", err)
+    console.error("Challenge progress route error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

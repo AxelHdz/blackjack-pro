@@ -226,4 +226,3 @@ DROP INDEX IF EXISTS public.idx_challenges_expires_at;
 DROP INDEX IF EXISTS public.idx_friend_requests_status;
 
 COMMIT;
-

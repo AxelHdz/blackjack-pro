@@ -42,7 +42,7 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
         setCurrentChallenge(contextActiveChallenge)
       }
     } catch (error) {
-      console.error("[v0] Failed to refresh active challenge:", error)
+      console.error("Failed to refresh active challenge:", error)
     }
   }, [challenge, refreshActiveChallenge, contextActiveChallenge])
 
@@ -92,7 +92,7 @@ export function ChallengeChip({ challenge, onClick, userId }: ChallengeChipProps
             await fetch(`/api/challenges/${currentChallenge.id}/complete`, { method: "POST" })
             await fetchActiveChallenge()
           } catch (err) {
-            console.error("[v0] Failed to auto-complete challenge from chip:", err)
+            console.error("Failed to auto-complete challenge from chip:", err)
           }
         })()
         return

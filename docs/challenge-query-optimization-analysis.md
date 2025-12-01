@@ -31,9 +31,9 @@
 ### 2. Leaderboard Chip Fetches All Challenges
 
 **Problem**: `leaderboard-chip.tsx` (line 48) fetches:
-```typescript
+\`\`\`typescript
 `/api/challenges?status=${encodeURIComponent("pending,active,completed,cancelled")}`
-```
+\`\`\`
 
 This fetches **ALL** challenges when it only needs:
 - One active challenge (if exists)
@@ -51,9 +51,9 @@ This fetches **ALL** challenges when it only needs:
 ### 4. Challenge Completion Polling
 
 **Problem**: `blackjack-game.tsx` (line 507) polls challenge completion every 30 seconds:
-```typescript
+\`\`\`typescript
 const interval = setInterval(checkChallengeCompletion, 30000)
-```
+\`\`\`
 
 This could be optimized to:
 - Only poll when challenge is close to expiring
@@ -126,4 +126,3 @@ If all optimizations are implemented:
 3. **Medium Impact, Low Effort**: Reduce polling frequency (Priority 3)
 4. **Medium Impact, Medium Effort**: Better caching (Priority 4)
 5. **High Impact, High Effort**: Event-driven architecture (Priority 5)
-

@@ -15,9 +15,6 @@ export async function GET() {
   }
 
   try {
-    // Optimized with composite indexes:
-    // - idx_challenges_challenger_status_created: for challenger queries with status filter
-    // - idx_challenges_challenged_status_created: for challenged queries with status filter
     const { data: challenge, error } = await supabase
       .from("challenges")
       .select("*")
@@ -26,7 +23,7 @@ export async function GET() {
       .maybeSingle()
 
     if (error) {
-      console.error("[v0] Active challenge fetch error:", error)
+      console.error("Active challenge fetch error:", error)
       return NextResponse.json({ error: "Failed to fetch active challenge" }, { status: 500 })
     }
 
@@ -34,14 +31,13 @@ export async function GET() {
       return NextResponse.json({ challenge: null })
     }
 
-    // Fetch user profiles
     const { data: profiles, error: profilesError } = await supabase
       .from("user_profiles")
       .select("id, display_name")
       .in("id", [challenge.challenger_id, challenge.challenged_id])
 
     if (profilesError) {
-      console.error("[v0] User profiles fetch error:", profilesError)
+      console.error("User profiles fetch error:", profilesError)
     }
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
@@ -49,7 +45,7 @@ export async function GET() {
     const formatted = formatChallengeResponse(challenge as ChallengeRecord, profilesMap)
     return NextResponse.json({ challenge: formatted })
   } catch (err) {
-    console.error("[v0] Active challenge error:", err)
+    console.error("Active challenge error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -38,10 +38,13 @@ DECLARE
   v_user_stats RECORD;
 BEGIN
   -- Get user's stats
-  SELECT total_money, level
+  SELECT gs.total_money, gs.level
   INTO v_user_stats
-  FROM public.game_stats
-  WHERE user_id = p_user_id;
+  FROM public.game_stats gs
+  WHERE gs.user_id = p_user_id
+    AND EXISTS (
+      SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+    );
   
   IF NOT FOUND THEN
     RETURN NULL;
@@ -55,22 +58,28 @@ BEGIN
       -- Friends scope with balance metric
       SELECT COUNT(*) + 1
       INTO v_rank
-      FROM public.game_stats
-      WHERE user_id = ANY(p_friend_ids)
+      FROM public.game_stats gs
+      WHERE gs.user_id = ANY(p_friend_ids)
+        AND EXISTS (
+          SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+        )
         AND (
-          total_money > v_user_stats.total_money OR
-          (total_money = v_user_stats.total_money AND level > v_user_stats.level) OR
-          (total_money = v_user_stats.total_money AND level = v_user_stats.level AND user_id < p_user_id)
+          gs.total_money > v_user_stats.total_money OR
+          (gs.total_money = v_user_stats.total_money AND gs.level > v_user_stats.level) OR
+          (gs.total_money = v_user_stats.total_money AND gs.level = v_user_stats.level AND gs.user_id < p_user_id)
         );
     ELSE
-      -- Global scope with balance metric
+      -- Global scope with balance metric, excluding rows without profiles
       SELECT COUNT(*) + 1
       INTO v_rank
-      FROM public.game_stats
-      WHERE (
-        total_money > v_user_stats.total_money OR
-        (total_money = v_user_stats.total_money AND level > v_user_stats.level) OR
-        (total_money = v_user_stats.total_money AND level = v_user_stats.level AND user_id < p_user_id)
+      FROM public.game_stats gs
+      WHERE EXISTS (
+        SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+      )
+      AND (
+        gs.total_money > v_user_stats.total_money OR
+        (gs.total_money = v_user_stats.total_money AND gs.level > v_user_stats.level) OR
+        (gs.total_money = v_user_stats.total_money AND gs.level = v_user_stats.level AND gs.user_id < p_user_id)
       );
     END IF;
   ELSE
@@ -79,22 +88,28 @@ BEGIN
       -- Friends scope with level metric
       SELECT COUNT(*) + 1
       INTO v_rank
-      FROM public.game_stats
-      WHERE user_id = ANY(p_friend_ids)
+      FROM public.game_stats gs
+      WHERE gs.user_id = ANY(p_friend_ids)
+        AND EXISTS (
+          SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+        )
         AND (
-          level > v_user_stats.level OR
-          (level = v_user_stats.level AND total_money > v_user_stats.total_money) OR
-          (level = v_user_stats.level AND total_money = v_user_stats.total_money AND user_id < p_user_id)
+          gs.level > v_user_stats.level OR
+          (gs.level = v_user_stats.level AND gs.total_money > v_user_stats.total_money) OR
+          (gs.level = v_user_stats.level AND gs.total_money = v_user_stats.total_money AND gs.user_id < p_user_id)
         );
     ELSE
-      -- Global scope with level metric
+      -- Global scope with level metric, excluding rows without profiles
       SELECT COUNT(*) + 1
       INTO v_rank
-      FROM public.game_stats
-      WHERE (
-        level > v_user_stats.level OR
-        (level = v_user_stats.level AND total_money > v_user_stats.total_money) OR
-        (level = v_user_stats.level AND total_money = v_user_stats.total_money AND user_id < p_user_id)
+      FROM public.game_stats gs
+      WHERE EXISTS (
+        SELECT 1 FROM public.user_profiles up WHERE up.id = gs.user_id
+      )
+      AND (
+        gs.level > v_user_stats.level OR
+        (gs.level = v_user_stats.level AND gs.total_money > v_user_stats.total_money) OR
+        (gs.level = v_user_stats.level AND gs.total_money = v_user_stats.total_money AND gs.user_id < p_user_id)
       );
     END IF;
   END IF;
@@ -111,4 +126,3 @@ COMMENT ON FUNCTION public.calculate_user_rank IS
    Leverages composite indexes for optimal performance at scale.';
 
 COMMIT;
-

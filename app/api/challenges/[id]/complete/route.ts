@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { finalizeChallenge } from "@/lib/challenge-finalize"
-import { type ChallengeRecord } from "@/lib/challenge-helpers"
+import type { ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
 
 // POST: Complete challenge (called when timer expires)
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (fetchError || !challenge) {
-      console.error("[v0] Challenge fetch error:", fetchError)
+      console.error("Challenge fetch error:", fetchError)
       return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
     }
 
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       isTie: result.isTie,
     })
   } catch (err) {
-    console.error("[v0] Challenge completion error:", err)
+    console.error("Challenge completion error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

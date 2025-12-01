@@ -52,6 +52,7 @@ Blackjack Pro is an educational web application designed to teach optimal blackj
 - **Balance Management**: Virtual money system with betting controls
 - **Round Summaries**: Periodic performance reviews every 30 rounds
 - **Level Up Celebrations**: Animated level-up screens with achievements
+- **Leaderboard & Rank**: Global/friends leaderboards with balance/level metrics, consistent tie-breakers, and rank chip/modal with loading states
 
 ### UI/UX
 - **Responsive Design**: Mobile-first design with touch support
@@ -121,17 +122,10 @@ NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000/auth/callback
 
 ### 4. Database Setup
 
-Run the SQL migration scripts in your Supabase SQL Editor in order:
-
-1. **001_create_user_profiles.sql**: Creates user profiles and game stats tables
-2. **002_add_total_winnings_field.sql**: Adds total winnings tracking
-3. **003_add_drill_tier_column.sql**: Adds drill tier progression
-
-These scripts will:
-- Create `user_profiles` table
-- Create `game_stats` table with all statistics fields
-- Set up Row Level Security policies
-- Create trigger for auto-creating profiles on signup
+Run the SQL migration scripts in your Supabase SQL Editor in order (see `scripts/` for the full list). Key leaderboard/rank migrations:
+- `20241203000001_add_leaderboard_composite_indexes.sql`: composite indexes for leaderboard ordering.
+- `20241203000002_add_leaderboard_rank_function.sql`: initial rank function.
+- `20241203000003_enforce_unique_game_stats_user.sql`: unique constraint on `game_stats.user_id` and updated rank function (requires `user_profiles`).
 
 ### 5. Run Development Server
 
@@ -162,6 +156,7 @@ blackjack-pro/
 │   ├── playing-card.tsx     # Card display component
 │   ├── stats-panel.tsx     # Statistics display
 │   └── theme-provider.tsx  # Theme context
+│   └── leaderboard-*       # Leaderboard chip/modal components
 │
 ├── lib/                     # Core logic and utilities
 │   ├── supabase/           # Supabase client configuration
@@ -176,10 +171,7 @@ blackjack-pro/
 │   ├── settlement.ts       # Payout calculations
 │   └── utils.ts            # General utilities
 │
-├── scripts/                # Database migration scripts
-│   ├── 001_create_user_profiles.sql
-│   ├── 002_add_total_winnings_field.sql
-│   └── 003_add_drill_tier_column.sql
+├── scripts/                # Database migration scripts (see filenames for order)
 │
 ├── middleware.ts           # Next.js middleware for auth
 ├── next.config.mjs        # Next.js configuration

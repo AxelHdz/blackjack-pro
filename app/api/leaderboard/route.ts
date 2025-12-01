@@ -1,6 +1,25 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
+type LeaderboardRow = {
+  user_id: string
+  total_money: number
+  level: number
+  user_profiles: {
+    display_name: string | null
+    avatar_url: string | null
+  }[]
+}
+
+type LeaderboardEntry = {
+  userId: string
+  name: string
+  avatarUrl: string | null
+  currentBalance: number
+  level: number
+  rank: number
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
 
@@ -19,8 +38,6 @@ export async function GET(request: NextRequest) {
   const limit = 50
 
   try {
-    console.log("[v0] Leaderboard query - scope:", scope, "metric:", metric)
-
     let query = supabase.from("game_stats").select(`
         user_id,
         total_money,
@@ -35,19 +52,13 @@ export async function GET(request: NextRequest) {
         .select("friend_user_id")
         .eq("user_id", user.id)
 
-      console.log("[v0] Friends data:", friendsData)
-      console.log("[v0] Friends error:", friendsError)
+      if (friendsError) {
+        console.error("Friends fetch error:", friendsError)
+      }
 
       const friendIds = friendsData?.map((f) => f.friend_user_id) || []
       // Include user's own ID to see themselves in friends view
       friendIds.push(user.id)
-
-      console.log("[v0] Friend IDs to filter:", friendIds)
-
-      if (friendIds.length === 1) {
-        // Only the user themselves, no friends
-        console.log("[v0] No friends found, returning only user")
-      }
 
       query = query.in("user_id", friendIds)
     }
@@ -72,16 +83,16 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error("[v0] Leaderboard query error:", error)
+      console.error("Leaderboard query error:", error)
       return NextResponse.json({ error: "Failed to fetch leaderboard" }, { status: 500 })
     }
 
     // Transform data to include rank
-    const entries =
-      data?.map((entry: any, index) => ({
+    const entries: LeaderboardEntry[] =
+      data?.map((entry: LeaderboardRow, index) => ({
         userId: entry.user_id,
-        name: entry.user_profiles?.display_name || `User ${entry.user_id.slice(-4)}`,
-        avatarUrl: entry.user_profiles?.avatar_url,
+        name: entry.user_profiles[0]?.display_name || `User ${entry.user_id.slice(-4)}`,
+        avatarUrl: entry.user_profiles[0]?.avatar_url ?? null,
         currentBalance: entry.total_money,
         level: entry.level,
         rank: (cursor ? Number.parseInt(cursor) : 0) + index + 1,
@@ -98,7 +109,7 @@ export async function GET(request: NextRequest) {
       },
     )
   } catch (err) {
-    console.error("[v0] Leaderboard error:", err)
+    console.error("Leaderboard error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

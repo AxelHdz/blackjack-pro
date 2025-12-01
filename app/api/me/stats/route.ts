@@ -2,6 +2,18 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createDeck, type Card as CardType } from "@/lib/card-utils"
 
+type LearningMode = "guided" | "practice" | "expert"
+
+type ModeStatsPayload = {
+  handsPlayed?: number
+  correctMoves?: number
+  totalMoves?: number
+  wins?: number
+  losses?: number
+}
+
+type ModeStats = Partial<Record<LearningMode, ModeStatsPayload>>
+
 type StatsPayload = {
   balance?: number
   totalWinnings?: number
@@ -15,8 +27,8 @@ type StatsPayload = {
   losses?: number
   drillTier?: number
   lastDrillCompletedAt?: string | null
-  modeStats?: any
-  learningMode?: string
+  modeStats?: ModeStats
+  learningMode?: LearningMode
   deck?: CardType[]
   activeChallenge?: boolean
 }
@@ -68,7 +80,7 @@ export async function GET() {
     const { data, error } = await supabase.from("game_stats").select("*").eq("user_id", user.id).maybeSingle()
 
     if (error && error.code !== "PGRST116") {
-      console.error("[v0] Failed to load stats:", error)
+      console.error("Failed to load stats:", error)
       return NextResponse.json({ error: "Failed to load stats" }, { status: 500 })
     }
 
@@ -82,7 +94,7 @@ export async function GET() {
         .single()
 
       if (insertError || !inserted) {
-        console.error("[v0] Failed to create default stats:", insertError)
+        console.error("Failed to create default stats:", insertError)
         return NextResponse.json({ error: "Failed to create stats" }, { status: 500 })
       }
 
@@ -91,7 +103,7 @@ export async function GET() {
 
     return NextResponse.json({ stats: data })
   } catch (err) {
-    console.error("[v0] Stats GET error:", err)
+    console.error("Stats GET error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -147,13 +159,13 @@ export async function POST(request: Request) {
       losses: Number.isFinite(losses) ? Math.floor(losses!) : undefined,
       drill_tier: Number.isFinite(drillTier) ? Math.floor(drillTier!) : undefined,
       last_drill_completed_at: lastDrillCompletedAt ? new Date(lastDrillCompletedAt).toISOString() : null,
-      last_play_mode: typeof learningMode === "string" ? learningMode : undefined,
+      last_play_mode: learningMode ?? undefined,
       updated_at: new Date().toISOString(),
       ...moneyFields,
     }
 
     if (modeStats) {
-      const applyMode = (prefix: string, mode?: Record<string, number | null | undefined>) => {
+      const applyMode = (prefix: string, mode?: ModeStatsPayload) => {
         if (!mode) return
         const setIfNumber = (field: string, value: number | null | undefined) => {
           if (typeof value === "number" && Number.isFinite(value)) {
@@ -181,13 +193,13 @@ export async function POST(request: Request) {
     const { error } = await supabase.from("game_stats").update(updates).eq("user_id", user.id)
 
     if (error) {
-      console.error("[v0] Failed to save stats:", error)
+      console.error("Failed to save stats:", error)
       return NextResponse.json({ error: "Failed to save stats" }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })
   } catch (err) {
-    console.error("[v0] Stats POST error:", err)
+    console.error("Stats POST error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

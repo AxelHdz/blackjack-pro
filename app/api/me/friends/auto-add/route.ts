@@ -5,7 +5,6 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient()
 
-    // Get current user
     const {
       data: { user },
       error: authError,
@@ -46,7 +45,7 @@ export async function POST(request: Request) {
     })
 
     if (functionError) {
-      console.error("[v0] Error creating bidirectional friendship:", functionError)
+      console.error("Error creating bidirectional friendship:", functionError)
       // Fallback to direct insert (only creates one direction if RLS blocks the second)
       const { error: friendship1Error } = await supabase.from("friends").insert({
         user_id: user.id,
@@ -55,19 +54,17 @@ export async function POST(request: Request) {
       })
 
       if (friendship1Error) {
-        console.error("[v0] Fallback insert also failed:", friendship1Error)
+        console.error("Fallback insert also failed:", friendship1Error)
         return NextResponse.json({ error: "Failed to create friendship" }, { status: 500 })
       }
     }
-
-    console.log("[v0] friend_added_via_referral", { referrerId: friendUserId, newFriendId: user.id })
 
     return NextResponse.json({
       success: true,
       message: "Friend added successfully",
     })
   } catch (error) {
-    console.error("[v0] Auto-add friend error:", error)
+    console.error("Auto-add friend error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

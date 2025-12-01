@@ -34,4 +34,3 @@ CREATE INDEX IF NOT EXISTS idx_game_stats_level_ranking
 -- 4. Match the exact sort order used in application queries for optimal performance
 
 COMMIT;
-

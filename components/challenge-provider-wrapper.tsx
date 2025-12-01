@@ -15,4 +15,3 @@ export function ChallengeProviderWrapper({ userId, friendReferralId }: Challenge
     </ChallengeProvider>
   )
 }
-

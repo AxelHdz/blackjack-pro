@@ -52,7 +52,7 @@ export function UsernameEditor({ initialUsername, onUpdate }: UsernameEditorProp
       onUpdate(data.displayName)
       setIsEditing(false)
     } catch (error) {
-      console.error("[v0] Failed to update username:", error)
+      console.error("Failed to update username:", error)
       toast({
         title: "Error",
         description: "Failed to update username",

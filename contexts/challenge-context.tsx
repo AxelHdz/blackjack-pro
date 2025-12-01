@@ -1,6 +1,7 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react"
+import type { ReactNode } from "react"
 import { type Challenge } from "@/types/challenge"
 import { fetchCached } from "@/lib/fetch-cache"
 
@@ -43,7 +44,7 @@ export function ChallengeProvider({ children, userId }: ChallengeProviderProps) 
         setActiveChallengeState(null)
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch active challenge:", error)
+      console.error("Failed to fetch active challenge:", error)
       setActiveChallengeState(null)
     } finally {
       setIsLoading(false)
@@ -124,4 +125,3 @@ export function useChallenge() {
   }
   return context
 }
-

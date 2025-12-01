@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { Swords, Clock, DollarSign, Trophy, Flag } from "lucide-react"
-import { type Challenge } from "@/types/challenge"
+import type { Challenge } from "@/types/challenge"
 
 type ChallengeModalMode = "create" | "accept" | "counter" | "view" | "results"
 
@@ -110,10 +110,6 @@ export function ChallengeModal({
 
   const [mode, setMode] = useState<ChallengeModalMode>(derivedMode)
   const [modalCountdown, setModalCountdown] = useState<number | null>(null)
-
-  useEffect(() => {
-    setLiveChallenge(challenge ?? null)
-  }, [challenge])
 
   useEffect(() => {
     if (!open) {
@@ -252,7 +248,7 @@ export function ChallengeModal({
       onChallengeCreated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to create challenge:", error)
+      console.error("Failed to create challenge:", error)
       toast({ title: "Error", description: "Failed to create challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -294,7 +290,7 @@ export function ChallengeModal({
       onChallengeUpdated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to accept challenge:", error)
+      console.error("Failed to accept challenge:", error)
       toast({ title: "Error", description: "Failed to accept challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -342,7 +338,7 @@ export function ChallengeModal({
       onChallengeUpdated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to counter-offer:", error)
+      console.error("Failed to counter-offer:", error)
       toast({ title: "Error", description: "Failed to send counter-offer", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -373,7 +369,7 @@ export function ChallengeModal({
       onChallengeUpdated?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to cancel challenge:", error)
+      console.error("Failed to cancel challenge:", error)
       toast({ title: "Error", description: "Failed to cancel challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -383,14 +379,11 @@ export function ChallengeModal({
   const handleEndChallenge = async () => {
     if (!currentChallenge?.id) return
 
-    console.log("[v0] Archiving challenge with ID:", currentChallenge.id, "status:", currentChallenge.status)
-
     // Check if user has already archived this challenge
     const isChallenger = currentChallenge.challengerId === userId
     const userAlreadyArchived = isChallenger ? currentChallenge.challengerArchived : currentChallenge.challengedArchived
 
     if (userAlreadyArchived) {
-      console.log("[v0] Challenge already archived by user, just closing modal")
       onChallengeEnded?.()
       onOpenChange(false)
       return
@@ -398,27 +391,22 @@ export function ChallengeModal({
 
     setLoading(true)
     try {
-      console.log("[v0] Making fetch request to:", `/api/challenges/${currentChallenge.id}/archive`)
-
       const response = await fetch(`/api/challenges/${currentChallenge.id}/archive`, {
         method: "POST",
       })
 
-      console.log("[v0] Archive response status:", response.status, "ok:", response.ok)
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
-        console.error("[v0] Archive response error data:", errorData)
+        console.error("Archive response error data:", errorData)
         throw new Error(errorData.error || "Failed to archive challenge")
       }
 
       const responseData = await response.json().catch(() => ({}))
-      console.log("[v0] Archive response success data:", responseData)
 
       onChallengeEnded?.()
       onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to archive challenge:", error)
+      console.error("Failed to archive challenge:", error)
       toast({
         title: "Error",
         description: "Failed to archive challenge. Please try again.",
@@ -450,11 +438,8 @@ export function ChallengeModal({
       })
       onChallengeEnded?.()
       onOpenChange(false)
-
-      onChallengeUpdated?.()
-      onOpenChange(false)
     } catch (error) {
-      console.error("[v0] Failed to forfeit challenge:", error)
+      console.error("Failed to forfeit challenge:", error)
       toast({ title: "Error", description: "Failed to forfeit challenge", variant: "destructive" })
     } finally {
       setLoading(false)
@@ -479,10 +464,6 @@ export function ChallengeModal({
       return "Archive"
     }
 
-    // Debug: log challenge status if it exists but isn't completed
-    if (challenge && challenge.status !== "completed") {
-      console.log("[ChallengeModal] Challenge status:", challenge.status, "derivedMode:", derivedMode)
-    }
     return "Close"
   }
 
@@ -640,15 +621,11 @@ export function ChallengeModal({
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-muted-foreground">{c.challengerName}</p>
-            <p className={`font-semibold ${challengerHighlight}`}>
-              {formatCredits(c.challengerCreditBalance)} credits
-            </p>
+            <p className={`font-semibold ${challengerHighlight}`}>{formatCredits(c.challengerCreditBalance)} credits</p>
           </div>
           <div className="text-right">
             <p className="text-muted-foreground">{c.challengedName}</p>
-            <p className={`font-semibold ${challengedHighlight}`}>
-              {formatCredits(c.challengedCreditBalance)} credits
-            </p>
+            <p className={`font-semibold ${challengedHighlight}`}>{formatCredits(c.challengedCreditBalance)} credits</p>
           </div>
         </div>
       </div>
@@ -816,7 +793,7 @@ export function ChallengeModal({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs"
+                      className="h-7 text-xs bg-transparent"
                       onClick={() => {
                         const maxWager = Math.min(userBalance, challengedUserBalance)
                         setWagerAmount(maxWager.toString())
@@ -842,8 +819,7 @@ export function ChallengeModal({
                     className="flex-1"
                     onClick={() => setDurationMinutes(5)}
                   >
-                    <Clock className="h-4 w-4 mr-2" />
-                    5 min
+                    <Clock className="h-4 w-4 mr-2" />5 min
                   </Button>
                   <Button
                     type="button"
@@ -868,12 +844,8 @@ export function ChallengeModal({
 
         <div className="flex flex-wrap gap-2">
           <Button
-            variant={(isCompletedView || isCancelledView) ? "default" : "outline"}
-            onClick={
-              (isCompletedView || isCancelledView)
-                ? handleEndChallenge
-                : () => onOpenChange(false)
-            }
+            variant={isCompletedView || isCancelledView ? "default" : "outline"}
+            onClick={isCompletedView || isCancelledView ? handleEndChallenge : () => onOpenChange(false)}
             className="flex-1"
             disabled={loading}
           >
@@ -911,13 +883,7 @@ export function ChallengeModal({
           )}
 
           {isActiveChallenge && (
-            <Button
-              type="button"
-              variant="destructive"
-              className="flex-1"
-              onClick={handleForfeit}
-              disabled={loading}
-            >
+            <Button type="button" variant="destructive" className="flex-1" onClick={handleForfeit} disabled={loading}>
               <Flag className="mr-2 h-4 w-4" />
               Forfeit (Concede)
             </Button>

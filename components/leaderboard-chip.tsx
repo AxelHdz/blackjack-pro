@@ -1,11 +1,12 @@
 "use client"
 
-import { Trophy } from "lucide-react"
+import { Loader2, Trophy } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
 import { ChallengeChip } from "@/components/challenge-chip"
 import { ChallengeModal } from "@/components/challenge-modal"
 import { type Challenge } from "@/types/challenge"
 import { fetchCached } from "@/lib/fetch-cache"
+import { useRank } from "@/hooks/use-rank"
 
 // Module-level guard to prevent duplicate fetches in React Strict Mode
 let hasInitialFetchRun = false
@@ -18,8 +19,7 @@ interface LeaderboardChipProps {
 }
 
 export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardChipProps) {
-  const [rank, setRank] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { rank, loading } = useRank({ metric, scope })
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [showChallengeModal, setShowChallengeModal] = useState(false)
   const [userBalance, setUserBalance] = useState<number | null>(null)
@@ -28,28 +28,6 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
   const dismissChallenge = (id: string | null) => {
     dismissedChallengeIdRef.current = id
   }
-
-  const fetchRank = useCallback(async () => {
-    try {
-      setLoading(true)
-      const url = `/api/me/rank?scope=${scope}&metric=${metric}`
-      const res = await fetch(url, { cache: "no-store" })
-      const data = await res.json().catch(() => ({}))
-
-      if (!res.ok) {
-        console.error("[v0] Rank request failed:", { status: res.status, body: data })
-        setRank(null)
-        return
-      }
-
-      setRank(typeof data.rank === "number" ? data.rank : null)
-    } catch (error) {
-      console.error("[v0] Failed to fetch rank:", error)
-      setRank(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [metric, scope])
 
   const fetchChallenge = useCallback(async () => {
     try {
@@ -102,7 +80,7 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
       // No challenge found
       setChallenge(null)
     } catch (error) {
-      console.error("[v0] Failed to fetch challenge:", error)
+      console.error("Failed to fetch challenge:", error)
       setChallenge(null)
     }
   }, [userId])
@@ -114,7 +92,7 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
         setUserBalance(data.stats.total_money)
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch user balance:", error)
+      console.error("Failed to fetch user balance:", error)
     }
   }, [])
 
@@ -123,7 +101,6 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     if (hasInitialFetchRun) return
     hasInitialFetchRun = true
     
-    void fetchRank()
     void fetchChallenge()
     void fetchUserBalance()
     
@@ -150,14 +127,6 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     window.addEventListener("stats:update", handleStatsUpdate)
     return () => window.removeEventListener("stats:update", handleStatsUpdate)
   }, [fetchUserBalance])
-
-  useEffect(() => {
-    const handleRankRefresh = () => {
-      void fetchRank()
-    }
-    window.addEventListener("rank:refresh", handleRankRefresh)
-    return () => window.removeEventListener("rank:refresh", handleRankRefresh)
-  }, [fetchRank])
 
   // Smart polling: only when page becomes visible (to detect new challenges)
   // Challenge updates are handled via the challenge:progress event system
@@ -200,11 +169,6 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
     }
   }
 
-  // Re-fetch rank when metric/scope toggles
-  useEffect(() => {
-    void fetchRank()
-  }, [metric, scope, fetchRank])
-
   return (
     <div className="flex flex-col gap-2 items-center">
       <button
@@ -223,7 +187,16 @@ export function LeaderboardChip({ onClick, metric, scope, userId }: LeaderboardC
                   : "text-primary"
           }`}
         />
-        <span className="text-sm font-medium text-foreground">Leaderboard · #{loading ? "..." : rank || "—"}</span>
+        <span className="text-sm font-medium text-foreground flex items-center gap-2">
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" />
+              <span aria-live="polite">Loading…</span>
+            </>
+          ) : (
+            <>Leaderboard · #{rank || "—"}</>
+          )}
+        </span>
       </button>
       {challenge && (
         <ChallengeChip challenge={challenge} onClick={handleChallengeChipClick} userId={userId} />

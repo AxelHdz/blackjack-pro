@@ -20,7 +20,7 @@ export async function GET() {
       .single()
 
     if (error) {
-      console.error("[v0] Failed to fetch profile:", error)
+      console.error("Failed to fetch profile:", error)
       return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 })
     }
 
@@ -32,12 +32,12 @@ export async function GET() {
       .single()
 
     if (statsError) {
-      console.error("[v0] Failed to fetch stats:", statsError)
+      console.error("Failed to fetch stats:", statsError)
     }
 
     return NextResponse.json({ profile, stats: stats ? { total_money: stats.total_money } : null })
   } catch (error) {
-    console.error("[v0] Error in profile GET:", error)
+    console.error("Error in profile GET:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
@@ -71,15 +71,13 @@ export async function PATCH(request: Request) {
       .eq("id", user.id)
 
     if (updateError) {
-      console.error("[v0] Failed to update profile:", updateError)
+      console.error("Failed to update profile:", updateError)
       return NextResponse.json({ error: "Failed to update username" }, { status: 500 })
     }
 
-    console.log("[v0] username_updated", { userId: user.id, newName: trimmedName })
-
     return NextResponse.json({ message: "Username updated successfully", displayName: trimmedName })
   } catch (error) {
-    console.error("[v0] Error in profile PATCH:", error)
+    console.error("Error in profile PATCH:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

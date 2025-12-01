@@ -2,6 +2,18 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createDeck, type Card as CardType } from "@/lib/card-utils"
 
+type LearningMode = "guided" | "practice" | "expert"
+
+type ModeStatsPayload = {
+  handsPlayed?: number
+  correctMoves?: number
+  totalMoves?: number
+  wins?: number
+  losses?: number
+}
+
+type ModeStats = Partial<Record<LearningMode, ModeStatsPayload>>
+
 type StatsPayload = {
   balance?: number
   totalWinnings?: number
@@ -15,8 +27,8 @@ type StatsPayload = {
   losses?: number
   drillTier?: number
   lastDrillCompletedAt?: string | null
-  modeStats?: any
-  learningMode?: string
+  modeStats?: ModeStats
+  learningMode?: LearningMode
   deck?: CardType[]
   activeChallenge?: boolean
 }
@@ -147,13 +159,13 @@ export async function POST(request: Request) {
       losses: Number.isFinite(losses) ? Math.floor(losses!) : undefined,
       drill_tier: Number.isFinite(drillTier) ? Math.floor(drillTier!) : undefined,
       last_drill_completed_at: lastDrillCompletedAt ? new Date(lastDrillCompletedAt).toISOString() : null,
-      last_play_mode: typeof learningMode === "string" ? learningMode : undefined,
+      last_play_mode: learningMode ?? undefined,
       updated_at: new Date().toISOString(),
       ...moneyFields,
     }
 
     if (modeStats) {
-      const applyMode = (prefix: string, mode?: Record<string, number | null | undefined>) => {
+      const applyMode = (prefix: string, mode?: ModeStatsPayload) => {
         if (!mode) return
         const setIfNumber = (field: string, value: number | null | undefined) => {
           if (typeof value === "number" && Number.isFinite(value)) {

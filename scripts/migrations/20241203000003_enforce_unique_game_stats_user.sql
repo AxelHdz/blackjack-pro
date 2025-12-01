@@ -1,28 +1,13 @@
--- 20241203000002_add_leaderboard_rank_function.sql
--- Add database function to efficiently calculate user rank using window functions
--- 
--- This function uses window functions to calculate rank, which is much more efficient
--- than counting rows with complex OR conditions. It leverages the composite indexes
--- created in the previous migration for optimal performance.
+-- 20241203000003_enforce_unique_game_stats_user.sql
+-- Enforce a single stats row per user and harden rank calculation against duplicates
 
 BEGIN;
 
--- ============================================================================
--- RANK CALCULATION FUNCTION
--- ============================================================================
+-- Ensure one stats row per user
+ALTER TABLE public.game_stats
+  ADD CONSTRAINT game_stats_user_unique UNIQUE (user_id);
 
--- Function to calculate user rank for leaderboard
--- Parameters:
---   p_user_id: UUID of the user to calculate rank for
---   p_scope: 'global' or 'friends' 
---   p_metric: 'balance' or 'level'
---   p_friend_ids: Array of friend user IDs (only used when scope = 'friends')
---
--- Returns: Integer rank (1-based, where 1 is the best rank)
---
--- This function uses the composite indexes to efficiently calculate rank.
--- The query pattern is optimized to leverage index scans instead of sequential scans.
-
+-- Recreate rank function to ignore any existing duplicates and only count users with profiles
 CREATE OR REPLACE FUNCTION public.calculate_user_rank(
   p_user_id UUID,
   p_scope TEXT DEFAULT 'global',
@@ -37,7 +22,7 @@ DECLARE
   v_rank INTEGER;
   v_user_stats RECORD;
 BEGIN
-  -- Get user's stats
+  -- Get user's stats (only if profile exists)
   SELECT gs.total_money, gs.level
   INTO v_user_stats
   FROM public.game_stats gs
@@ -50,13 +35,10 @@ BEGIN
     RETURN NULL;
   END IF;
   
-  -- Calculate rank based on metric
-  -- Use the same OR logic as before, but the composite indexes will help
-  -- the query planner choose index scans over sequential scans
+  -- Calculate rank based on metric, counting distinct users with profiles
   IF p_metric = 'balance' THEN
     IF p_scope = 'friends' AND array_length(p_friend_ids, 1) > 0 THEN
-      -- Friends scope with balance metric
-      SELECT COUNT(*) + 1
+      SELECT COUNT(DISTINCT gs.user_id) + 1
       INTO v_rank
       FROM public.game_stats gs
       WHERE gs.user_id = ANY(p_friend_ids)
@@ -69,8 +51,7 @@ BEGIN
           (gs.total_money = v_user_stats.total_money AND gs.level = v_user_stats.level AND gs.user_id < p_user_id)
         );
     ELSE
-      -- Global scope with balance metric, excluding rows without profiles
-      SELECT COUNT(*) + 1
+      SELECT COUNT(DISTINCT gs.user_id) + 1
       INTO v_rank
       FROM public.game_stats gs
       WHERE EXISTS (
@@ -85,8 +66,7 @@ BEGIN
   ELSE
     -- Level metric
     IF p_scope = 'friends' AND array_length(p_friend_ids, 1) > 0 THEN
-      -- Friends scope with level metric
-      SELECT COUNT(*) + 1
+      SELECT COUNT(DISTINCT gs.user_id) + 1
       INTO v_rank
       FROM public.game_stats gs
       WHERE gs.user_id = ANY(p_friend_ids)
@@ -99,8 +79,7 @@ BEGIN
           (gs.level = v_user_stats.level AND gs.total_money = v_user_stats.total_money AND gs.user_id < p_user_id)
         );
     ELSE
-      -- Global scope with level metric, excluding rows without profiles
-      SELECT COUNT(*) + 1
+      SELECT COUNT(DISTINCT gs.user_id) + 1
       INTO v_rank
       FROM public.game_stats gs
       WHERE EXISTS (
@@ -117,12 +96,5 @@ BEGIN
   RETURN v_rank;
 END;
 $$;
-
--- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION public.calculate_user_rank(UUID, TEXT, TEXT, UUID[]) TO authenticated;
-
-COMMENT ON FUNCTION public.calculate_user_rank IS 
-  'Efficiently calculates user rank for leaderboard using window functions. 
-   Leverages composite indexes for optimal performance at scale.';
 
 COMMIT;

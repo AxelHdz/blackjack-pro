@@ -28,6 +28,22 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Guard against duplicate stats rows for this user
+    const { count: statsCount, error: statsCountError } = await supabase
+      .from("game_stats")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+
+    if (statsCountError) {
+      console.error("Failed to count stats rows:", statsCountError)
+      return NextResponse.json({ error: "Failed to load stats" }, { status: 500 })
+    }
+
+    if ((statsCount || 0) > 1) {
+      console.error("Duplicate game_stats rows detected for user:", user.id, "count:", statsCount)
+      return NextResponse.json({ error: "Duplicate stats detected; please contact support" }, { status: 500 })
+    }
+
     // Verify stats exist so we can differentiate "no stats" from server errors
     const { data: stats, error: statsError } = await supabase
       .from("game_stats")

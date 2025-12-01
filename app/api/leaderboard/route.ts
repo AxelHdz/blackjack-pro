@@ -1,6 +1,25 @@
 import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
+type LeaderboardRow = {
+  user_id: string
+  total_money: number
+  level: number
+  user_profiles: {
+    display_name: string | null
+    avatar_url: string | null
+  } | null
+}
+
+type LeaderboardEntry = {
+  userId: string
+  name: string
+  avatarUrl: string | null
+  currentBalance: number
+  level: number
+  rank: number
+}
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
 
@@ -69,11 +88,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform data to include rank
-    const entries =
-      data?.map((entry: any, index) => ({
+    const entries: LeaderboardEntry[] =
+      data?.map((entry: LeaderboardRow, index) => ({
         userId: entry.user_id,
         name: entry.user_profiles?.display_name || `User ${entry.user_id.slice(-4)}`,
-        avatarUrl: entry.user_profiles?.avatar_url,
+        avatarUrl: entry.user_profiles?.avatar_url ?? null,
         currentBalance: entry.total_money,
         level: entry.level,
         rank: (cursor ? Number.parseInt(cursor) : 0) + index + 1,

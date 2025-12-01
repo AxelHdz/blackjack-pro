@@ -468,8 +468,16 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
       }
 
       if (data.deck && Array.isArray(data.deck) && data.deck.length > 0) {
-        const isValidDeck = data.deck.every((card: any) => card && typeof card === "object" && card.suit && card.rank)
-        updateEngine({ deck: isValidDeck ? (data.deck as any) : createDeck() })
+        const isValidDeck = data.deck.every(
+          (card): card is CardType =>
+            card &&
+            typeof card === "object" &&
+            "suit" in card &&
+            "rank" in card &&
+            typeof card.suit === "string" &&
+            typeof card.rank === "string",
+        )
+        updateEngine({ deck: isValidDeck ? data.deck : createDeck() })
       } else {
         updateEngine({ deck: createDeck() })
       }
@@ -948,9 +956,6 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         addExperience(resolution.xpGain)
       }
 
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new CustomEvent("rank:refresh"))
-      }
     },
     [addExperience, learningMode, openModeSelector],
   )

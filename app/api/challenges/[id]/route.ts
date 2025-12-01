@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server"
 import { formatChallengeResponse, deriveAwaitingUserId, type ChallengeRecord } from "@/lib/challenge-helpers"
 import { type NextRequest, NextResponse } from "next/server"
+import type { PostgrestSingleResponse, SupabaseClient } from "@supabase/supabase-js"
 
-const fetchChallengeById = (supabase: any, id: string) => {
-  const query = supabase.from("challenges").select("*").eq("id", id)
-  return query.maybeSingle()
-}
+const fetchChallengeById = (
+  supabase: SupabaseClient,
+  id: string,
+): Promise<PostgrestSingleResponse<ChallengeRecord>> =>
+  supabase.from<ChallengeRecord>("challenges").select("*").eq("id", id).maybeSingle()
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
-    return NextResponse.json(formatChallengeResponse(challenge as ChallengeRecord, profilesMap))
+    return NextResponse.json(formatChallengeResponse(challenge, profilesMap))
   } catch (err) {
     console.error("Challenge fetch error:", err)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -71,7 +73,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const isChallenger = challenge.challenger_id === user.id
     const isChallenged = challenge.challenged_id === user.id
-    const awaitingUserId = deriveAwaitingUserId(challenge as ChallengeRecord)
+    const awaitingUserId = deriveAwaitingUserId(challenge)
 
     if (!isChallenger && !isChallenged) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
@@ -124,7 +126,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const challengeCredits = 500
 
       const { data: updatedChallenge, error: updateError } = await supabase
-        .from("challenges")
+        .from<ChallengeRecord>("challenges")
         .update({
           status: "active",
           challenger_balance_start: challengerStats.total_money,
@@ -219,7 +221,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       const { data: updatedChallenge, error: updateError } = await supabase
-        .from("challenges")
+        .from<ChallengeRecord>("challenges")
         .update({
           wager_amount: wagerAmount,
           duration_minutes: durationMinutes,
@@ -313,7 +315,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const nowIso = new Date().toISOString()
 
     const { data: cancelledChallenge, error: cancelError } = await supabase
-      .from("challenges")
+      .from<ChallengeRecord>("challenges")
       .update({
         status: "cancelled",
         challenger_balance_end: refundedBalance,
@@ -337,7 +339,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const profilesMap = new Map(profiles?.map((profile) => [profile.id, profile]) || [])
 
     return NextResponse.json({
-      challenge: formatChallengeResponse(cancelledChallenge as ChallengeRecord, profilesMap),
+      challenge: formatChallengeResponse(cancelledChallenge, profilesMap),
     })
   } catch (err) {
     console.error("Challenge cancellation error:", err)

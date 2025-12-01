@@ -136,10 +136,6 @@ export function useStatsPersistence({
 
   const save = useCallback(async () => {
     if (!statsLoaded || deps.balance === null) return
-    if (!hasHydratedRef.current) {
-      hasHydratedRef.current = true
-      return
-    }
 
     const signature = getSignature()
     const now = Date.now()
@@ -168,6 +164,9 @@ export function useStatsPersistence({
         await persistStats(payload)
         lastSaveRef.current = { signature: finalSignature, at: Date.now() }
         coolingRef.current = true
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("rank:refresh"))
+        }
         setTimeout(() => {
           coolingRef.current = false
         }, 500)

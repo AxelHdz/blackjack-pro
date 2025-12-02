@@ -16,7 +16,6 @@ function getDealerKey(card: Card): DealerKey {
   return Number.parseInt(card.rank) as DealerKey
 }
 
-// Check if hand is a pair
 function isPair(playerHand: Card[]): boolean {
   if (playerHand.length !== 2) return false
   const v1 = getCardValue(playerHand[0])

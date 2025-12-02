@@ -198,14 +198,13 @@ function advanceToNextHand(state: EngineGameState, hands: PlayerHandState[]) {
         viewHandIndex: nextHandIndex,
         message: "Playing next hand...",
       },
-      resolution: null as RoundResolution | null,
+      resolution: null,
     }
   }
 
-  // All player hands are done; dealer needs to act unless already finished
   return {
     state: { ...state, hands, gameState: "dealer" as const },
-    resolution: null as RoundResolution | null,
+    resolution: null,
   }
 }
 
@@ -250,7 +249,6 @@ function handleHit(container: EngineContainer): EngineContainer {
       }
     }
 
-    // Last hand bust but another hand is live; resolve against dealer immediately
     const { dealerHand: finalDealer, deck: finalDeck } = playDealerToEnd(state.dealerHand, newDeck)
     const resolution = resolveRoundImmediate(updatedHands, finalDealer, state.roundLevel)
     return {

@@ -455,8 +455,6 @@ export function animateDealerPlay({
     steps.push({ dealerHand: dealer, deck })
   }
 
-  const hasMultipleHands = state.hands.length > 1
-
   if (steps.length === 0) {
     const resolution = resolveHands({ hands: state.hands, dealerHand: state.dealerHand, level: state.roundLevel })
 

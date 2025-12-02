@@ -1,5 +1,14 @@
 import { type Card, calculateHandValue, getCardValue, isSoftHand } from "./card-utils"
-import { hardRules, pairRules, softRules, type DealerKey, type RuleCase } from "./strategy-config"
+import { canDouble } from "./hand-actions"
+import {
+  hardRules,
+  pairRules,
+  softRules,
+  tableRules,
+  type DealerKey,
+  type RuleCase,
+  type TableRules,
+} from "./strategy-config"
 
 export type GameAction = "hit" | "stand" | "double" | "split"
 
@@ -8,6 +17,19 @@ interface StrategyRule {
   fallback: GameAction | null
   tip: string
   feedback: string
+}
+
+export type StrategyContext = {
+  handMeta?: {
+    doubled?: boolean
+    isSplitAce?: boolean
+  }
+  rules?: Pick<TableRules, "doubleOnSplitAces">
+}
+
+type DoubleAvailability = {
+  canDouble: boolean
+  reason?: "post-draw" | "split-aces" | "already-doubled"
 }
 
 function getDealerKey(card: Card): DealerKey {
@@ -23,29 +45,31 @@ function isPair(playerHand: Card[]): boolean {
   return v1 === v2
 }
 
-export function getOptimalMove(playerHand: Card[], dealerUpCard: Card): GameAction {
+export function getOptimalMove(playerHand: Card[], dealerUpCard: Card, context: StrategyContext = {}): GameAction {
   const rule = getStrategyRule(playerHand, dealerUpCard)
-  const canDouble = playerHand.length === 2
+  const doubleAvailability = getDoubleAvailability(playerHand, context)
 
-  if (rule.action === "double" && !canDouble && rule.fallback) {
+  if (rule.action === "double" && !doubleAvailability.canDouble && rule.fallback) {
     return rule.fallback
   }
 
   return rule.action
 }
 
-export function getTipMessage(playerHand: Card[], dealerUpCard: Card): string {
+export function getTipMessage(playerHand: Card[], dealerUpCard: Card, context: StrategyContext = {}): string {
   const rule = getStrategyRule(playerHand, dealerUpCard)
-  return adjustMessageForDoubleAvailability(rule.tip, rule, playerHand.length === 2)
+  const doubleAvailability = getDoubleAvailability(playerHand, context)
+  return adjustMessageForDoubleAvailability(rule.tip, rule, doubleAvailability)
 }
 
-export function getFeedbackMessage(playerHand: Card[], dealerUpCard: Card): string {
+export function getFeedbackMessage(playerHand: Card[], dealerUpCard: Card, context: StrategyContext = {}): string {
   const rule = getStrategyRule(playerHand, dealerUpCard)
-  return adjustMessageForDoubleAvailability(rule.feedback, rule, playerHand.length === 2)
+  const doubleAvailability = getDoubleAvailability(playerHand, context)
+  return adjustMessageForDoubleAvailability(rule.feedback, rule, doubleAvailability)
 }
 
-function adjustMessageForDoubleAvailability(message: string, rule: StrategyRule, canDouble: boolean): string {
-  if (rule.action === "double" && !canDouble && rule.fallback) {
+function adjustMessageForDoubleAvailability(message: string, rule: StrategyRule, availability: DoubleAvailability): string {
+  if (rule.action === "double" && !availability.canDouble && rule.fallback) {
     const fallbackAction = rule.fallback
     const fallbackDirective =
       fallbackAction === "stand"
@@ -53,10 +77,43 @@ function adjustMessageForDoubleAvailability(message: string, rule: StrategyRule,
         : fallbackAction === "hit"
           ? "hit instead."
           : `${fallbackAction} instead.`
-    return `${message} Doubling isn't available after drawing cards, so ${fallbackDirective}`
+    const restriction =
+      availability.reason === "split-aces"
+        ? "Doubling isn't allowed after splitting aces at this table"
+        : availability.reason === "already-doubled"
+          ? "Doubling again isn't available on this hand"
+          : "Doubling isn't available after drawing cards"
+    return `${message} ${restriction}, so ${fallbackDirective}`
   }
 
   return message
+}
+
+function getDoubleAvailability(playerHand: Card[], context: StrategyContext): DoubleAvailability {
+  const rules = context.rules ?? { doubleOnSplitAces: tableRules.doubleOnSplitAces }
+  const handMeta = context.handMeta ?? {}
+  const allowed = canDouble(
+    { cards: playerHand, doubled: handMeta.doubled, isSplitAce: handMeta.isSplitAce },
+    rules,
+  )
+
+  if (allowed) {
+    return { canDouble: true }
+  }
+
+  if (playerHand.length !== 2) {
+    return { canDouble: false, reason: "post-draw" }
+  }
+
+  if (handMeta.doubled) {
+    return { canDouble: false, reason: "already-doubled" }
+  }
+
+  if (!rules.doubleOnSplitAces && handMeta.isSplitAce) {
+    return { canDouble: false, reason: "split-aces" }
+  }
+
+  return { canDouble: false }
 }
 
 function getStrategyRule(playerHand: Card[], dealerUpCard: Card): StrategyRule {

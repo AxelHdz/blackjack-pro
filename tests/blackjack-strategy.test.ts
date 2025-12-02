@@ -32,4 +32,8 @@ describe("blackjack-strategy getOptimalMove", () => {
   it("falls back to a hit when doubling is not available after drawing", () => {
     expectMove([card("5"), card("3"), card("2")], card("9"), "hit")
   })
+
+  it("uses fallback when doubling split aces is disallowed", () => {
+    expect(getOptimalMove([card("A"), card("7")], card("6"), { handMeta: { isSplitAce: true } })).toBe("stand")
+  })
 })

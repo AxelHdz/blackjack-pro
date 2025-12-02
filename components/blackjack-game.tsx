@@ -86,6 +86,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
   const activeHand = hands[currentHandIndex] ?? { cards: [], bet: 0, doubled: false }
   const displayedHandIndex = gameState === "finished" && isSplit ? viewHandIndex : currentHandIndex
   const playerHand = hands[displayedHandIndex]?.cards ?? activeHand.cards
+  const displayedHandState = hands[displayedHandIndex] ?? activeHand
   const totalBet =
     hands.length > 0 ? hands.reduce((sum, hand) => sum + (hand.doubled ? hand.bet * 2 : hand.bet), 0) : 0
   const currentHandBaseBet = activeHand.bet ?? 0
@@ -842,7 +843,11 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
     // Use original hand if provided (for split), otherwise use current hand
     const handToCheck = originalHand || activeHand.cards
-    const optimal = getOptimalMove(handToCheck, dealerHand[0])
+    const strategyContext = {
+      handMeta: { isSplitAce: activeHand.isSplitAce, doubled: activeHand.doubled },
+      rules: { doubleOnSplitAces: tableRules.doubleOnSplitAces },
+    }
+    const optimal = getOptimalMove(handToCheck, dealerHand[0], strategyContext)
     const isCorrect = action === optimal
 
     setTotalMoves((prev) => prev + 1)
@@ -868,6 +873,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
         optimalMove: optimal,
         playerMove: action,
         tableVariant: "H17",
+        handMeta: strategyContext.handMeta,
       }
       const feedback = resolveFeedback(feedbackCtx)
       setFeedbackData({
@@ -1005,7 +1011,10 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
 
   const optimalMove =
     gameState === "playing" && activeHand.cards.length > 0 && dealerHand.length > 0
-      ? getOptimalMove(activeHand.cards, dealerHand[0])
+      ? getOptimalMove(activeHand.cards, dealerHand[0], {
+          handMeta: { isSplitAce: activeHand.isSplitAce, doubled: activeHand.doubled },
+          rules: { doubleOnSplitAces: tableRules.doubleOnSplitAces },
+        })
       : null
 
   const getActionExplanation = (action: GameAction) => {
@@ -1777,6 +1786,7 @@ export function BlackjackGame({ userId, friendReferralId }: BlackjackGameProps) 
                                 optimalMove: optimalMove,
                                 playerMove: optimalMove, // In guided mode, we're showing the optimal move
                                 tableVariant: "H17",
+                                handMeta: { isSplitAce: displayedHandState.isSplitAce, doubled: displayedHandState.doubled },
                               }
                               const feedback = resolveFeedback(feedbackCtx)
                               setFeedbackData({

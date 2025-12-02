@@ -1,5 +1,5 @@
 import { type Card, getCardValue, calculateHandValue, isSoftHand } from "./card-utils"
-import { getTipMessage, getFeedbackMessage, type GameAction } from "./blackjack-strategy"
+import { getTipMessage, getFeedbackMessage, type GameAction, type StrategyContext } from "./blackjack-strategy"
 
 export type NormalizedUpcard = 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | "A"
 
@@ -17,6 +17,7 @@ export interface FeedbackContext {
   optimalMove: GameAction
   playerMove: GameAction
   tableVariant: "S17" | "H17"
+  handMeta?: StrategyContext["handMeta"]
 }
 
 export interface FeedbackResult {
@@ -37,8 +38,8 @@ export function resolveFeedback(ctx: FeedbackContext): FeedbackResult {
   const isPair = ctx.playerHand.length === 2 && getCardValue(ctx.playerHand[0]) === getCardValue(ctx.playerHand[1])
 
   // Get the tip and feedback from the strategy engine
-  const strategyTip = getTipMessage(ctx.playerHand, ctx.dealerUpcard)
-  const strategyFeedback = getFeedbackMessage(ctx.playerHand, ctx.dealerUpcard)
+  const strategyTip = getTipMessage(ctx.playerHand, ctx.dealerUpcard, { handMeta: ctx.handMeta })
+  const strategyFeedback = getFeedbackMessage(ctx.playerHand, ctx.dealerUpcard, { handMeta: ctx.handMeta })
 
   // Check if the strategy messages match the optimal move
   const moveKeywords: Record<GameAction, string[]> = {

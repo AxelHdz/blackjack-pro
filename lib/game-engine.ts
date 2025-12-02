@@ -209,13 +209,17 @@ export function resolveHands({
   dealerHand: Card[]
   level: number
 }): SplitHandResolution | SingleHandResolution {
-  if (hands.length <= 1) {
-    const hand = hands[0]
+  if (hands.length === 0) {
+    throw new Error("resolveHands requires at least one hand")
+  }
+
+  if (hands.length === 1) {
+    const [hand] = hands
     return resolveSingleHand({
-      playerHand: hand?.cards ?? [],
+      playerHand: hand.cards,
       dealerHand,
-      baseBet: hand?.bet ?? 0,
-      isDoubled: hand?.doubled ?? false,
+      baseBet: hand.bet,
+      isDoubled: hand.doubled,
       level,
     })
   }

@@ -38,4 +38,13 @@ describe("strategy config (H17)", () => {
     expect(tip.toLowerCase()).toContain("doubling isn't available")
     expect(feedback.toLowerCase()).toContain("doubling isn't available")
   })
+
+  it("falls back when doubling split aces is forbidden by table rules", () => {
+    const hand = [card("A"), card("7")] // soft 18 after splitting aces
+    const dealer = up("6")
+    const context = { handMeta: { isSplitAce: true } }
+    expect(getOptimalMove(hand, dealer, context)).toBe("stand")
+    const tip = getTipMessage(hand, dealer, context).toLowerCase()
+    expect(tip).toContain("splitting aces")
+  })
 })

@@ -4,7 +4,7 @@ A comprehensive blackjack strategy learning platform built with Next.js, featuri
 
 ## 🎯 Overview
 
-Blackjack Pro is an educational web application designed to teach optimal blackjack strategy through interactive gameplay. Players can learn, practice, and master blackjack decision-making across three difficulty modes, with detailed feedback, statistics tracking, and a unique buyback drill system for skill reinforcement.
+Blackjack Pro is an educational web application designed to teach optimal blackjack strategy through interactive gameplay. Players can learn, practice, and master blackjack decision-making across three difficulty modes, with detailed feedback, statistics tracking, and a unique buyback drill system for skill reinforcement. Current table rules: H17 (dealer hits soft 17), DAS enabled, no doubling after split aces.
 
 ## ✨ Features
 
@@ -96,29 +96,29 @@ Blackjack Pro is an educational web application designed to teach optimal blackj
 
 ### 1. Clone the Repository
 
-\`\`\`bash
+```bash
 git clone <repository-url>
 cd blackjack-pro
-\`\`\`
+```
 
 ### 2. Install Dependencies
 
-\`\`\`bash
+```bash
 pnpm install
-\`\`\`
+```
 
 ### 3. Environment Variables
 
 Create a `.env.local` file in the root directory:
 
-\`\`\`env
+```env
 # Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # Optional: For OAuth redirects
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=http://localhost:3000/auth/callback
-\`\`\`
+```
 
 ### 4. Database Setup
 
@@ -129,71 +129,74 @@ Run the SQL migration scripts in your Supabase SQL Editor in order (see `scripts
 
 ### 5. Run Development Server
 
-\`\`\`bash
+```bash
 pnpm dev
-\`\`\`
+```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## 📁 Project Structure
+## 📁 Project Structure (key files)
 
-\`\`\`
+```
 blackjack-pro/
-├── app/                      # Next.js App Router pages
-│   ├── auth/                 # Authentication pages
-│   │   ├── callback/         # OAuth callback handler
-│   │   ├── login/           # Login/signup page
-│   │   └── sign-up/         # Sign up page
-│   ├── globals.css          # Global styles
-│   ├── layout.tsx           # Root layout
-│   └── page.tsx             # Home page (game)
-│
-├── components/              # React components
-│   ├── ui/                  # Reusable UI components (shadcn/ui)
-│   ├── blackjack-game.tsx   # Main game component
-│   ├── betting-controls.tsx # Betting interface
-│   ├── buyback-drill-modal.tsx # Drill challenge modal
-│   ├── playing-card.tsx     # Card display component
-│   ├── stats-panel.tsx     # Statistics display
-│   └── theme-provider.tsx  # Theme context
-│   └── leaderboard-*       # Leaderboard chip/modal components
-│
-├── lib/                     # Core logic and utilities
-│   ├── supabase/           # Supabase client configuration
-│   │   ├── client.ts       # Client-side Supabase client
-│   │   ├── server.ts       # Server-side Supabase client
-│   │   └── middleware.ts   # Auth middleware
-│   ├── blackjack-strategy.ts # Optimal move calculation
-│   ├── card-utils.ts       # Card manipulation utilities
-│   ├── drill-config.ts     # Drill configuration
-│   ├── drill-feedback.ts   # Drill feedback system
-│   ├── ev-calculator.ts    # Expected value calculations
-│   ├── settlement.ts       # Payout calculations
-│   └── utils.ts            # General utilities
-│
-├── scripts/                # Database migration scripts (see filenames for order)
-│
-├── middleware.ts           # Next.js middleware for auth
-├── next.config.mjs        # Next.js configuration
-├── package.json           # Dependencies and scripts
-└── tsconfig.json          # TypeScript configuration
-\`\`\`
+├── app/                      # Next.js App Router (auth flows, entry, layout)
+├── components/
+│   ├── blackjack-game.tsx    # Main game UI and interactions
+│   ├── betting-controls.tsx  # Bet controls
+│   ├── buyback-drill-modal.tsx # Drill flow
+│   ├── leaderboard-*.tsx     # Leaderboard chip/modal
+│   ├── feedback-modal.tsx    # Feedback display
+│   ├── playing-card.tsx      # Card visuals
+│   └── ui/                   # Shadcn-based UI primitives
+├── contexts/                 # Challenge/stat persistence contexts
+├── hooks/
+│   ├── use-game-engine.ts    # Per-hand engine state, actions, and dealer play
+│   └── use-challenge-lifecycle.ts # Challenge timers/state
+├── lib/
+│   ├── strategy-config.ts    # Data-driven strategy matrix (H17/DAS, no split-ace doubles)
+│   ├── blackjack-strategy.ts # Strategy resolver (actions/tips/feedback)
+│   ├── hand-actions.ts       # Shared guards (canSplit/canDouble)
+│   ├── game-engine.ts        # Dealer AI, resolution helpers, resolveHands
+│   ├── card-utils.ts         # Deck, hand values, soft detection
+│   ├── drill-feedback.ts     # Feedback generation
+│   ├── settlement.ts         # Payout math (3:2 blackjack)
+│   └── supabase/             # Supabase client/server helpers
+├── docs/
+│   └── blackjack-hand-feedback.md # H17 strategy/feedback reference (data-driven source)
+├── scripts/                  # Database migration scripts
+├── tests/                    # Vitest suites (engine, strategy, payouts)
+├── middleware.ts             # Auth middleware
+├── next.config.mjs           # Next.js config
+├── package.json              # Scripts/deps
+└── tsconfig.json             # TypeScript config
+```
 
 ## 🎮 Key Features Explained
 
+### Architecture and Module Map
+
+- **Strategy (H17, DAS, no double on split aces)**
+  - `lib/strategy-config.ts`: data-driven matrix for hard/soft/pair rules plus `tableRules` (H17 only; surrender-ready).
+  - `lib/blackjack-strategy.ts`: resolves optimal move, tip, and feedback from the config; auto-injects “no double after drawing” copy.
+  - `lib/hand-actions.ts`: shared guards (`canDouble`, `canSplit`, `isPairHand`) used by engine and UI for consistent permissions.
+- **Engine and Resolution**
+  - `hooks/use-game-engine.ts`: per-hand state machine (supports splits/DAS, blocks split-ace doubles) using shared helpers.
+  - `lib/game-engine.ts`: dealer logic, dealing helpers, settlement helpers, and `resolveHands` (single/multi-hand payouts and XP).
+  - `lib/settlement.ts`: payout math (3:2 blackjack, doubled wagers).
+- **Feedback and Drills**
+  - `lib/drill-feedback.ts`: feedback generation driven by strategy output; telemetry keys for drills.
+  - `components/feedback-modal.tsx`, `components/buyback-drill-modal.tsx`: surfaces tips/why copy and drill flows.
+- **UI**
+  - `components/blackjack-game.tsx`: main UI, uses shared hand guards and engine actions; handles hints, practice feedback, and split navigation.
+  - `components/playing-card.tsx`, `components/ui/*`: cards and UI primitives.
+- **Docs**
+  - `docs/blackjack-hand-feedback.md`: H17-only strategy/feedback reference sourced from `lib/strategy-config.ts`.
+
 ### Optimal Move Calculation
 
-The game uses a comprehensive basic strategy engine (`lib/blackjack-strategy.ts`) that calculates optimal moves based on:
-- Player hand value (hard/soft)
-- Dealer upcard
-- Pair detection
-- Table rules (S17 - Stand on Soft 17)
-
-The strategy covers:
-- Hard hands (5-21)
-- Soft hands (A,2 through A,9)
-- Pair splitting rules
-- Double down opportunities
+- Data-driven basic strategy (`lib/strategy-config.ts`) for hard/soft/pairs under H17/DAS (no double on split aces).
+- Resolver (`lib/blackjack-strategy.ts`) outputs action, tip, feedback; doubles fall back when unavailable after draws.
+- Shared permission checks (`lib/hand-actions.ts`) keep engine/UI in sync.
 
 ### Settlement System
 
@@ -234,7 +237,7 @@ All stats persist to Supabase and sync across sessions.
 
 ### Available Scripts
 
-\`\`\`bash
+```bash
 # Development server
 pnpm dev
 
@@ -246,23 +249,23 @@ pnpm start
 
 # Lint code
 pnpm lint
-\`\`\`
+```
 
 ### Code Style
 
 - TypeScript strict mode enabled
 - ESLint for code quality
-- Prettier formatting (if configured)
-- Component-based architecture
-- Custom hooks for game logic
+- Component-based architecture with shared hooks/helpers
+- Data-driven strategy config and per-hand engine state
 
-### Key Design Patterns
+### Testing
 
-- **State Management**: React hooks (useState, useEffect)
-- **Server Components**: Next.js App Router with server/client separation
-- **Authentication**: Supabase Auth with middleware protection
-- **Database**: PostgreSQL with RLS for security
-- **Type Safety**: Full TypeScript coverage
+- **Vitest suites**:
+  - `tests/strategy-config.test.ts` — matrix spot-checks and double-availability messaging
+  - `tests/use-game-engine-actions.test.ts` — engine actions, splits, doubles, bust paths
+  - `tests/game-engine.test.ts` — dealer/settlement helpers and payouts
+  - `tests/blackjack-payout.test.ts` — payout math and blackjack handling
+- Run all tests: `pnpm test`
 
 ## 🗄️ Database Schema
 

@@ -27,9 +27,9 @@ describe("useGameEngine actions", () => {
     })
 
     expect(result.current.state.gameState).toBe("playing")
-    expect(result.current.state.activeBet).toBe(10)
     expect(result.current.state.roundLevel).toBe(3)
-    expect(result.current.state.playerHand).toHaveLength(2)
+    expect(result.current.state.hands[0]?.bet).toBe(10)
+    expect(result.current.state.hands[0]?.cards).toHaveLength(2)
     expect(result.current.state.dealerHand).toHaveLength(2)
   })
 
@@ -152,5 +152,47 @@ describe("useGameEngine actions", () => {
     })
     expect(result.current.state.currentHandIndex).toBe(1)
     expect(result.current.state.gameState).toBe("playing")
+  })
+
+  it("allows double on second split hand", () => {
+    // d1(6), d2(10), p1(8), p2(8), split draws 2 and 3, second-hand double draws 9
+    const deck = [card("9"), card("3"), card("2"), card("8"), card("8"), card("10"), card("6")]
+    const { result } = createEngine(deck)
+
+    act(() => {
+      result.current.dispatch({ type: "DEAL", bet: 10, level: 1 })
+    })
+    act(() => {
+      result.current.dispatch({ type: "SPLIT" })
+    })
+    act(() => {
+      result.current.dispatch({ type: "STAND" }) // finish first hand
+    })
+    act(() => {
+      result.current.dispatch({ type: "DOUBLE" }) // double second hand
+    })
+
+    expect(result.current.state.hands[1]?.doubled).toBe(true)
+    expect(result.current.state.hands[1]?.cards).toHaveLength(3)
+    expect(result.current.state.gameState).toBe("dealer")
+  })
+
+  it("blocks double on split aces", () => {
+    // d1(6), d2(10), p1(A), p2(A), split draws 2 and 3, attempting double should be ignored
+    const deck = [card("9"), card("3"), card("2"), card("A"), card("A"), card("10"), card("6")]
+    const { result } = createEngine(deck)
+
+    act(() => {
+      result.current.dispatch({ type: "DEAL", bet: 10, level: 1 })
+    })
+    act(() => {
+      result.current.dispatch({ type: "SPLIT" })
+    })
+    act(() => {
+      result.current.dispatch({ type: "DOUBLE" })
+    })
+
+    expect(result.current.state.hands[0]?.doubled).toBe(false)
+    expect(result.current.state.currentHandIndex).toBe(0)
   })
 })
